@@ -1,0 +1,32 @@
+{
+  "id": "collection_v1",
+  "tenant_id": "system",
+  "workflow_type": "collection",
+  "segment": null,
+  "version": 1,
+  "label": "Collections / Dunning",
+  "initial_stage": "due",
+  "stages": [
+    { "id": "due",                  "label": "Due",                  "order": 1, "is_terminal": false, "color": "#60a5fa", "entry_actions": [], "exit_conditions": [] },
+    { "id": "pre_due_reminder",     "label": "Pre-Due Reminder",     "order": 2, "is_terminal": false, "color": "#fbbf24", "sla": { "duration_hours": 72 }, "entry_actions": [{ "type": "notify", "config": { "template": "pre_due_reminder", "recipients": ["accounts"], "channels": ["whatsapp"] } }], "exit_conditions": [] },
+    { "id": "overdue",              "label": "Overdue",              "order": 3, "is_terminal": false, "color": "#f97316", "entry_actions": [{ "type": "notify", "config": { "template": "invoice_overdue", "recipients": ["accounts", "manager"], "channels": ["whatsapp", "in_app"] } }], "exit_conditions": [] },
+    { "id": "dunning_whatsapp",     "label": "Dunning — WhatsApp",   "order": 4, "is_terminal": false, "color": "#ef4444", "sla": { "duration_hours": 48, "escalation_actions": [{ "type": "notify", "config": { "template": "escalate_to_ai_voice", "recipients": ["accounts"], "channels": ["in_app"] } }] }, "entry_actions": [{ "type": "notify", "config": { "template": "dunning_whatsapp", "recipients": ["customer"], "channels": ["whatsapp"] } }], "exit_conditions": [] },
+    { "id": "ai_voice_escalation",  "label": "AI Voice Escalation",  "order": 5, "is_terminal": false, "color": "#dc2626", "entry_actions": [{ "type": "notify", "config": { "template": "ai_voice_call_scheduled", "recipients": ["accounts"], "channels": ["in_app"] } }], "exit_conditions": [] },
+    { "id": "promise_to_pay",       "label": "Promise to Pay",       "order": 6, "is_terminal": false, "color": "#a78bfa", "entry_actions": [{ "type": "notify", "config": { "template": "ptp_recorded", "recipients": ["accounts", "manager"], "channels": ["in_app"] } }], "exit_conditions": [] },
+    { "id": "paid",                 "label": "Paid",                 "order": 7, "is_terminal": true,  "color": "#22c55e", "entry_actions": [{ "type": "notify", "config": { "template": "payment_received", "recipients": ["accounts", "owner"], "channels": ["in_app"] } }], "exit_conditions": [] },
+    { "id": "disputed",             "label": "Disputed",             "order": 8, "is_terminal": false, "color": "#f59e0b", "entry_actions": [{ "type": "create_task", "config": { "title": "Resolve payment dispute", "due_offset_hours": 48, "assigned_to_role": "accounts", "priority": "high" } }], "exit_conditions": [] },
+    { "id": "written_off",          "label": "Written Off",          "order": 9, "is_terminal": true,  "color": "#6b7280", "entry_actions": [{ "type": "notify", "config": { "template": "written_off_alert", "recipients": ["coo", "manager"], "channels": ["whatsapp", "in_app"] } }], "exit_conditions": [] }
+  ],
+  "transitions": [
+    { "id": "due_to_pre_due",       "label": "Send Pre-Due Reminder",       "from_stage": "due",               "to_stage": "pre_due_reminder",    "is_back_flow": false, "requires_remark": false, "guard_conditions": [], "allowed_roles": ["accounts", "sales_manager"], "actions": [] },
+    { "id": "pre_due_to_overdue",   "label": "Move to Overdue",             "from_stage": "pre_due_reminder",  "to_stage": "overdue",             "is_back_flow": false, "requires_remark": false, "guard_conditions": [], "allowed_roles": ["accounts", "sales_manager"], "actions": [] },
+    { "id": "due_to_overdue",       "label": "Mark Overdue",                "from_stage": "due",               "to_stage": "overdue",             "is_back_flow": false, "requires_remark": false, "guard_conditions": [], "allowed_roles": ["accounts", "sales_manager"], "actions": [] },
+    { "id": "overdue_to_dunning",   "label": "Start WhatsApp Dunning",      "from_stage": "overdue",           "to_stage": "dunning_whatsapp",    "is_back_flow": false, "requires_remark": false, "guard_conditions": [], "allowed_roles": ["accounts"], "actions": [] },
+    { "id": "dunning_to_ai_voice",  "label": "Escalate to AI Voice",        "from_stage": "dunning_whatsapp",  "to_stage": "ai_voice_escalation", "is_back_flow": false, "requires_remark": true,  "guard_conditions": [], "allowed_roles": ["accounts", "sales_manager"], "actions": [] },
+    { "id": "any_to_ptp",           "label": "Record Promise to Pay",       "from_stage": "*",                 "to_stage": "promise_to_pay",      "is_back_flow": false, "requires_remark": true,  "guard_conditions": [{ "type": "required_fields", "config": { "fields": ["promise_amount", "promise_date"], "error_message": "Promise amount and date are required." } }], "allowed_roles": ["accounts", "sales_manager"], "actions": [] },
+    { "id": "any_to_paid",          "label": "Mark Paid",                   "from_stage": "*",                 "to_stage": "paid",                "is_back_flow": false, "requires_remark": false, "guard_conditions": [{ "type": "required_fields", "config": { "fields": ["payment_reference"], "error_message": "Payment reference or receipt is required." } }], "allowed_roles": ["accounts", "sales_manager"], "actions": [] },
+    { "id": "any_to_disputed",      "label": "Mark Disputed",               "from_stage": "*",                 "to_stage": "disputed",            "is_back_flow": false, "requires_remark": true,  "guard_conditions": [], "allowed_roles": ["accounts", "sales_manager"], "actions": [] },
+    { "id": "disputed_to_paid",     "label": "Resolve & Mark Paid",         "from_stage": "disputed",          "to_stage": "paid",                "is_back_flow": false, "requires_remark": true,  "guard_conditions": [], "allowed_roles": ["accounts", "coo"], "actions": [] },
+    { "id": "any_to_written_off",   "label": "Write Off",                   "from_stage": "*",                 "to_stage": "written_off",         "is_back_flow": false, "requires_remark": true,  "guard_conditions": [], "allowed_roles": ["coo"], "actions": [] }
+  ]
+}

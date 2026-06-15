@@ -1,0 +1,30 @@
+{
+  "id": "quotation_v1",
+  "tenant_id": "system",
+  "workflow_type": "quotation",
+  "segment": null,
+  "version": 1,
+  "label": "Quotation",
+  "initial_stage": "draft",
+  "stages": [
+    { "id": "draft",            "label": "Draft",             "order": 1, "is_terminal": false, "color": "#94a3b8", "entry_actions": [], "exit_conditions": [{ "type": "required_fields", "config": { "fields": ["lines", "customer_id"], "error_message": "Quote must have a customer and at least one line item." } }] },
+    { "id": "pending_approval", "label": "Pending Approval",  "order": 2, "is_terminal": false, "color": "#fbbf24", "sla": { "duration_hours": 24, "escalation_actions": [{ "type": "notify", "config": { "template": "approval_overdue", "recipients": ["approver", "manager"], "channels": ["whatsapp"] } }] }, "entry_actions": [{ "type": "notify", "config": { "template": "approval_requested", "recipients": ["approver"], "channels": ["in_app", "whatsapp"] } }], "exit_conditions": [] },
+    { "id": "approved",         "label": "Approved",          "order": 3, "is_terminal": false, "color": "#60a5fa", "entry_actions": [], "exit_conditions": [] },
+    { "id": "sent",             "label": "Sent",              "order": 4, "is_terminal": false, "color": "#a78bfa", "entry_actions": [{ "type": "notify", "config": { "template": "quote_sent_confirmation", "recipients": ["owner"], "channels": ["in_app"] } }], "exit_conditions": [] },
+    { "id": "negotiating",      "label": "Negotiating",       "order": 5, "is_terminal": false, "color": "#f97316", "entry_actions": [], "exit_conditions": [] },
+    { "id": "won",              "label": "Won",               "order": 6, "is_terminal": true,  "color": "#22c55e", "entry_actions": [{ "type": "notify", "config": { "template": "quote_won", "recipients": ["owner", "manager"], "channels": ["whatsapp", "in_app"] } }], "exit_conditions": [] },
+    { "id": "lost",             "label": "Lost",              "order": 7, "is_terminal": true,  "color": "#ef4444", "entry_actions": [], "exit_conditions": [] },
+    { "id": "expired",          "label": "Expired",           "order": 8, "is_terminal": true,  "color": "#6b7280", "entry_actions": [{ "type": "notify", "config": { "template": "quote_expired", "recipients": ["owner"], "channels": ["in_app"] } }], "exit_conditions": [] }
+  ],
+  "transitions": [
+    { "id": "draft_to_pending",    "label": "Submit for Approval", "from_stage": "draft",            "to_stage": "pending_approval", "is_back_flow": false, "requires_remark": false, "guard_conditions": [{ "type": "approval_granted", "config": { "approval_type": "discount_tier1", "error_message": "Discount exceeds your tier — approval required." } }], "allowed_roles": ["inside_sales", "sales_manager"], "actions": [{ "type": "notify", "config": { "template": "quote_submitted", "recipients": ["approver"], "channels": ["in_app"] } }] },
+    { "id": "draft_to_approved",   "label": "Self-Approve",        "from_stage": "draft",            "to_stage": "approved",         "is_back_flow": false, "requires_remark": false, "guard_conditions": [], "allowed_roles": ["sales_manager", "coo"], "actions": [] },
+    { "id": "pending_to_approved", "label": "Approve",             "from_stage": "pending_approval", "to_stage": "approved",         "is_back_flow": false, "requires_remark": false, "guard_conditions": [], "allowed_roles": ["sales_manager", "coo"], "actions": [{ "type": "notify", "config": { "template": "quote_approved", "recipients": ["owner"], "channels": ["in_app", "whatsapp"] } }] },
+    { "id": "pending_to_draft",    "label": "Reject / Revise",     "from_stage": "pending_approval", "to_stage": "draft",            "is_back_flow": true,  "requires_remark": true,  "guard_conditions": [], "allowed_roles": ["sales_manager", "coo"], "actions": [{ "type": "notify", "config": { "template": "quote_rejected", "recipients": ["owner"], "channels": ["in_app", "whatsapp"] } }] },
+    { "id": "approved_to_sent",    "label": "Send to Customer",    "from_stage": "approved",         "to_stage": "sent",             "is_back_flow": false, "requires_remark": false, "guard_conditions": [], "allowed_roles": ["inside_sales", "sales_manager"], "actions": [] },
+    { "id": "sent_to_negotiating", "label": "Customer Countered",  "from_stage": "sent",             "to_stage": "negotiating",      "is_back_flow": false, "requires_remark": true,  "guard_conditions": [], "allowed_roles": ["inside_sales", "sales_manager"], "actions": [] },
+    { "id": "negotiating_to_won",  "label": "Mark Won",            "from_stage": "negotiating",      "to_stage": "won",              "is_back_flow": false, "requires_remark": true,  "guard_conditions": [{ "type": "required_fields", "config": { "fields": ["final_value"], "error_message": "Final agreed value is required." } }], "allowed_roles": ["sales_manager", "coo"], "actions": [] },
+    { "id": "sent_to_won",         "label": "Mark Won (no nego)",  "from_stage": "sent",             "to_stage": "won",              "is_back_flow": false, "requires_remark": true,  "guard_conditions": [], "allowed_roles": ["sales_manager", "coo"], "actions": [] },
+    { "id": "any_to_lost",         "label": "Mark Lost",           "from_stage": "*",                "to_stage": "lost",             "is_back_flow": false, "requires_remark": true,  "guard_conditions": [{ "type": "required_fields", "config": { "fields": ["loss_reason_code"], "error_message": "Loss reason is required." } }], "allowed_roles": ["sales_manager", "coo"], "actions": [] }
+  ]
+}

@@ -1,0 +1,402 @@
+{
+  "id": "project_architect_v1",
+  "tenant_id": "system",
+  "workflow_type": "project",
+  "segment": "architect",
+  "version": 1,
+  "label": "Architect Project Pipeline",
+  "initial_stage": "identify",
+  "stages": [
+    {
+      "id": "identify",
+      "label": "Identify",
+      "order": 1,
+      "color": "#94a3b8",
+      "is_terminal": false,
+      "sla": {
+        "duration_hours": 48,
+        "reminder_at_percent": 80,
+        "escalation_actions": [
+          {
+            "type": "notify",
+            "config": {
+              "template": "sla_breach_identify",
+              "recipients": ["manager"],
+              "channels": ["whatsapp", "in_app"]
+            }
+          }
+        ]
+      },
+      "entry_actions": [
+        {
+          "type": "create_task",
+          "config": {
+            "title": "Qualify architect contact and confirm project details",
+            "due_offset_hours": 24,
+            "assigned_to_role": "owner",
+            "priority": "medium"
+          }
+        }
+      ],
+      "exit_conditions": [
+        {
+          "type": "required_fields",
+          "config": {
+            "fields": ["architect_firm_id", "project_name", "estimated_value", "city"],
+            "error_message": "Architect firm, project name, estimated value, and city are required before advancing."
+          }
+        }
+      ]
+    },
+    {
+      "id": "specified",
+      "label": "Specified",
+      "order": 2,
+      "color": "#60a5fa",
+      "is_terminal": false,
+      "sla": {
+        "duration_hours": 720,
+        "escalation_actions": [
+          {
+            "type": "notify",
+            "config": {
+              "template": "project_dormant",
+              "recipients": ["owner", "manager"],
+              "channels": ["whatsapp"]
+            }
+          }
+        ]
+      },
+      "entry_actions": [
+        {
+          "type": "notify",
+          "config": {
+            "template": "project_specified_alert",
+            "recipients": ["inside_sales", "manager"],
+            "channels": ["in_app", "whatsapp"]
+          }
+        }
+      ],
+      "exit_conditions": [
+        {
+          "type": "required_fields",
+          "config": {
+            "fields": ["specification_ids"],
+            "error_message": "At least one specification must be recorded before advancing."
+          }
+        },
+        {
+          "type": "required_documents",
+          "config": {
+            "document_types": ["spec_sheet"],
+            "error_message": "A specification sheet must be attached before advancing."
+          }
+        }
+      ]
+    },
+    {
+      "id": "tracking",
+      "label": "Tracking",
+      "order": 3,
+      "color": "#fbbf24",
+      "is_terminal": false,
+      "sla": {
+        "duration_hours": 2160,
+        "reminder_at_percent": 75,
+        "escalation_actions": [
+          {
+            "type": "notify",
+            "config": {
+              "template": "project_long_tracking",
+              "recipients": ["owner", "manager"],
+              "channels": ["whatsapp"]
+            }
+          }
+        ]
+      },
+      "entry_actions": [],
+      "exit_conditions": []
+    },
+    {
+      "id": "paving_stage",
+      "label": "Paving Stage",
+      "order": 4,
+      "color": "#f97316",
+      "is_terminal": false,
+      "sla": {
+        "duration_hours": 72,
+        "escalation_actions": [
+          {
+            "type": "notify",
+            "config": {
+              "template": "paving_stage_no_quote",
+              "recipients": ["inside_sales", "manager"],
+              "channels": ["whatsapp", "in_app"]
+            }
+          }
+        ]
+      },
+      "entry_actions": [
+        {
+          "type": "notify",
+          "config": {
+            "template": "paving_stage_reached",
+            "recipients": ["inside_sales", "manager", "coo"],
+            "channels": ["whatsapp", "in_app"]
+          }
+        },
+        {
+          "type": "create_task",
+          "config": {
+            "title": "Submit commercial quote to architect",
+            "due_offset_hours": 48,
+            "assigned_to_role": "inside_sales",
+            "priority": "urgent"
+          }
+        }
+      ],
+      "exit_conditions": [
+        {
+          "type": "required_documents",
+          "config": {
+            "document_types": ["boq"],
+            "error_message": "BOQ must be attached before moving to quoting."
+          }
+        }
+      ]
+    },
+    {
+      "id": "quoting",
+      "label": "Quoting",
+      "order": 5,
+      "color": "#a78bfa",
+      "is_terminal": false,
+      "sla": {
+        "duration_hours": 120,
+        "escalation_actions": [
+          {
+            "type": "notify",
+            "config": {
+              "template": "quote_overdue",
+              "recipients": ["manager"],
+              "channels": ["whatsapp"]
+            }
+          }
+        ]
+      },
+      "entry_actions": [
+        {
+          "type": "notify",
+          "config": {
+            "template": "quote_required",
+            "recipients": ["inside_sales"],
+            "channels": ["in_app"]
+          }
+        }
+      ],
+      "exit_conditions": [
+        {
+          "type": "required_fields",
+          "config": {
+            "fields": ["quotation_ids"],
+            "error_message": "At least one quotation must be created before advancing."
+          }
+        }
+      ]
+    },
+    {
+      "id": "won",
+      "label": "Won",
+      "order": 6,
+      "color": "#22c55e",
+      "is_terminal": true,
+      "entry_actions": [
+        {
+          "type": "notify",
+          "config": {
+            "template": "project_won",
+            "recipients": ["owner", "manager", "coo"],
+            "channels": ["whatsapp", "in_app"]
+          }
+        },
+        {
+          "type": "create_task",
+          "config": {
+            "title": "Hand off to fulfilment — create sales order",
+            "due_offset_hours": 8,
+            "assigned_to_role": "inside_sales",
+            "priority": "urgent"
+          }
+        }
+      ],
+      "exit_conditions": []
+    },
+    {
+      "id": "lost",
+      "label": "Lost",
+      "order": 7,
+      "color": "#ef4444",
+      "is_terminal": true,
+      "entry_actions": [
+        {
+          "type": "notify",
+          "config": {
+            "template": "project_lost",
+            "recipients": ["manager"],
+            "channels": ["in_app"]
+          }
+        }
+      ],
+      "exit_conditions": []
+    }
+  ],
+  "transitions": [
+    {
+      "id": "identify_to_specified",
+      "label": "Mark Specified",
+      "from_stage": "identify",
+      "to_stage": "specified",
+      "is_back_flow": false,
+      "requires_remark": false,
+      "guard_conditions": [],
+      "allowed_roles": ["field_engineer", "inside_sales", "sales_manager"],
+      "actions": []
+    },
+    {
+      "id": "specified_to_tracking",
+      "label": "Move to Tracking",
+      "from_stage": "specified",
+      "to_stage": "tracking",
+      "is_back_flow": false,
+      "requires_remark": false,
+      "guard_conditions": [],
+      "allowed_roles": ["field_engineer", "inside_sales", "sales_manager"],
+      "actions": []
+    },
+    {
+      "id": "tracking_to_paving",
+      "label": "Mark Paving Stage",
+      "from_stage": "tracking",
+      "to_stage": "paving_stage",
+      "is_back_flow": false,
+      "requires_remark": true,
+      "guard_conditions": [],
+      "allowed_roles": ["field_engineer", "inside_sales", "sales_manager"],
+      "actions": [
+        {
+          "type": "notify",
+          "config": {
+            "template": "paving_stage_reached",
+            "recipients": ["manager"],
+            "channels": ["whatsapp"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "paving_to_quoting",
+      "label": "Start Quoting",
+      "from_stage": "paving_stage",
+      "to_stage": "quoting",
+      "is_back_flow": false,
+      "requires_remark": false,
+      "guard_conditions": [],
+      "allowed_roles": ["inside_sales", "sales_manager"],
+      "actions": []
+    },
+    {
+      "id": "quoting_to_won",
+      "label": "Mark Won",
+      "from_stage": "quoting",
+      "to_stage": "won",
+      "is_back_flow": false,
+      "requires_remark": true,
+      "guard_conditions": [
+        {
+          "type": "required_fields",
+          "config": {
+            "fields": ["order_value", "won_quote_id"],
+            "error_message": "Order value and the winning quotation must be set before marking won."
+          }
+        },
+        {
+          "type": "required_documents",
+          "config": {
+            "document_types": ["purchase_order"],
+            "error_message": "Customer PO must be attached before marking won."
+          }
+        }
+      ],
+      "allowed_roles": ["sales_manager", "coo"],
+      "actions": [
+        {
+          "type": "create_task",
+          "config": {
+            "title": "Create sales order from winning quote",
+            "due_offset_hours": 8,
+            "assigned_to_role": "inside_sales",
+            "priority": "urgent"
+          }
+        }
+      ]
+    },
+    {
+      "id": "quoting_to_lost",
+      "label": "Mark Lost",
+      "from_stage": "quoting",
+      "to_stage": "lost",
+      "is_back_flow": false,
+      "requires_remark": true,
+      "guard_conditions": [
+        {
+          "type": "required_fields",
+          "config": {
+            "fields": ["loss_reason_code"],
+            "error_message": "Loss reason code is required before marking lost."
+          }
+        }
+      ],
+      "allowed_roles": ["sales_manager", "coo"],
+      "actions": []
+    },
+    {
+      "id": "tracking_to_lost",
+      "label": "Mark Lost (Tracking)",
+      "from_stage": "tracking",
+      "to_stage": "lost",
+      "is_back_flow": false,
+      "requires_remark": true,
+      "guard_conditions": [
+        {
+          "type": "required_fields",
+          "config": {
+            "fields": ["loss_reason_code"],
+            "error_message": "Loss reason code is required."
+          }
+        }
+      ],
+      "allowed_roles": ["sales_manager", "coo"],
+      "actions": []
+    },
+    {
+      "id": "any_to_tracking",
+      "label": "Need Clarification",
+      "from_stage": "*",
+      "to_stage": "tracking",
+      "is_back_flow": true,
+      "requires_remark": true,
+      "guard_conditions": [],
+      "allowed_roles": ["field_engineer", "inside_sales", "sales_manager", "coo"],
+      "actions": [
+        {
+          "type": "notify",
+          "config": {
+            "template": "project_needs_clarification",
+            "recipients": ["owner", "manager"],
+            "channels": ["in_app", "whatsapp"]
+          }
+        }
+      ]
+    }
+  ]
+}
