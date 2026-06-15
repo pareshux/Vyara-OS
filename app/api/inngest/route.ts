@@ -3,6 +3,10 @@ import { inngest } from '@/lib/inngest/client'
 import { pavingStageCheck } from '@/lib/inngest/functions'
 import { onQuoteWonCreateOrderTask } from '@/lib/inngest/order-handlers'
 import { onOrderCreatedScheduleDispatchTask } from '@/lib/inngest/dispatch-handlers'
+import {
+  onInvoiceSyncedCreateCollection,
+  dailyCollectionCheck,
+} from '@/lib/inngest/collection-handlers'
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -10,5 +14,7 @@ export const { GET, POST, PUT } = serve({
     pavingStageCheck,
     onQuoteWonCreateOrderTask,
     onOrderCreatedScheduleDispatchTask,
+    onInvoiceSyncedCreateCollection,
+    dailyCollectionCheck,
   ],
 })
