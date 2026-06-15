@@ -3,8 +3,9 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ChevronRight, FileText } from 'lucide-react'
+import { ChevronRight, FileText, Truck } from 'lucide-react'
 import { OrderStageActions } from './stage-actions'
+import { ScheduleDispatchButton } from './schedule-dispatch-sheet'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: order }, { data: allStages }, { data: history }] = await Promise.all([
+  const [{ data: order }, { data: allStages }, { data: history }, { data: dispatchesRaw }] = await Promise.all([
     supabase
       .from('sales_order')
       .select(
@@ -34,6 +35,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       .from('sales_order_stage_history')
       .select('id, remark, created_at, from_stage:from_stage_id(label, color), to_stage:to_stage_id(label, color), actor:actor_id(id)')
       .eq('sales_order_id', id)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('dispatch')
+      .select('id, dispatch_number, scheduled_at, delivered_at, stage:current_stage_id(label, color)')
+      .eq('sales_order_id', id)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false }),
   ])
 
@@ -106,11 +113,25 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </div>
 
           {stages.length > 0 && stage && (
-            <OrderStageActions
-              orderId={order.id}
-              currentStageId={stage.id}
-              stages={stages}
-            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <OrderStageActions
+                orderId={order.id}
+                currentStageId={stage.id}
+                stages={stages}
+              />
+              {!stage.label.toLowerCase().includes('cancel') && (
+                <ScheduleDispatchButton
+                  orderId={order.id}
+                  lines={lines.map((l) => ({
+                    id: l.id,
+                    product_name: l.product_name,
+                    sku_code: l.sku_code,
+                    unit: l.unit,
+                    quantity: Number(l.quantity),
+                  }))}
+                />
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -190,6 +211,40 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               </tfoot>
             )}
           </table>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+          <Truck className="size-3.5 text-muted-foreground" /> Dispatches
+        </h2>
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          {(dispatchesRaw ?? []).length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground">No dispatches yet for this order.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {(dispatchesRaw ?? []).map((d) => {
+                const s = (Array.isArray(d.stage) ? d.stage[0] : d.stage) as { label: string; color: string } | null
+                return (
+                  <li key={d.id as string} className="px-4 py-2.5 flex items-center gap-3 text-sm">
+                    <Link href={`/dispatches/${d.id}`} className="font-mono text-xs text-foreground hover:text-primary flex-1 min-w-0 truncate">
+                      {d.dispatch_number as string}
+                    </Link>
+                    {s && (
+                      <Badge variant="outline" className="border-0 text-xs" style={{ backgroundColor: `${s.color}20`, color: s.color }}>
+                        {s.label}
+                      </Badge>
+                    )}
+                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                      {d.scheduled_at
+                        ? new Date(d.scheduled_at as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                        : '—'}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
       </div>
 
