@@ -23,6 +23,20 @@ Vyara OS is **vertical SaaS for made-to-order building-materials manufacturers**
 - Don't over-design unknowns. Assume the architecture is ~80% right and build; let the rest emerge.
 - **Platform discipline test:** for every new abstraction or schema decision, ask "does this work for customer #2 in the vertical, or am I encoding a Vyara quirk?" Vyara-specific things are configured per tenant, never hardcoded.
 
+## Foundational audit — run BEFORE building any feature, page, or module
+
+Before writing code for any new surface, surface findings on these seven questions and let the user weigh in. Don't silently assume; don't build past unanswered foundational questions.
+
+1. **Data inputs** — what entities does this read from? Do they exist + are populated? If a source needs to be built first, name it.
+2. **Data outputs** — what gets written? Where?
+3. **Master dependencies** — does this assume reference data (vendors, price lists, reason codes, tier names, territory codes, etc.) that should be tenant-configurable? If yes, do we have a master for it? Is it hardcoded or in a `*_master` table?
+4. **CRUD completeness** — for every entity touched, is there Create / Read / Update / Delete via UI? If something's missing, is it intentional (snapshots are immutable per Principle #8) or a gap that will bite later?
+5. **Action ↔ UI symmetry** — every server action should have a UI calling it; every UI surface should have a corresponding action. Asymmetry is how Slice 1 ended up with quote-creation that no UI invoked and notification-writes to nonexistent columns.
+6. **Cross-module coupling** — any write to another module's tables? Any hidden read assumption? Convert to event-driven if possible (Principle #0).
+7. **Customer-#2 readiness** — does this hardcode any Vyara-specific enum, label, or value? Per Constitution v2 year-1 success criterion, the answer must be no.
+
+Format the findings as a short list ("here's what this depends on / here's what's missing / here's what I'd build vs defer"), let the user decide what's in/out, then build. This is the discipline that prevents the "wait, did we forget X?" loop.
+
 ## Invariants (from the Constitution — repeated here because they're easy to violate)
 
 - `tenant_id` on every table; Supabase RLS by tenant + territory/role.
