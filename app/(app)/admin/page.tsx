@@ -26,7 +26,7 @@ const SECTIONS = [
     title: 'Price lists',
     blurb: 'Per-product pricing with effective dates. Auto-fills onto quotes + orders.',
     icon: BadgePercent,
-    available: false,
+    available: true,
   },
   {
     href: '/admin/vendors',
