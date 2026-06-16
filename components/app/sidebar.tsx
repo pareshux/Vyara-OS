@@ -13,6 +13,8 @@ import {
   FileText,
   Wallet,
   TrendingUp,
+  Warehouse,
+  Boxes,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -20,6 +22,8 @@ const NAV_ITEMS = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Projects', href: '/projects', icon: FolderKanban },
   { label: 'Orders', href: '/orders', icon: Package },
+  { label: 'Inventory', href: '/inventory', icon: Boxes },
+  { label: 'Warehouses', href: '/warehouses', icon: Warehouse },
   { label: 'Dispatches', href: '/dispatches', icon: Truck },
   { label: 'Invoices', href: '/invoices', icon: FileText },
   { label: 'Collections', href: '/collections', icon: Wallet },
