@@ -28,6 +28,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .eq('is_read', false),
   ])
 
+  // Role gate (Decision H1) — dealer-role users belong in /dealer-portal/*.
+  // Internal layout always redirects them out, so dealers never see internal pages.
+  if (profile?.role === 'dealer') {
+    redirect('/dealer-portal/dashboard')
+  }
+
   const userName = profile?.full_name ?? user.email ?? 'User'
   const userRole = profile?.role ?? 'sales_engineer'
 
