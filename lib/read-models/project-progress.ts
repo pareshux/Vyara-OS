@@ -31,6 +31,16 @@ export type MiniBar = {
   pct: number
 } | null
 
+export type SubstageSignal = {
+  // Primary metric shown beneath the substage label
+  primary: string
+  // Optional muted secondary (e.g. value for Order, breakdown for Quote)
+  secondary?: string
+  // Coarse status: 'empty' (no activity yet), 'active' (work happening),
+  // 'done' (everything we can measure is complete).
+  status: 'empty' | 'active' | 'done'
+}
+
 export type Substage = {
   id: string
   substage_key: string
@@ -39,6 +49,7 @@ export type Substage = {
   color: string
   is_watch_stage: boolean
   sla_days: number | null
+  signal: SubstageSignal | null
 }
 
 export type MacroStage = {
@@ -78,6 +89,81 @@ export type ProjectProgress = {
   health: Health
   health_reason: string
   next_action: NextAction
+}
+
+// Per-substage signal evaluator. Dispatches on substage_key — adding a new
+// sub-stage to a tenant template only requires adding a case here if you want
+// it to surface a count. Unknown keys return null (renders as a plain dot).
+function buildSubstageSignal(params: {
+  key: string
+  isWatch: boolean
+  quoteCounts: { total: number; draft: number; sent: number; won: number; dead: number }
+  orderCount: number
+  orderValue: number
+  ordersReady: number
+  totalLines: number
+  reservedLinesCount: number
+  totalDispatches: number
+  deliveredDispatches: number
+}): SubstageSignal | null {
+  // Watch-stages are informational only — no signal, no count chip.
+  if (params.isWatch) return null
+
+  switch (params.key) {
+    case 'quote': {
+      const q = params.quoteCounts
+      if (q.total === 0) return { primary: 'No quotes yet', status: 'empty' }
+      const parts: string[] = []
+      if (q.draft > 0) parts.push(`${q.draft} draft`)
+      if (q.sent > 0) parts.push(`${q.sent} sent`)
+      if (q.won > 0) parts.push(`${q.won} won`)
+      if (q.dead > 0) parts.push(`${q.dead} lost`)
+      return {
+        primary: `${q.total} quote${q.total === 1 ? '' : 's'}`,
+        secondary: parts.join(' · '),
+        status: q.won > 0 ? 'done' : 'active',
+      }
+    }
+    case 'order': {
+      if (params.orderCount === 0) return { primary: 'No orders yet', status: 'empty' }
+      return {
+        primary: `${params.orderCount} order${params.orderCount === 1 ? '' : 's'}`,
+        secondary: params.orderValue > 0 ? formatINRCompact(params.orderValue) : undefined,
+        status: 'active',
+      }
+    }
+    case 'reserve_stock': {
+      if (params.totalLines === 0) return { primary: 'No lines to reserve', status: 'empty' }
+      const allReserved = params.reservedLinesCount >= params.totalLines
+      return {
+        primary: `${params.reservedLinesCount} of ${params.totalLines}`,
+        secondary: allReserved ? 'all reserved' : `${params.totalLines - params.reservedLinesCount} unreserved`,
+        status: allReserved ? 'done' : 'active',
+      }
+    }
+    case 'ready': {
+      if (params.orderCount === 0) return { primary: '—', status: 'empty' }
+      if (params.ordersReady === 0) return { primary: '0 ready', status: 'active' }
+      return {
+        primary: `${params.ordersReady} ready`,
+        secondary: 'awaiting dispatch',
+        status: 'active',
+      }
+    }
+    case 'dispatch': {
+      if (params.totalDispatches === 0) return { primary: 'No tranches yet', status: 'empty' }
+      const allDelivered = params.deliveredDispatches >= params.totalDispatches
+      return {
+        primary: `${params.deliveredDispatches}/${params.totalDispatches} tranches`,
+        secondary: allDelivered
+          ? 'all delivered'
+          : `${params.totalDispatches - params.deliveredDispatches} in flight`,
+        status: allDelivered ? 'done' : 'active',
+      }
+    }
+    default:
+      return null
+  }
 }
 
 function formatINRCompact(n: number): string {
@@ -145,6 +231,7 @@ export async function getProjectProgress(projectId: string): Promise<ProjectProg
       color: s.color,
       is_watch_stage: s.is_watch_stage,
       sla_days: s.sla_days ?? null,
+      signal: null,
     }))
   }
 
@@ -223,16 +310,37 @@ export async function getProjectProgress(projectId: string): Promise<ProjectProg
   let billingBar: MiniBar = null
   let reservationBar: MiniBar = null
 
-  const { data: ordersForBars } = await supabase
-    .from('sales_order')
-    .select('id, value')
-    .eq('project_id', projectId)
-    .is('deleted_at', null)
+  // Load orders + quotations together — both feed the mini-bars AND the
+  // per-substage signals (Quote, Order, Ready substages all derive from these).
+  const [{ data: ordersForBars }, { data: quotationsForProject }] = await Promise.all([
+    supabase
+      .from('sales_order')
+      .select('id, value, current_stage:current_stage_id(stage_key)')
+      .eq('project_id', projectId)
+      .is('deleted_at', null),
+    supabase
+      .from('quotation')
+      .select('id, status, total')
+      .eq('project_id', projectId)
+      .is('deleted_at', null),
+  ])
   const orderIds = (ordersForBars ?? []).map((o) => o.id)
   const totalOrderValue = (ordersForBars ?? []).reduce((s, o) => s + Number(o.value ?? 0), 0)
   const fallbackTotal = totalOrderValue > 0
     ? totalOrderValue
     : Number(project.order_value ?? project.estimated_value ?? 0)
+  // Orders that have reached the "ready" order_stage — i.e. produced and
+  // waiting to dispatch. Used by the Ready substage signal.
+  const ordersReady = (ordersForBars ?? []).filter((o) => {
+    const s = Array.isArray(o.current_stage) ? o.current_stage[0] : o.current_stage
+    return (s as { stage_key?: string } | null)?.stage_key === 'ready'
+  }).length
+
+  // These numbers are hoisted because per-substage signals reuse them.
+  let totalDispatches = 0
+  let deliveredDispatches = 0
+  let totalLines = 0
+  let reservedLinesCount = 0
 
   if (orderIds.length > 0) {
     // Dispatch mini-bar: count(delivered dispatches) vs count(all dispatches for these orders)
@@ -241,8 +349,8 @@ export async function getProjectProgress(projectId: string): Promise<ProjectProg
       .select('id, delivered_at, sales_order_id')
       .in('sales_order_id', orderIds)
       .is('deleted_at', null)
-    const totalDispatches = (dispatchesForOrders ?? []).length
-    const deliveredDispatches = (dispatchesForOrders ?? []).filter((d) => d.delivered_at != null).length
+    totalDispatches = (dispatchesForOrders ?? []).length
+    deliveredDispatches = (dispatchesForOrders ?? []).filter((d) => d.delivered_at != null).length
     if (totalDispatches > 0) {
       dispatchBar = {
         done: deliveredDispatches,
@@ -264,12 +372,13 @@ export async function getProjectProgress(projectId: string): Promise<ProjectProg
         .select('id, sales_order_line_id, status')
         .in('sales_order_id', orderIds),
     ])
-    const totalLines = (lineCountRaw ?? []).length
+    totalLines = (lineCountRaw ?? []).length
     const reservedLineIds = new Set(
       (reservationsRaw ?? [])
         .filter((r) => r.status === 'active' || r.status === 'consumed')
         .map((r) => r.sales_order_line_id)
     )
+    reservedLinesCount = reservedLineIds.size
     if (totalLines > 0) {
       reservationBar = {
         done: reservedLineIds.size,
@@ -298,6 +407,45 @@ export async function getProjectProgress(projectId: string): Promise<ProjectProg
       formatted_total: formatINRCompact(fallbackTotal),
       pct: Math.min(100, Math.round((sumBilled / fallbackTotal) * 100)),
     }
+  }
+
+  // 6b) Per-substage signals — each sub-stage's own count/status, derived
+  //     from the cross-module data we just loaded. Sub-stages don't form a
+  //     serial position; they run in parallel. The signal makes that visible
+  //     (Quote can be "2 sent, 1 won" at the same time as Dispatch is "3/5").
+  //     Dispatch keyed by `substage_key` so customer-#2 templates with
+  //     different sub-stage labels still work — just don't use unknown keys
+  //     here without adding an evaluator.
+  if (currentSubstages.length > 0) {
+    const quoteCounts = (quotationsForProject ?? []).reduce(
+      (acc, q) => {
+        acc.total++
+        const s = String(q.status)
+        if (s === 'accepted') acc.won++
+        else if (s === 'rejected' || s === 'expired') acc.dead++
+        else if (s === 'sent' || s === 'revised') acc.sent++
+        else acc.draft++
+        return acc
+      },
+      { total: 0, draft: 0, sent: 0, won: 0, dead: 0 }
+    )
+    const orderCount = (ordersForBars ?? []).length
+
+    currentSubstages = currentSubstages.map((sub): Substage => {
+      const signal = buildSubstageSignal({
+        key: sub.substage_key,
+        isWatch: sub.is_watch_stage,
+        quoteCounts,
+        orderCount,
+        orderValue: totalOrderValue,
+        ordersReady,
+        totalLines,
+        reservedLinesCount,
+        totalDispatches,
+        deliveredDispatches,
+      })
+      return { ...sub, signal }
+    })
   }
 
   // 7) Next action — earliest open task on the project

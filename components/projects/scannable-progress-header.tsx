@@ -21,7 +21,7 @@ import {
   User,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ProjectProgress, Health } from '@/lib/read-models/project-progress'
+import type { ProjectProgress, Health, Substage } from '@/lib/read-models/project-progress'
 
 const HEALTH_META: Record<Health, { label: string; bg: string; text: string; dot: string; icon: React.ReactNode }> = {
   on_track:       { label: 'On track',       bg: 'bg-emerald-50', text: 'text-emerald-700', dot: '#10b981', icon: <ShieldCheck className="size-3.5" /> },
@@ -94,43 +94,17 @@ export function ScannableProgressHeader({ progress }: { progress: ProjectProgres
         })}
       </div>
 
-      {/* Sub-pipeline expansion (COMPLETENESS a) — only when the current stage has substages */}
+      {/* Sub-pipeline expansion (COMPLETENESS a) — only when the current stage has substages.
+          Each substage shows its own count/status signal (parallel activity model,
+          not a serial position). Watch-stages render dashed/italic with no signal. */}
       {progress.current_substages.length > 0 && (
         <div className="rounded-lg border border-border bg-muted/30 p-3 flex flex-col gap-2">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
             {progress.current_stage?.label} sub-pipeline
           </p>
-          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-            {progress.current_substages.map((sub, i) => (
-              <div key={sub.id} className="flex items-center gap-1 shrink-0">
-                {sub.is_watch_stage ? (
-                  // Watch-stage: dashed border + muted italic text + eye icon.
-                  // Visual signals "informational only — never gates money or hard logic."
-                  <div
-                    className="flex items-center gap-1.5 rounded-md border border-dashed px-1.5 py-0.5"
-                    style={{ borderColor: sub.color, opacity: 0.7 }}
-                    title="Watch-stage — informational only, never gates money or hard logic"
-                  >
-                    <Eye className="size-3 text-muted-foreground/70" />
-                    <span className="text-[11px] italic text-muted-foreground/80">
-                      {sub.label}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <div
-                      className="size-2 rounded-full shrink-0"
-                      style={{ backgroundColor: sub.color }}
-                    />
-                    <span className="text-[11px] font-medium text-foreground/80">
-                      {sub.label}
-                    </span>
-                  </div>
-                )}
-                {i < progress.current_substages.length - 1 && (
-                  <ChevronRight className="size-3 text-muted-foreground/30 shrink-0" />
-                )}
-              </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
+            {progress.current_substages.map((sub) => (
+              <SubstageCell key={sub.id} sub={sub} />
             ))}
           </div>
         </div>
@@ -226,6 +200,79 @@ export function ScannableProgressHeader({ progress }: { progress: ProjectProgres
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Per-substage cell — label + status dot + the signal computed in the
+// read-model. Watch-stages render dashed/italic with no signal (informational).
+function SubstageCell({ sub }: { sub: Substage }) {
+  const isWatch = sub.is_watch_stage
+  const status = sub.signal?.status ?? 'empty'
+
+  // Status → dot tint (active uses the substage's own colour; done = emerald;
+  // empty = muted). Watch-stage uses its own dashed treatment.
+  const dotStyle =
+    status === 'done'
+      ? { backgroundColor: '#10b981' }
+      : status === 'active'
+      ? { backgroundColor: sub.color }
+      : { backgroundColor: '#d1d5db' }
+
+  if (isWatch) {
+    return (
+      <div
+        className="flex items-start gap-2 rounded-md border border-dashed px-2 py-1.5"
+        style={{ borderColor: sub.color, opacity: 0.8 }}
+        title="Watch-stage — informational only, never gates money or hard logic"
+      >
+        <Eye className="size-3 text-muted-foreground/70 mt-0.5 shrink-0" />
+        <div className="flex flex-col min-w-0">
+          <span className="text-[11px] italic text-muted-foreground/80 leading-tight">
+            {sub.label}
+          </span>
+          <span className="text-[10px] text-muted-foreground/60 leading-tight">
+            watch
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-start gap-2">
+      <div
+        className="size-2 rounded-full shrink-0 mt-1"
+        style={dotStyle}
+      />
+      <div className="flex flex-col min-w-0">
+        <span className="text-[11px] font-medium text-foreground/80 leading-tight">
+          {sub.label}
+        </span>
+        {sub.signal ? (
+          <>
+            <span
+              className={cn(
+                'text-[11px] tabular-nums leading-tight',
+                status === 'done'
+                  ? 'text-emerald-700 font-medium'
+                  : status === 'active'
+                  ? 'text-foreground font-medium'
+                  : 'text-muted-foreground/60 italic'
+              )}
+            >
+              {sub.signal.primary}
+            </span>
+            {sub.signal.secondary && (
+              <span className="text-[10px] text-muted-foreground/70 leading-tight">
+                {sub.signal.secondary}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/50 italic leading-tight">—</span>
+        )}
+      </div>
     </div>
   )
 }

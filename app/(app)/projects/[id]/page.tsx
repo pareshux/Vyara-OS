@@ -235,6 +235,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 stages={segmentStages}
                 currentStageId={currentStage.id}
                 projectId={project.id}
+                displayMode="advance-only"
               />
             </div>
           )}
