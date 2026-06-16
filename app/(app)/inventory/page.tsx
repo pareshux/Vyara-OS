@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Boxes, Upload, AlertTriangle, Warehouse, Pencil, ArrowLeftRight } from 'lucide-react'
 import { AdjustButton } from './adjust-button'
 import { ReceiveButton } from './receive-button'
+import { LimitsButton } from './limits-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -200,7 +201,7 @@ export default async function InventoryPage({
                     </td>
                     <td className="px-3 py-2 text-right">
                       {wh && pr && (
-                        <div className="flex justify-end items-center gap-1">
+                        <div className="flex justify-end items-center gap-1 flex-wrap">
                           <ReceiveButton
                             variant="ghost"
                             label="Receive"
@@ -218,9 +219,18 @@ export default async function InventoryPage({
                             currentAvailable={Number(r.available_qty)}
                             estimatedUnitPrice={pr.mrp ?? undefined}
                           />
+                          <LimitsButton
+                            warehouseId={wh.id}
+                            productId={pr.id}
+                            skuCode={pr.sku_code}
+                            productName={pr.name}
+                            unit={pr.unit}
+                            currentMin={r.min_level != null ? Number(r.min_level) : null}
+                            currentMax={r.max_level != null ? Number(r.max_level) : null}
+                          />
                           <Link
                             href={`/inventory/ledger?warehouse=${wh.id}&product=${pr.id}`}
-                            className="text-xs text-primary hover:underline"
+                            className="text-xs text-primary hover:underline ml-1"
                           >
                             Ledger
                           </Link>
