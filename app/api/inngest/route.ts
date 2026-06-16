@@ -7,6 +7,10 @@ import {
   onInvoiceSyncedCreateCollection,
   dailyCollectionCheck,
 } from '@/lib/inngest/collection-handlers'
+import {
+  onDispatchCompletedConsumeReservation,
+  inventoryDailyCheck,
+} from '@/lib/inngest/inventory-handlers'
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -16,5 +20,7 @@ export const { GET, POST, PUT } = serve({
     onOrderCreatedScheduleDispatchTask,
     onInvoiceSyncedCreateCollection,
     dailyCollectionCheck,
+    onDispatchCompletedConsumeReservation,
+    inventoryDailyCheck,
   ],
 })
