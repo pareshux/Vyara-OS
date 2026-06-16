@@ -24,18 +24,20 @@ import {
 import { PlusCircle } from 'lucide-react'
 import { createDealerFromFirm } from '@/lib/actions/dealers'
 
-const SUGGESTED_TIERS = ['platinum', 'gold', 'silver', 'bronze']
+const NONE = '__none__'
 
 interface Props {
   eligibleFirms: { id: string; name: string; type: string; city: string | null }[]
+  tiers: { id: string; label: string }[]
+  territories: { id: string; label: string; level: number }[]
 }
 
-export function NewDealerSheet({ eligibleFirms }: Props) {
+export function NewDealerSheet({ eligibleFirms, tiers, territories }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [firmId, setFirmId] = useState<string>('')
-  const [tier, setTier] = useState<string>('')
-  const [territory, setTerritory] = useState('')
+  const [tierId, setTierId] = useState<string>(NONE)
+  const [territoryId, setTerritoryId] = useState<string>(NONE)
   const [creditLimit, setCreditLimit] = useState<number | ''>('')
   const [creditPeriodDays, setCreditPeriodDays] = useState<number>(30)
   const [dormancyDays, setDormancyDays] = useState<number>(90)
@@ -44,7 +46,7 @@ export function NewDealerSheet({ eligibleFirms }: Props) {
   const [err, setErr] = useState<string | null>(null)
 
   function reset() {
-    setFirmId(''); setTier(''); setTerritory(''); setCreditLimit('')
+    setFirmId(''); setTierId(NONE); setTerritoryId(NONE); setCreditLimit('')
     setCreditPeriodDays(30); setDormancyDays(90); setNotes(''); setErr(null)
   }
 
@@ -54,8 +56,8 @@ export function NewDealerSheet({ eligibleFirms }: Props) {
     startTransition(async () => {
       const res = await createDealerFromFirm({
         firm_id: firmId,
-        tier: tier.trim() || undefined,
-        territory: territory.trim() || undefined,
+        tier_id: tierId === NONE ? null : tierId,
+        territory_id: territoryId === NONE ? null : territoryId,
         credit_limit: creditLimit === '' ? undefined : Number(creditLimit),
         credit_period_days: creditPeriodDays,
         dormancy_threshold_days: dormancyDays,
@@ -108,19 +110,33 @@ export function NewDealerSheet({ eligibleFirms }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label>Tier</Label>
-                <Input
-                  value={tier}
-                  onChange={(e) => setTier(e.target.value)}
-                  placeholder="e.g. gold"
-                  list="tier-suggestions"
-                />
-                <datalist id="tier-suggestions">
-                  {SUGGESTED_TIERS.map((t) => <option key={t} value={t} />)}
-                </datalist>
+                <Select value={tierId} onValueChange={setTierId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>—</SelectItem>
+                    {tiers.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {tiers.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground italic">Add tiers in <a href="/admin/dealer-tiers" className="text-primary hover:underline">Settings</a>.</p>
+                )}
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="territory">Territory</Label>
-                <Input id="territory" value={territory} onChange={(e) => setTerritory(e.target.value)} placeholder="e.g. Surat South" />
+                <Label>Territory</Label>
+                <Select value={territoryId} onValueChange={setTerritoryId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>—</SelectItem>
+                    {territories.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {'  '.repeat(t.level)}{t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {territories.length === 0 && (
+                  <p className="text-[10px] text-muted-foreground italic">Add territories in <a href="/admin/territories" className="text-primary hover:underline">Settings</a>.</p>
+                )}
               </div>
             </div>
 

@@ -20,18 +20,27 @@ export default async function DealerProfilePage() {
     .from('dealer_user')
     .select(
       `invited_at, accepted_at,
-       dealer:dealer_id(dealer_code, tier, territory, credit_limit, credit_period_days, onboarded_at,
-                        firm:firm_id(name, city, gstin, phone, email))`
+       dealer:dealer_id(dealer_code, credit_limit, credit_period_days, onboarded_at,
+                        firm:firm_id(name, city, gstin, phone, email),
+                        tier:tier_id(label, color, bg_color),
+                        territory:territory_id(label))`
     )
     .eq('auth_user_id', user.id)
     .eq('is_active', true)
     .maybeSingle()
 
+  type TierObj = { label: string; color: string; bg_color: string }
+  type TerritoryObj = { label: string }
+  type Firm = { name: string; city: string | null; gstin: string | null; phone: string | null; email: string | null }
   const dealer = (Array.isArray(link?.dealer) ? link?.dealer[0] : link?.dealer) as
-    | { dealer_code: string; tier: string | null; territory: string | null; credit_limit: number | null; credit_period_days: number; onboarded_at: string;
-        firm: { name: string; city: string | null; gstin: string | null; phone: string | null; email: string | null } | { name: string; city: string | null; gstin: string | null; phone: string | null; email: string | null }[] | null }
+    | { dealer_code: string; credit_limit: number | null; credit_period_days: number; onboarded_at: string;
+        firm: Firm | Firm[] | null
+        tier: TierObj | TierObj[] | null
+        territory: TerritoryObj | TerritoryObj[] | null }
     | null
-  const firm = dealer ? (Array.isArray(dealer.firm) ? dealer.firm[0] : dealer.firm) as { name: string; city: string | null; gstin: string | null; phone: string | null; email: string | null } | null : null
+  const firm = dealer ? ((Array.isArray(dealer.firm) ? dealer.firm[0] : dealer.firm) as Firm | null) : null
+  const tierObj = dealer ? ((Array.isArray(dealer.tier) ? dealer.tier[0] : dealer.tier) as TierObj | null) : null
+  const territoryObj = dealer ? ((Array.isArray(dealer.territory) ? dealer.territory[0] : dealer.territory) as TerritoryObj | null) : null
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-3xl">
@@ -60,10 +69,14 @@ export default async function DealerProfilePage() {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Dealer</p>
             <Row label="Firm" value={firm.name} />
             <Row label="Code" value={<span className="font-mono">{dealer.dealer_code}</span>} />
-            {dealer.tier && (
-              <Row label="Tier" value={<Badge variant="secondary" className="text-xs capitalize">{dealer.tier}</Badge>} />
+            {tierObj && (
+              <Row label="Tier" value={
+                <Badge variant="outline" className="border-0 text-xs" style={{ backgroundColor: tierObj.bg_color, color: tierObj.color }}>
+                  {tierObj.label}
+                </Badge>
+              } />
             )}
-            <Row label="Territory" value={dealer.territory ?? '—'} />
+            <Row label="Territory" value={territoryObj?.label ?? '—'} />
             <Row label="City" value={firm.city ?? '—'} />
             <Row label="GSTIN" value={firm.gstin ?? '—'} />
             <Row label="Onboarded" value={new Date(dealer.onboarded_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} />

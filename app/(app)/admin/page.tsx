@@ -33,21 +33,21 @@ const SECTIONS = [
     title: 'Vendors',
     blurb: 'Suppliers, transporters, contractors, service providers. Reference data; not procurement.',
     icon: Truck,
-    available: false,
+    available: true,
   },
   {
     href: '/admin/dealer-tiers',
     title: 'Dealer tiers',
     blurb: 'Configurable ladder for dealer ranking (replaces free-text tier field).',
     icon: BookmarkIcon,
-    available: false,
+    available: true,
   },
   {
     href: '/admin/territories',
     title: 'Territories',
     blurb: 'Regional hierarchy. Used for projects, dealers, and salesperson assignment.',
     icon: Map,
-    available: false,
+    available: true,
   },
 ]
 

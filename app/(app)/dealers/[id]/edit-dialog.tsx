@@ -8,29 +8,38 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Pencil } from 'lucide-react'
 import { updateDealer, setDealerActive } from '@/lib/actions/dealers'
 
-const SUGGESTED_TIERS = ['platinum', 'gold', 'silver', 'bronze']
+const NONE = '__none__'
 
 interface Props {
   dealerId: string
   initial: {
-    tier: string | null
-    territory: string | null
+    tier_id: string | null
+    territory_id: string | null
     credit_limit: number | null
     credit_period_days: number
     dormancy_threshold_days: number
     notes: string | null
     is_active: boolean
   }
+  tiers: { id: string; label: string }[]
+  territories: { id: string; label: string; level: number }[]
 }
 
-export function EditDealerButton({ dealerId, initial }: Props) {
+export function EditDealerButton({ dealerId, initial, tiers, territories }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [tier, setTier] = useState(initial.tier ?? '')
-  const [territory, setTerritory] = useState(initial.territory ?? '')
+  const [tierId, setTierId] = useState<string>(initial.tier_id ?? NONE)
+  const [territoryId, setTerritoryId] = useState<string>(initial.territory_id ?? NONE)
   const [creditLimit, setCreditLimit] = useState<number | ''>(initial.credit_limit ?? '')
   const [creditPeriodDays, setCreditPeriodDays] = useState<number>(initial.credit_period_days)
   const [dormancyDays, setDormancyDays] = useState<number>(initial.dormancy_threshold_days)
@@ -42,8 +51,8 @@ export function EditDealerButton({ dealerId, initial }: Props) {
     setErr(null)
     startTransition(async () => {
       const res = await updateDealer(dealerId, {
-        tier: tier.trim() || null,
-        territory: territory.trim() || null,
+        tier_id: tierId === NONE ? null : tierId,
+        territory_id: territoryId === NONE ? null : territoryId,
         credit_limit: creditLimit === '' ? null : Number(creditLimit),
         credit_period_days: creditPeriodDays,
         dormancy_threshold_days: dormancyDays,
@@ -84,21 +93,28 @@ export function EditDealerButton({ dealerId, initial }: Props) {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="tier">Tier</Label>
-                <Input
-                  id="tier"
-                  value={tier}
-                  onChange={(e) => setTier(e.target.value)}
-                  placeholder="e.g. gold"
-                  list="tier-suggestions"
-                />
-                <datalist id="tier-suggestions">
-                  {SUGGESTED_TIERS.map((t) => <option key={t} value={t} />)}
-                </datalist>
+                <Label>Tier</Label>
+                <Select value={tierId} onValueChange={setTierId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>—</SelectItem>
+                    {tiers.map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="territory">Territory</Label>
-                <Input id="territory" value={territory} onChange={(e) => setTerritory(e.target.value)} placeholder="e.g. Surat South" />
+                <Label>Territory</Label>
+                <Select value={territoryId} onValueChange={setTerritoryId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>—</SelectItem>
+                    {territories.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {'  '.repeat(t.level)}{t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

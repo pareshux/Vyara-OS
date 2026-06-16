@@ -9,13 +9,6 @@ import { UsersSection } from './users-section'
 
 export const dynamic = 'force-dynamic'
 
-const TIER_STYLES: Record<string, { bg: string; color: string }> = {
-  platinum: { bg: '#E5E7EB', color: '#374151' },
-  gold:     { bg: '#FEF3C7', color: '#B45309' },
-  silver:   { bg: '#F1F5F9', color: '#475569' },
-  bronze:   { bg: '#FFEDD5', color: '#C2410C' },
-}
-
 export default async function DealerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
@@ -28,13 +21,17 @@ export default async function DealerDetailPage({ params }: { params: Promise<{ i
     { data: recentOrdersRaw },
     { data: recentInvoicesRaw },
     { data: ledgerRaw },
+    { data: tiersRaw },
+    { data: territoriesRaw },
   ] = await Promise.all([
     supabase
       .from('dealer')
       .select(
-        `id, dealer_code, tier, territory, credit_limit, credit_period_days,
+        `id, dealer_code, tier_id, territory_id, credit_limit, credit_period_days,
          dormancy_threshold_days, is_active, onboarded_at, notes, created_at,
-         firm:firm_id(id, name, city, gstin, phone, email)`
+         firm:firm_id(id, name, city, gstin, phone, email),
+         tier:tier_id(label, color, bg_color),
+         territory:territory_id(label)`
       )
       .eq('id', id)
       .is('deleted_at', null)
@@ -62,12 +59,30 @@ export default async function DealerDetailPage({ params }: { params: Promise<{ i
       .eq('dealer_id', id)
       .order('txn_date', { ascending: false })
       .limit(10),
+    supabase
+      .from('dealer_tier')
+      .select('id, label')
+      .is('deleted_at', null)
+      .eq('is_active', true)
+      .order('sort_order'),
+    supabase
+      .from('territory')
+      .select('id, label, level')
+      .is('deleted_at', null)
+      .eq('is_active', true)
+      .order('level').order('sort_order'),
   ])
 
   if (!dealer) notFound()
 
   const firm = (Array.isArray(dealer.firm) ? dealer.firm[0] : dealer.firm) as
     | { id: string; name: string; city: string | null; gstin: string | null; phone: string | null; email: string | null }
+    | null
+  const tierObj = (Array.isArray(dealer.tier) ? dealer.tier[0] : dealer.tier) as
+    | { label: string; color: string; bg_color: string }
+    | null
+  const territoryObj = (Array.isArray(dealer.territory) ? dealer.territory[0] : dealer.territory) as
+    | { label: string }
     | null
 
   // Filter orders + invoices to those belonging to this dealer's firm
@@ -104,8 +119,6 @@ export default async function DealerDetailPage({ params }: { params: Promise<{ i
     (daysSinceLast == null && Math.floor((Date.now() - new Date(dealer.onboarded_at as string).getTime()) / 86_400_000) > (dealer.dormancy_threshold_days as number))
   )
 
-  const ts = dealer.tier ? TIER_STYLES[(dealer.tier as string).toLowerCase()] ?? TIER_STYLES.bronze : null
-
   type LedgerRow = { txn_date: string; txn_type: string; source_ref: string; debit: number; credit: number; description: string; running_balance: number }
   const ledger = (ledgerRaw ?? []) as unknown as LedgerRow[]
 
@@ -124,9 +137,9 @@ export default async function DealerDetailPage({ params }: { params: Promise<{ i
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl font-semibold">{firm?.name ?? '—'}</h1>
                 <span className="font-mono text-xs text-muted-foreground">{dealer.dealer_code as string}</span>
-                {ts && dealer.tier && (
-                  <Badge variant="outline" className="border-0 text-xs capitalize" style={{ backgroundColor: ts.bg, color: ts.color }}>
-                    {dealer.tier as string}
+                {tierObj && (
+                  <Badge variant="outline" className="border-0 text-xs" style={{ backgroundColor: tierObj.bg_color, color: tierObj.color }}>
+                    {tierObj.label}
                   </Badge>
                 )}
                 {!dealer.is_active ? (
@@ -140,7 +153,7 @@ export default async function DealerDetailPage({ params }: { params: Promise<{ i
                 )}
               </div>
               <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
-                {dealer.territory && <span>{dealer.territory as string}</span>}
+                {territoryObj && <span>{territoryObj.label}</span>}
                 {firm?.city && <span className="flex items-center gap-1"><MapPin className="size-3.5" /> {firm.city}</span>}
                 {firm?.phone && <span className="flex items-center gap-1"><Phone className="size-3.5" /> {firm.phone}</span>}
                 <span className="flex items-center gap-1"><Calendar className="size-3.5" /> Onboarded {new Date(dealer.onboarded_at as string).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
@@ -149,14 +162,16 @@ export default async function DealerDetailPage({ params }: { params: Promise<{ i
             <EditDealerButton
               dealerId={dealer.id as string}
               initial={{
-                tier: (dealer.tier as string) ?? null,
-                territory: (dealer.territory as string) ?? null,
+                tier_id: (dealer.tier_id as string) ?? null,
+                territory_id: (dealer.territory_id as string) ?? null,
                 credit_limit: dealer.credit_limit != null ? Number(dealer.credit_limit) : null,
                 credit_period_days: Number(dealer.credit_period_days),
                 dormancy_threshold_days: Number(dealer.dormancy_threshold_days),
                 notes: (dealer.notes as string) ?? null,
                 is_active: dealer.is_active as boolean,
               }}
+              tiers={tiersRaw ?? []}
+              territories={territoriesRaw ?? []}
             />
           </div>
         </CardContent>

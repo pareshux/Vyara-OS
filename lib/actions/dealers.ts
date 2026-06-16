@@ -30,8 +30,8 @@ function adminClient() {
 
 export async function createDealerFromFirm(params: {
   firm_id: string
-  tier?: string
-  territory?: string
+  tier_id?: string | null
+  territory_id?: string | null
   credit_limit?: number
   credit_period_days?: number
   dormancy_threshold_days?: number
@@ -65,8 +65,8 @@ export async function createDealerFromFirm(params: {
     .insert({
       tenant_id: ctx.tenantId,
       firm_id: params.firm_id,
-      tier: params.tier?.trim() || null,
-      territory: params.territory?.trim() || null,
+      tier_id: params.tier_id ?? null,
+      territory_id: params.territory_id ?? null,
       credit_limit: params.credit_limit ?? null,
       credit_period_days: params.credit_period_days ?? 30,
       dormancy_threshold_days: params.dormancy_threshold_days ?? 90,
@@ -87,8 +87,8 @@ export async function createDealerFromFirm(params: {
 export async function updateDealer(
   dealerId: string,
   patch: Partial<{
-    tier: string | null
-    territory: string | null
+    tier_id: string | null
+    territory_id: string | null
     credit_limit: number | null
     credit_period_days: number
     dormancy_threshold_days: number

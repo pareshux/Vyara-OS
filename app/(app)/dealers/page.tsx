@@ -8,13 +8,6 @@ import { NewDealerSheet } from './new-dealer-sheet'
 
 export const dynamic = 'force-dynamic'
 
-const TIER_STYLES: Record<string, { bg: string; color: string }> = {
-  platinum: { bg: '#E5E7EB', color: '#374151' },
-  gold:     { bg: '#FEF3C7', color: '#B45309' },
-  silver:   { bg: '#F1F5F9', color: '#475569' },
-  bronze:   { bg: '#FFEDD5', color: '#C2410C' },
-}
-
 export default async function DealersPage({
   searchParams,
 }: {
@@ -33,13 +26,17 @@ export default async function DealersPage({
     { data: ageingRaw },
     { data: lastOrderRaw },
     { data: firms },
+    { data: tiersRaw },
+    { data: territoriesRaw },
   ] = await Promise.all([
     supabase
       .from('dealer')
       .select(
-        `id, dealer_code, tier, territory, credit_limit, credit_period_days,
+        `id, dealer_code, tier_id, territory_id, credit_limit, credit_period_days,
          dormancy_threshold_days, is_active, onboarded_at, notes,
-         firm:firm_id(id, name, city, phone)`
+         firm:firm_id(id, name, city, phone),
+         tier:tier_id(label, color, bg_color),
+         territory:territory_id(label)`
       )
       .is('deleted_at', null)
       .order('dealer_code'),
@@ -60,13 +57,26 @@ export default async function DealersPage({
       .select('id, name, type, city')
       .is('deleted_at', null)
       .order('name'),
+    // Masters for the New-dealer sheet
+    supabase
+      .from('dealer_tier')
+      .select('id, label')
+      .is('deleted_at', null)
+      .eq('is_active', true)
+      .order('sort_order'),
+    supabase
+      .from('territory')
+      .select('id, label, level')
+      .is('deleted_at', null)
+      .eq('is_active', true)
+      .order('level').order('sort_order'),
   ])
 
   type Dealer = {
     id: string
     dealer_code: string
-    tier: string | null
-    territory: string | null
+    tier_id: string | null
+    territory_id: string | null
     credit_limit: number | null
     credit_period_days: number
     dormancy_threshold_days: number
@@ -74,6 +84,8 @@ export default async function DealersPage({
     onboarded_at: string
     notes: string | null
     firm: { id: string; name: string; city: string | null; phone: string | null } | { id: string; name: string; city: string | null; phone: string | null }[] | null
+    tier: { label: string; color: string; bg_color: string } | { label: string; color: string; bg_color: string }[] | null
+    territory: { label: string } | { label: string }[] | null
   }
   const dealers = (dealersRaw ?? []) as unknown as Dealer[]
 
@@ -121,6 +133,8 @@ export default async function DealersPage({
   // Compute statuses + apply filter
   type Row = Dealer & {
     firmObj: { id: string; name: string; city: string | null; phone: string | null } | null
+    tierObj: { label: string; color: string; bg_color: string } | null
+    territoryObj: { label: string } | null
     outstanding: number
     lastOrderDate: string | null
     daysSinceOrder: number | null
@@ -130,6 +144,8 @@ export default async function DealersPage({
   }
   const rows: Row[] = dealers.map((d) => {
     const firmObj = (Array.isArray(d.firm) ? d.firm[0] : d.firm) ?? null
+    const tierObj = (Array.isArray(d.tier) ? d.tier[0] : d.tier) ?? null
+    const territoryObj = (Array.isArray(d.territory) ? d.territory[0] : d.territory) ?? null
     const fid = firmObj?.id
     const outstanding = fid ? (outstandingByFirm[fid] ?? 0) : 0
     const lastOrderDate = fid ? lastOrderByFirm[fid] ?? null : null
@@ -145,7 +161,7 @@ export default async function DealersPage({
       const daysSinceOnboard = Math.floor((now.getTime() - new Date(d.onboarded_at).getTime()) / 86_400_000)
       isDormant = daysSinceOnboard > d.dormancy_threshold_days
     }
-    return { ...d, firmObj, outstanding, lastOrderDate, daysSinceOrder, isDormant, thisMonth, lastMonth }
+    return { ...d, firmObj, tierObj, territoryObj, outstanding, lastOrderDate, daysSinceOrder, isDormant, thisMonth, lastMonth }
   })
 
   const filtered = rows.filter((r) => {
@@ -177,7 +193,11 @@ export default async function DealersPage({
             </p>
           </div>
         </div>
-        <NewDealerSheet eligibleFirms={eligibleFirms} />
+        <NewDealerSheet
+          eligibleFirms={eligibleFirms}
+          tiers={tiersRaw ?? []}
+          territories={territoriesRaw ?? []}
+        />
       </div>
 
       {/* View toggle */}
@@ -256,7 +276,6 @@ export default async function DealersPage({
             </thead>
             <tbody>
               {filtered.map((r) => {
-                const ts = r.tier ? TIER_STYLES[r.tier.toLowerCase()] ?? TIER_STYLES.bronze : null
                 return (
                   <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/30">
                     <td className="px-3 py-2 font-mono text-xs">
@@ -273,14 +292,14 @@ export default async function DealersPage({
                       )}
                     </td>
                     <td className="hidden px-3 py-2 md:table-cell">
-                      {ts && r.tier ? (
-                        <Badge variant="outline" className="border-0 text-xs capitalize" style={{ backgroundColor: ts.bg, color: ts.color }}>
-                          {r.tier}
+                      {r.tierObj ? (
+                        <Badge variant="outline" className="border-0 text-xs" style={{ backgroundColor: r.tierObj.bg_color, color: r.tierObj.color }}>
+                          {r.tierObj.label}
                         </Badge>
                       ) : <span className="text-muted-foreground/50">—</span>}
                     </td>
                     <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">
-                      {r.territory ?? '—'}
+                      {r.territoryObj?.label ?? '—'}
                     </td>
                     <td className="hidden px-3 py-2 text-muted-foreground tabular-nums text-xs lg:table-cell">
                       {r.lastOrderDate
@@ -348,8 +367,8 @@ export default async function DealersPage({
                       <Link href={`/dealers/${r.id}`} className="text-foreground hover:text-primary">
                         {r.firmObj?.name ?? '—'}
                       </Link>
-                      {r.tier && (
-                        <span className="ml-1.5 text-[10px] text-muted-foreground capitalize">· {r.tier}</span>
+                      {r.tierObj && (
+                        <span className="ml-1.5 text-[10px] text-muted-foreground">· {r.tierObj.label}</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right">
