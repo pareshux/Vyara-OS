@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { FileText, Upload, Plus } from 'lucide-react'
+import { FileText, Upload, Plus, Search, X } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,10 +16,19 @@ const BUCKET_STYLES: Record<string, { bg: string; color: string; label: string }
   closed:  { bg: '#DCFCE7', color: '#15803D', label: 'Closed' },
 }
 
-export default async function InvoicesPage() {
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; bucket?: string; status?: string }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  const sp = await searchParams
+  const q = (sp.q ?? '').trim()
+  const bucketFilter = sp.bucket ?? null
+  const statusFilter = sp.status ?? null
 
   const { data: invoicesRaw } = await supabase
     .from('invoice_ageing_v')
@@ -49,7 +58,7 @@ export default async function InvoicesPage() {
     days_overdue: number
     ageing_bucket: string
   }
-  const rows = (invoicesRaw ?? []) as unknown as Row[]
+  const allRows = (invoicesRaw ?? []) as unknown as Row[]
   const metaById = Object.fromEntries(
     ((meta ?? []) as unknown as Array<{ id: string; source: string; is_running_bill: boolean; running_bill_seq: number | null; project: { id: string; name: string } | { id: string; name: string }[] | null; buyer: { name: string } | { name: string }[] | null }>).map((m) => [
       m.id,
@@ -63,13 +72,44 @@ export default async function InvoicesPage() {
     ])
   )
 
-  // Bucket totals
+  // Bucket totals (computed from the full unfiltered set so chips always show real distribution)
   const buckets = ['current', '1-30', '31-60', '60+', 'closed']
   const bucketTotals = buckets.map((b) => ({
     key: b,
-    count: rows.filter((r) => r.ageing_bucket === b).length,
-    outstanding: rows.filter((r) => r.ageing_bucket === b).reduce((s, r) => s + Number(r.outstanding), 0),
+    count: allRows.filter((r) => r.ageing_bucket === b).length,
+    outstanding: allRows.filter((r) => r.ageing_bucket === b).reduce((s, r) => s + Number(r.outstanding), 0),
   }))
+
+  // Apply filters and search
+  let rows = allRows
+  if (bucketFilter) rows = rows.filter((r) => r.ageing_bucket === bucketFilter)
+  if (statusFilter) rows = rows.filter((r) => r.status === statusFilter)
+  if (q) {
+    const needle = q.toLowerCase()
+    rows = rows.filter((r) => {
+      const m = metaById[r.id]
+      return (
+        r.invoice_number.toLowerCase().includes(needle) ||
+        (r.external_invoice_number ?? '').toLowerCase().includes(needle) ||
+        (m?.buyer?.name ?? '').toLowerCase().includes(needle) ||
+        (m?.project?.name ?? '').toLowerCase().includes(needle)
+      )
+    })
+  }
+
+  const statuses = ['draft', 'sent', 'partial_paid', 'paid', 'cancelled', 'written_off']
+  const statusCounts = Object.fromEntries(
+    statuses.map((s) => [s, allRows.filter((r) => r.status === s).length])
+  )
+
+  function buildQs(opts: { q?: string | null; bucket?: string | null; status?: string | null }) {
+    const params = new URLSearchParams()
+    if (opts.q) params.set('q', opts.q)
+    if (opts.bucket) params.set('bucket', opts.bucket)
+    if (opts.status) params.set('status', opts.status)
+    const s = params.toString()
+    return s ? `?${s}` : ''
+  }
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-6xl">
@@ -78,6 +118,12 @@ export default async function InvoicesPage() {
           <h1 className="text-lg font-semibold text-foreground">Invoices</h1>
           <p className="text-sm text-muted-foreground tabular-nums">
             {rows.length} {rows.length === 1 ? 'invoice' : 'invoices'}
+            {(q || bucketFilter || statusFilter) && (
+              <>
+                {' '}
+                <Link href="/invoices" className="text-xs text-primary hover:underline">(clear filters)</Link>
+              </>
+            )}
           </p>
         </div>
         <div className="flex gap-2">
@@ -90,33 +136,96 @@ export default async function InvoicesPage() {
         </div>
       </div>
 
-      {/* Ageing chips */}
+      {/* Ageing chip cards — clickable filters */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {bucketTotals.map((b) => {
           const s = BUCKET_STYLES[b.key]
+          const active = bucketFilter === b.key
           return (
-            <Card key={b.key} size="sm">
-              <CardContent className="pt-3 pb-3 flex flex-col gap-1">
-                <span className="text-xs font-medium" style={{ color: s.color }}>{s.label}</span>
-                <span className="tabular-nums text-lg font-semibold text-foreground">
-                  ₹{b.outstanding.toLocaleString('en-IN')}
-                </span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {b.count} {b.count === 1 ? 'invoice' : 'invoices'}
-                </span>
-              </CardContent>
-            </Card>
+            <Link key={b.key} href={buildQs({ q, status: statusFilter, bucket: active ? null : b.key })}>
+              <Card size="sm" className={`cursor-pointer transition-all ${active ? 'ring-2 ring-primary' : 'hover:bg-muted/30'}`}>
+                <CardContent className="pt-3 pb-3 flex flex-col gap-1">
+                  <span className="text-xs font-medium" style={{ color: s.color }}>{s.label}</span>
+                  <span className="tabular-nums text-lg font-semibold text-foreground">
+                    ₹{b.outstanding.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {b.count} {b.count === 1 ? 'invoice' : 'invoices'}
+                  </span>
+                </CardContent>
+              </Card>
+            </Link>
           )
         })}
       </div>
+
+      {/* Search + status filter */}
+      <Card>
+        <CardContent className="pt-3 flex flex-col gap-3">
+          <form action="/invoices" method="get" className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="size-4 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                name="q"
+                defaultValue={q}
+                placeholder="Search by invoice number, external number, buyer, or project…"
+                className="flex h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 py-1 text-sm shadow-xs"
+              />
+            </div>
+            {bucketFilter && <input type="hidden" name="bucket" value={bucketFilter} />}
+            {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
+            <Button type="submit" size="sm" variant="outline">Search</Button>
+            {q && (
+              <Button type="button" size="sm" variant="ghost" asChild>
+                <Link href={buildQs({ bucket: bucketFilter, status: statusFilter })}>
+                  <X className="size-3.5" />
+                </Link>
+              </Button>
+            )}
+          </form>
+
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={buildQs({ q, bucket: bucketFilter })}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+                !statusFilter ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'
+              }`}
+            >
+              All statuses
+            </Link>
+            {statuses.map((s) => {
+              const active = statusFilter === s
+              const count = statusCounts[s] ?? 0
+              if (count === 0 && !active) return null
+              return (
+                <Link
+                  key={s}
+                  href={buildQs({ q, bucket: bucketFilter, status: active ? null : s })}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors capitalize ${
+                    active ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                  }`}
+                >
+                  {s.replace('_', ' ')}
+                  <span className="tabular-nums font-semibold">{count}</span>
+                </Link>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       {rows.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <FileText className="size-8 mb-3 text-muted-foreground/50" />
-            <p className="text-sm font-medium text-foreground">No invoices yet</p>
+            <p className="text-sm font-medium text-foreground">
+              {q || bucketFilter || statusFilter ? 'No invoices match the filters' : 'No invoices yet'}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create one manually or import from a Tally CSV export.
+              {q || bucketFilter || statusFilter
+                ? 'Try clearing filters or a different search term.'
+                : 'Create one manually or import from a Tally CSV export.'}
             </p>
           </CardContent>
         </Card>
