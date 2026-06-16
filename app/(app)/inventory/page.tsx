@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Boxes, Upload, AlertTriangle, Warehouse, Pencil, ArrowLeftRight } from 'lucide-react'
+import { Boxes, Upload, AlertTriangle, Warehouse, Pencil, ArrowLeftRight, Search, X } from 'lucide-react'
 import { AdjustButton } from './adjust-button'
 import { ReceiveButton } from './receive-button'
 import { LimitsButton } from './limits-button'
@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ warehouse?: string }>
+  searchParams: Promise<{ warehouse?: string; q?: string; status?: string }>
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -22,6 +22,8 @@ export default async function InventoryPage({
 
   const sp = await searchParams
   const filterWarehouse = sp.warehouse ?? null
+  const q = (sp.q ?? '').trim()
+  const statusFilter = sp.status ?? null
 
   const [{ data: warehouses }, stockRes] = await Promise.all([
     supabase
@@ -55,11 +57,41 @@ export default async function InventoryPage({
     warehouse: { id: string; code: string; name: string; type: string } | { id: string; code: string; name: string; type: string }[] | null
     product: { id: string; sku_code: string; name: string; unit: string; category: string; mrp: number | null } | { id: string; sku_code: string; name: string; unit: string; category: string; mrp: number | null }[] | null
   }
-  const rows = (stockRows ?? []) as unknown as Row[]
+  const allRows = (stockRows ?? []) as unknown as Row[]
+
+  // Apply search + status filter (in-memory, pilot scale)
+  let rows = allRows
+  if (q) {
+    const needle = q.toLowerCase()
+    rows = rows.filter((r) => {
+      const pr = Array.isArray(r.product) ? r.product[0] : r.product
+      return (pr?.sku_code ?? '').toLowerCase().includes(needle)
+        || (pr?.name ?? '').toLowerCase().includes(needle)
+    })
+  }
+  if (statusFilter === 'low') {
+    rows = rows.filter((r) => r.min_level != null && Number(r.available_qty) < Number(r.min_level))
+  } else if (statusFilter === 'empty') {
+    rows = rows.filter((r) => Number(r.available_qty) === 0)
+  } else if (statusFilter === 'ok') {
+    rows = rows.filter((r) => Number(r.available_qty) > 0 && !(r.min_level != null && Number(r.available_qty) < Number(r.min_level)))
+  }
+
   const totalSkus = rows.length
-  const lowStock = rows.filter((r) => r.min_level != null && Number(r.available_qty) < Number(r.min_level)).length
+  const lowStock = allRows.filter((r) => r.min_level != null && Number(r.available_qty) < Number(r.min_level)).length
+  const emptyStock = allRows.filter((r) => Number(r.available_qty) === 0).length
+  const okStock = allRows.length - lowStock - emptyStock
   const totalAvailable = rows.reduce((s, r) => s + Number(r.available_qty), 0)
   const totalReserved = rows.reduce((s, r) => s + Number(r.reserved_qty), 0)
+
+  function buildQs(opts: { warehouse?: string | null; q?: string | null; status?: string | null }) {
+    const params = new URLSearchParams()
+    if (opts.warehouse) params.set('warehouse', opts.warehouse)
+    if (opts.q) params.set('q', opts.q)
+    if (opts.status) params.set('status', opts.status)
+    const s = params.toString()
+    return s ? `?${s}` : ''
+  }
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-6xl">
@@ -89,10 +121,34 @@ export default async function InventoryPage({
         </div>
       </div>
 
+      {/* Search */}
+      <form action="/inventory" method="get" className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="size-4 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            name="q"
+            defaultValue={q}
+            placeholder="Search by SKU code or product name…"
+            className="flex h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 py-1 text-sm shadow-xs"
+          />
+        </div>
+        {filterWarehouse && <input type="hidden" name="warehouse" value={filterWarehouse} />}
+        {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
+        <Button type="submit" size="sm" variant="outline">Search</Button>
+        {q && (
+          <Button type="button" size="sm" variant="ghost" asChild>
+            <Link href={buildQs({ warehouse: filterWarehouse, status: statusFilter })}>
+              <X className="size-3.5" />
+            </Link>
+          </Button>
+        )}
+      </form>
+
       {/* Warehouse filter chips */}
       <div className="flex flex-wrap gap-2">
         <Link
-          href="/inventory"
+          href={buildQs({ q, status: statusFilter })}
           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
             !filterWarehouse ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'
           }`}
@@ -104,7 +160,7 @@ export default async function InventoryPage({
           return (
             <Link
               key={w.id}
-              href={`/inventory?warehouse=${w.id}`}
+              href={buildQs({ warehouse: isActive ? null : w.id, q, status: statusFilter })}
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
                 isActive ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'
               }`}
@@ -114,6 +170,42 @@ export default async function InventoryPage({
             </Link>
           )
         })}
+      </div>
+
+      {/* Status filter chips */}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href={buildQs({ warehouse: filterWarehouse, q })}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+            !statusFilter ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'
+          }`}
+        >
+          All
+        </Link>
+        <Link
+          href={buildQs({ warehouse: filterWarehouse, q, status: statusFilter === 'low' ? null : 'low' })}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+            statusFilter === 'low' ? 'bg-destructive text-destructive-foreground border-destructive' : 'bg-red-50 text-red-700 border-transparent hover:bg-red-100'
+          }`}
+        >
+          <AlertTriangle className="size-3" /> Low <span className="tabular-nums font-semibold">{lowStock}</span>
+        </Link>
+        <Link
+          href={buildQs({ warehouse: filterWarehouse, q, status: statusFilter === 'empty' ? null : 'empty' })}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+            statusFilter === 'empty' ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 text-amber-700 border-transparent hover:bg-amber-100'
+          }`}
+        >
+          Empty <span className="tabular-nums font-semibold">{emptyStock}</span>
+        </Link>
+        <Link
+          href={buildQs({ warehouse: filterWarehouse, q, status: statusFilter === 'ok' ? null : 'ok' })}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+            statusFilter === 'ok' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 text-emerald-700 border-transparent hover:bg-emerald-100'
+          }`}
+        >
+          OK <span className="tabular-nums font-semibold">{okStock}</span>
+        </Link>
       </div>
 
       {/* KPI cards */}
