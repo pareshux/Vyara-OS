@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Boxes, Upload, AlertTriangle, Warehouse } from 'lucide-react'
+import { Boxes, Upload, AlertTriangle, Warehouse, Pencil, ArrowLeftRight } from 'lucide-react'
+import { AdjustButton } from './adjust-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +33,7 @@ export default async function InventoryPage({
         .select(
           `id, available_qty, reserved_qty, min_level, max_level, last_movement_at,
            warehouse:warehouse_id(id, code, name, type),
-           product:product_id(id, sku_code, name, unit, category)`
+           product:product_id(id, sku_code, name, unit, category, mrp)`
         )
         .order('available_qty', { ascending: true })
       if (filterWarehouse) q = q.eq('warehouse_id', filterWarehouse)
@@ -50,7 +51,7 @@ export default async function InventoryPage({
     max_level: number | null
     last_movement_at: string | null
     warehouse: { id: string; code: string; name: string; type: string } | { id: string; code: string; name: string; type: string }[] | null
-    product: { id: string; sku_code: string; name: string; unit: string; category: string } | { id: string; sku_code: string; name: string; unit: string; category: string }[] | null
+    product: { id: string; sku_code: string; name: string; unit: string; category: string; mrp: number | null } | { id: string; sku_code: string; name: string; unit: string; category: string; mrp: number | null }[] | null
   }
   const rows = (stockRows ?? []) as unknown as Row[]
   const totalSkus = rows.length
@@ -73,6 +74,12 @@ export default async function InventoryPage({
           </div>
         </div>
         <div className="flex gap-2">
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/inventory/adjustments"><Pencil className="size-4 mr-1.5" />Adjustments</Link>
+          </Button>
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/inventory/transfers"><ArrowLeftRight className="size-4 mr-1.5" />Transfers</Link>
+          </Button>
           <Button size="sm" variant="outline" asChild>
             <Link href="/inventory/import"><Upload className="size-4 mr-1.5" />Import CSV</Link>
           </Button>
@@ -147,7 +154,7 @@ export default async function InventoryPage({
                 <th className="hidden px-3 py-2 text-right font-medium text-muted-foreground md:table-cell">Reserved</th>
                 <th className="hidden px-3 py-2 text-right font-medium text-muted-foreground lg:table-cell">Min</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
-                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Ledger</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -191,12 +198,22 @@ export default async function InventoryPage({
                     </td>
                     <td className="px-3 py-2 text-right">
                       {wh && pr && (
-                        <Link
-                          href={`/inventory/ledger?warehouse=${wh.id}&product=${pr.id}`}
-                          className="text-xs text-primary hover:underline"
-                        >
-                          View
-                        </Link>
+                        <div className="flex justify-end items-center gap-1">
+                          <AdjustButton
+                            warehouseId={wh.id}
+                            productId={pr.id}
+                            skuCode={pr.sku_code}
+                            productName={pr.name}
+                            currentAvailable={Number(r.available_qty)}
+                            estimatedUnitPrice={pr.mrp ?? undefined}
+                          />
+                          <Link
+                            href={`/inventory/ledger?warehouse=${wh.id}&product=${pr.id}`}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            Ledger
+                          </Link>
+                        </div>
                       )}
                     </td>
                   </tr>
