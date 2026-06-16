@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Warehouse,
   Boxes,
+  Store,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { label: 'Invoices', href: '/invoices', icon: FileText },
   { label: 'Collections', href: '/collections', icon: Wallet },
   { label: 'Finance', href: '/finance', icon: TrendingUp },
+  { label: 'Dealers', href: '/dealers', icon: Store },
   { label: 'Contacts', href: '/contacts', icon: Users },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
 ]
