@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Package, PlusCircle } from 'lucide-react'
+import { OrderRowActions } from './row-actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,15 +21,16 @@ export default async function OrdersPage() {
         `id, order_number, value, order_date, expected_delivery_at, notes,
          project:project_id(id, name),
          buyer:buyer_firm_id(name),
-         stage:current_stage_id(id, label, color, order_index)`
+         stage:current_stage_id(id, stage_key, label, color, order_index, is_terminal)`
       )
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
     supabase
       .from('order_stage')
-      .select('id, label, color, order_index')
+      .select('id, stage_key, label, color, order_index, is_terminal')
       .order('order_index'),
   ])
+  const cancelStageId = (stagesRaw ?? []).find((s) => s.stage_key === 'cancelled')?.id ?? null
 
   type Order = {
     id: string
@@ -39,7 +41,7 @@ export default async function OrdersPage() {
     notes: string | null
     project: { id: string; name: string } | { id: string; name: string }[] | null
     buyer: { name: string } | { name: string }[] | null
-    stage: { id: string; label: string; color: string; order_index: number } | { id: string; label: string; color: string; order_index: number }[] | null
+    stage: { id: string; stage_key: string; label: string; color: string; order_index: number; is_terminal: boolean } | { id: string; stage_key: string; label: string; color: string; order_index: number; is_terminal: boolean }[] | null
   }
 
   const orders = (ordersRaw ?? []) as unknown as Order[]
@@ -108,6 +110,7 @@ export default async function OrdersPage() {
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Stage</th>
                 <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Value</th>
                 <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell">Expected</th>
+                <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -154,6 +157,14 @@ export default async function OrdersPage() {
                       {o.expected_delivery_at
                         ? new Date(o.expected_delivery_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
                         : <span className="text-muted-foreground/50">—</span>}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <OrderRowActions
+                        orderId={o.id}
+                        orderNumber={o.order_number}
+                        isTerminal={stage?.is_terminal ?? false}
+                        cancelStageId={cancelStageId}
+                      />
                     </td>
                   </tr>
                 )
