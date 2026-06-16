@@ -16,6 +16,7 @@ import {
   Warehouse,
   Boxes,
   Store,
+  Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -34,8 +35,13 @@ const NAV_ITEMS = [
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
 ]
 
-export function Sidebar() {
+interface SidebarProps {
+  userRole?: string
+}
+
+export function Sidebar({ userRole }: SidebarProps) {
   const pathname = usePathname()
+  const isAdminish = userRole === 'admin' || userRole === 'manager'
 
   return (
     <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
@@ -65,6 +71,26 @@ export function Sidebar() {
             </Link>
           )
         })}
+
+        {isAdminish && (
+          <>
+            <div className="mt-3 mb-1 px-3 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+              Admin
+            </div>
+            <Link
+              href="/admin"
+              className={cn(
+                'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                pathname === '/admin' || pathname.startsWith('/admin/')
+                  ? 'bg-sidebar-primary/10 text-sidebar-primary'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+              )}
+            >
+              <Settings className="size-4 shrink-0" />
+              Settings
+            </Link>
+          </>
+        )}
       </nav>
     </aside>
   )
