@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { consumeSampleStock } from './sample-consumption'
 
 async function getActorContext() {
   const supabase = await createClient()
@@ -73,11 +74,15 @@ export type SampleStatusUpdate =
   | 'outcome_negative'
   | 'cancelled'
 
+export type UpdateSampleStatusResult =
+  | { success: true; sampleConsumed?: boolean; sampleConsumeError?: string; sampleWarehouseCode?: string }
+  | { error: string }
+
 export async function updateSampleStatus(
   sampleId: string,
   status: SampleStatusUpdate,
   outcomeNotes?: string
-): Promise<{ success: true } | { error: string }> {
+): Promise<UpdateSampleStatusResult> {
   const ctx = await getActorContext()
   if (!ctx) return { error: 'Not authenticated' }
 
@@ -117,6 +122,24 @@ export async function updateSampleStatus(
   // trg_sample_activity writes 'sample_updated' on any status change.
   // No manual activity insert needed.
 
+  // When the sample becomes 'dispatched', consume from the SAMPLES warehouse
+  // bucket so commercial stock isn't affected. Non-blocking: if consumption
+  // fails (e.g. no samples warehouse, insufficient stock), the status change
+  // still sticks and we surface the warning to the caller.
+  let sampleConsumed: boolean | undefined
+  let sampleConsumeError: string | undefined
+  let sampleWarehouseCode: string | undefined
+  if (status === 'dispatched') {
+    const result = await consumeSampleStock(sampleId)
+    if ('error' in result) {
+      sampleConsumed = false
+      sampleConsumeError = result.error
+    } else {
+      sampleConsumed = result.consumed
+      sampleWarehouseCode = result.warehouse_code
+    }
+  }
+
   if (existing) revalidatePath(`/projects/${existing.project_id}`)
-  return { success: true }
+  return { success: true, sampleConsumed, sampleConsumeError, sampleWarehouseCode }
 }

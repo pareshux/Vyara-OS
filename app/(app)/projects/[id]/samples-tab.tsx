@@ -112,7 +112,18 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
         toast.error(result.error)
         return
       }
-      toast.success(`Sample marked as ${STATUS_STYLES[status]?.label ?? status}`)
+      const label = STATUS_STYLES[status]?.label ?? status
+      if (status === 'dispatched') {
+        if (result.sampleConsumed) {
+          toast.success(`Marked ${label} · sample stock consumed @ ${result.sampleWarehouseCode}`)
+        } else if (result.sampleConsumeError) {
+          toast.warning(`Marked ${label} · sample stock not consumed: ${result.sampleConsumeError}`)
+        } else {
+          toast.success(`Sample marked as ${label}`)
+        }
+      } else {
+        toast.success(`Sample marked as ${label}`)
+      }
       router.refresh()
     })
   }
