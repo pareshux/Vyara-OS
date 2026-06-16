@@ -2,15 +2,104 @@
 
 > The **8-week customer-#2 onboarding test** is the year-1 success gate (Constitution v2). This audit records the platform's readiness and lists what would still block onboarding a second Tier-1 / Tier-2 building-materials manufacturer today. Re-run after every slice; the gap should narrow, not widen.
 
-**Most recent revision:** 2026-06-16 (post Slice 3)
+**Most recent revision:** 2026-06-16 (post Slice 3.5)
 **Headline history:**
 - Post Slice 2:    4–6 months
 - Post Slice 2.5:  4–6 months (held — no new infra, no new debt)
-- Post Slice 3:    **3–4 months** (narrowed — dealer module is reusable; readiness sprint becomes more impactful)
+- Post Slice 3:    3–4 months (narrowed — dealer module is reusable; readiness sprint becomes more impactful)
+- Post Slice 3.5:  **~2 months** (8 weeks possible if customer #2 accepts no bulk import). Masters work is largely done; the residual gap is the readiness sprint itself.
 
 ---
 
-# Post-Slice-3 update (current)
+# Post-Slice-3.5 update (current)
+
+## What Slice 3.5 closed
+
+Six tenant-configurable masters that were previously hardcoded or missing:
+
+| Master | What it replaces | UI |
+|---|---|---|
+| `tax_rate` | Hardcoded `gst_pct DEFAULT 18` on invoice + CSV importer | `/admin/taxes` |
+| `payment_term` | Hardcoded `payment_terms_days DEFAULT 30`; no per-customer override | `/admin/payment-terms` |
+| `price_list` + `price_list_entry` | `product.base_price` was the only price source; no segment/region pricing | `/admin/price-lists`, `/admin/price-lists/[id]` |
+| `vendor` | Vendor records didn't exist (only `transporter` subtype) | `/admin/vendors` |
+| `dealer_tier` (with `color` + `bg_color`) | Free-text `dealer.tier` + hardcoded `TIER_STYLES` map in two files | `/admin/dealer-tiers` |
+| `territory` (hierarchical via `parent_id`) | Free-text `dealer.territory` + free-text `project.territory` (partial migration) | `/admin/territories` |
+
+Wiring into the workflow:
+
+| Surface | Before Slice 3.5 | After Slice 3.5 |
+|---|---|---|
+| Quote form (`/projects/[id]` Quotes tab) | Auto-filled `unit_price` from `product.base_price` | Resolves via `get_active_price(tenant, product, segment, region, qty)` with `(seg+region) > seg > region > tenant-default` priority; shows "From DEFAULT_2026 · ₹450" microcopy; shows "vs list +5%" delta when overridden |
+| Manual order form (`/orders/new`) | Auto-filled from `product.mrp` | Same active-price resolution as quotes |
+| New invoice form (`/invoices/new`) | Hand-typed `gst_pct` + `payment_terms_days` | Auto-fills from tenant default tax + payment term; firm-level `default_payment_term_id` overrides PT for that buyer; due_date auto-derives from invoice_date + days; "manual" tag in amber when user overrides |
+| CSV importer (`/invoices/import`) | Hardcoded `gst_pct = 18` fallback | Reads tenant default tax rate |
+| Dealer list + detail + portal profile | Hardcoded `TIER_STYLES` color map; free-text tier display | Tier badge reads color from `dealer_tier` master; tier + territory shown via joined master.label |
+
+Snapshot FKs (for audit, ON DELETE SET NULL — never break a historical row):
+
+- `quotation_line.price_list_entry_id` / `sales_order_line.price_list_entry_id` — set only when the saved unit_price still matches the list price within half a paisa, so manual overrides read honestly as "manual" not "stale attribution"
+- `invoice.tax_rate_id` / `invoice.payment_term_id` — same gating
+
+## Discipline tests (Slice 3.5)
+
+| Test | Result |
+|---|---|
+| New masters carry generic, not Vyara-specific values | ✅ Vendor types (supplier/contractor/service/other), tier `color` is a hex (not a name), territory is hierarchical (not a Gujarat-shaped enum) |
+| Customer #2 can set their own values without code change | ✅ Admin UI for all six; default-handling enforced via partial unique indexes (`is_default WHERE is_active`) so a tenant always has exactly one default or none |
+| No Vyara branding/copy in admin pages | ✅ Generic copy throughout; seed data is labelled `for Vyara (the launch customer)` |
+| Wiring degrades gracefully | ✅ Quote/order forms fall back to `product.base_price`/`mrp` when no list covers the product; invoice form falls back to 18/30 hardcoded when no master defaults exist |
+| Snapshot principle preserved | ✅ Unit_price + gst_pct + payment_terms_days remain authoritative numbers; FKs are informational and ON DELETE SET NULL |
+
+## Open debts after Slice 3.5
+
+| Debt | Severity | Where it's addressed |
+|---|---|---|
+| Code prefix (`VT-*`) hardcoded across modules | Low | Readiness sprint — `tenant.settings.code_prefix` |
+| Per-tenant invite email branding / notification templates | Low | Readiness sprint — notification template master deferred from Slice 3.5 |
+| Dealer-orders cross-module write to project | Low | Future refactor — extract `requestDealerProject()` |
+| Per-line tax (HSN-class invoices) | Low | Future enhancement when a customer actually needs mixed-tax invoices |
+| Project.territory + user_profile.territory still TEXT | Low | Readiness sprint — Step 3 migrated dealer.territory_id only; the other two columns + UI need the same treatment |
+| Dealer.tier + dealer.territory TEXT columns kept (deprecated) | Low | Cleanup once Customer #1 confirms no rollback needed |
+| Module visibility per tenant (Principle #11) | High | Readiness sprint |
+| Master-data CSV importers (firm/contact/product/warehouse + new: dealer/vendor/tier/territory/price-list) | High | Readiness sprint — list is now longer because Slice 3.5 added masters |
+| Razorpay payment initiation (dealer portal) | Medium | Fast-follow |
+
+## What still blocks 8-week onboarding
+
+Severity-ordered. Effort estimates assume one full-time engineer.
+
+| Need | Effort | Notes |
+|---|---|---|
+| Tenant-creation admin UI | 1–2 days | Currently manual SQL |
+| Module visibility per tenant | 2–3 weeks | Now critical — Slice 3 + 3.5 added enough surface area that not every tenant wants all of it |
+| Master-data CSV importers | ~4 weeks | Was the dominant gap; now larger because of new masters. **If skipped (one-by-one via UI), shaves ~4 weeks off** |
+| Configurable pipeline / stage seeds | 1–2 weeks | "paving_stage" still Vyara-specific |
+| Product category CHECK relaxation | 1 day + retrofit | Same as before |
+| Subdomain / per-tenant routing | 1–2 weeks | Same |
+| Documentation / runbooks | 1–2 weeks | Add: admin setup runbook, master configuration playbook |
+| Code prefix configurability | 2–3 days | New finding from Slice 3.5 — every entity number starts `VT-` |
+
+**Realistic onboarding time: ~2 months. Target: 8 weeks. Gap: roughly 1×.**
+
+8 weeks becomes honest if the readiness sprint ships and customer #2 accepts entering their masters via the admin UI one row at a time instead of CSV import (a reasonable trade for a pilot customer).
+
+## Recommendation (updated)
+
+```
+NEXT  →  Platform-readiness sprint     ← tenant onboarding UI, module visibility flags,
+                                          configurable seed packs, code-prefix config,
+                                          subdomain routing, runbooks, notification
+                                          templates. CSV importers optional/parallel.
+THEN  →  First real customer-#2 onboarding attempt — the 8-week test
+THEN  →  Slice 4 (Tenders / Complaints / etc.) — driven by whatever the second customer needs
+```
+
+The readiness sprint is now the last meaningful platform investment before attempting the 8-week test. Building more capability slices before attempting the test risks shipping into a vacuum — the test is what tells us whether the platform thesis is right.
+
+---
+
+# Historical — Post Slice 3
 
 ## What Slice 3 added vs the 8-week target
 
