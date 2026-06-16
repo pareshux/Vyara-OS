@@ -27,7 +27,7 @@ export default async function OrdersPage({
       let query = supabase
         .from('sales_order')
         .select(
-          `id, order_number, value, order_date, expected_delivery_at, notes,
+          `id, order_number, value, order_date, expected_delivery_at, notes, created_via,
            project:project_id(id, name),
            buyer:buyer_firm_id(name),
            stage:current_stage_id(id, stage_key, label, color, order_index, is_terminal)`
@@ -52,6 +52,7 @@ export default async function OrdersPage({
     order_date: string
     expected_delivery_at: string | null
     notes: string | null
+    created_via: string
     project: { id: string; name: string } | { id: string; name: string }[] | null
     buyer: { name: string } | { name: string }[] | null
     stage: { id: string; stage_key: string; label: string; color: string; order_index: number; is_terminal: boolean } | { id: string; stage_key: string; label: string; color: string; order_index: number; is_terminal: boolean }[] | null
@@ -209,6 +210,11 @@ export default async function OrdersPage({
                       <Link href={`/orders/${o.id}`} className="text-foreground hover:text-primary">
                         {o.order_number}
                       </Link>
+                      {o.created_via === 'dealer_portal' && (
+                        <Badge variant="outline" className="ml-1.5 text-[9px] uppercase border-0 bg-purple-50 text-purple-700">
+                          Via portal
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {project ? (
