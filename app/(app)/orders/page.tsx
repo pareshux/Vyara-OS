@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Package } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Package, PlusCircle } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,6 +63,9 @@ export default async function OrdersPage() {
             {orders.length} {orders.length === 1 ? 'order' : 'orders'}
           </p>
         </div>
+        <Button size="sm" asChild>
+          <Link href="/orders/new"><PlusCircle className="size-4 mr-1.5" />New order</Link>
+        </Button>
       </div>
 
       {stageCounts.some((s) => s.count > 0) && (
@@ -86,9 +90,11 @@ export default async function OrdersPage() {
             <Package className="size-8 mb-3 text-muted-foreground/50" />
             <p className="text-sm font-medium text-foreground">No sales orders yet</p>
             <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-              Mark a quote as won, then create an order from the project page — or convert
-              an existing quote with the &quot;Create order&quot; action.
+              Create a direct order, or mark a quote as won and convert it from the project page.
             </p>
+            <Button size="sm" asChild className="mt-3">
+              <Link href="/orders/new"><PlusCircle className="size-4 mr-1.5" />New order</Link>
+            </Button>
           </CardContent>
         </Card>
       ) : (
