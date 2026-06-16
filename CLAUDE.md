@@ -52,9 +52,11 @@ Inngest jobs: `paving-stage-daily-check`, `order-on-quote-won`, `dispatch-on-ord
 
 ## Current step
 
-Slice 2 complete (commits up through `feat(slice2/finance)`). Vision sharpened (vertical-locked to building materials, Tier 1+2). Next move pending: **gap analysis against vyara-vision-blueprint-v3.md** to determine whether Slice 2.5 (operational inventory) or Slice 3 (Dealer portal) is the higher-priority build.
+Slices 1 + 2 + 2.5 complete. Slice 2.5 (Operational Inventory) shipped: warehouse master, stock movements with trigger-enforced invariants, reservations wired into orders, adjustments + transfers + sample bucket, low-stock cron. Mehul's question #7 ("do we have stock to commit?") is now answerable in one click.
 
-The **customer-#2 onboarding test has not yet been attempted.** Until it is, the platform thesis is unproven regardless of how complete Slices 1+2 look.
+Next: **Slice 3 — Dealer portal**, then a platform-readiness sprint (see `docs/customer-2-readiness-audit.md`) before Slice 4.
+
+The **customer-#2 onboarding test has not yet been attempted.** Currently estimated at 4–6 months (gap unchanged from Slice 2). Slice 2.5 maintained discipline — no new lock-in — but the gap closes only with a dedicated readiness sprint. See the audit doc for the specific blockers.
 
 ## Known Slice 1 schema drift (flagged for review)
 

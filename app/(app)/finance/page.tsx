@@ -11,6 +11,8 @@ import {
   ArrowRight,
   CalendarClock,
   Send,
+  Boxes,
+  AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -38,6 +40,7 @@ export default async function FinancePage() {
     { data: recentReceipts },
     { data: openCollections },
     { data: recentDunning },
+    { data: stockRows },
   ] = await Promise.all([
     supabase.from('invoice_ageing_v').select('outstanding, ageing_bucket, days_overdue, billed_amount, paid_amount, invoice_date, due_date, status'),
     supabase.from('invoice').select('total, billed_amount, invoice_date, status').is('deleted_at', null).gte('invoice_date', last30Start),
@@ -64,6 +67,9 @@ export default async function FinancePage() {
       )
       .order('created_at', { ascending: false })
       .limit(8),
+    supabase
+      .from('stock')
+      .select('available_qty, reserved_qty, min_level, product:product_id(mrp)'),
   ])
 
   type AgRow = { outstanding: number; ageing_bucket: string; days_overdue: number; billed_amount: number; paid_amount: number; invoice_date: string; due_date: string; status: string }
@@ -79,6 +85,21 @@ export default async function FinancePage() {
   const dailyRevenue = totalBilledL30 / 30
   const dso = dailyRevenue > 0 ? totalOutstanding / dailyRevenue : 0
   const collectionRate = totalBilledL30 > 0 ? (totalReceivedL30 / totalBilledL30) * 100 : 0
+
+  // Inventory metrics (Slice 2.5)
+  type StockRow = { available_qty: number; reserved_qty: number; min_level: number | null; product: { mrp: number | null } | { mrp: number | null }[] | null }
+  const stk = (stockRows ?? []) as unknown as StockRow[]
+  const lowStockCount = stk.filter((s) => s.min_level != null && Number(s.available_qty) < Number(s.min_level)).length
+  const stockValueAvailable = stk.reduce((sum, s) => {
+    const p = Array.isArray(s.product) ? s.product[0] : s.product
+    const unit = p?.mrp ? Number(p.mrp) : 0
+    return sum + (Number(s.available_qty) * unit)
+  }, 0)
+  const stockValueReserved = stk.reduce((sum, s) => {
+    const p = Array.isArray(s.product) ? s.product[0] : s.product
+    const unit = p?.mrp ? Number(p.mrp) : 0
+    return sum + (Number(s.reserved_qty) * unit)
+  }, 0)
 
   // Ageing breakdown
   const buckets = ['current', '1-30', '31-60', '60+'] as const
@@ -115,21 +136,43 @@ export default async function FinancePage() {
           hint={`${liveRows.length} open invoices`}
         />
         <KPI
+          icon={<Boxes className="size-4" />}
+          label="Stock value (MRP)"
+          value={`₹${(stockValueAvailable + stockValueReserved).toLocaleString('en-IN')}`}
+          hint={`${stk.length} SKU rows${lowStockCount > 0 ? ` · ${lowStockCount} low` : ''}`}
+        />
+        <KPI
           icon={<CalendarClock className="size-4" />}
           label="DSO (days)"
           value={dso > 0 ? dso.toFixed(0) : '—'}
           hint="outstanding ÷ avg daily revenue (30d)"
         />
         <KPI
+          icon={<TrendingUp className="size-4" />}
+          label="Collected (30d)"
+          value={`₹${totalReceivedL30.toLocaleString('en-IN')}`}
+          hint={`${collectionRate.toFixed(0)}% of billed`}
+        />
+      </div>
+
+      {/* Second-row KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <KPI
           icon={<FileText className="size-4" />}
           label="Invoiced (30d)"
           value={`₹${totalInvoicedL30.toLocaleString('en-IN')}`}
         />
         <KPI
-          icon={<TrendingUp className="size-4" />}
-          label="Collected (30d)"
-          value={`₹${totalReceivedL30.toLocaleString('en-IN')}`}
-          hint={`${collectionRate.toFixed(0)}% of billed`}
+          icon={<AlertTriangle className="size-4" />}
+          label="Stock reserved (₹)"
+          value={`₹${stockValueReserved.toLocaleString('en-IN')}`}
+          hint="committed against open orders"
+        />
+        <KPI
+          icon={<AlertCircle className="size-4" />}
+          label="Low-stock SKUs"
+          value={lowStockCount.toString()}
+          hint={lowStockCount > 0 ? 'See /inventory for details' : 'All above min'}
         />
       </div>
 
