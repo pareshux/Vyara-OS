@@ -66,14 +66,12 @@ Inngest jobs: `paving-stage-daily-check`, `order-on-quote-won`, `dispatch-on-ord
 
 ## Current step
 
-Slices 1 + 2 + 2.5 complete. Slice 2.5 (Operational Inventory) shipped: warehouse master, stock movements with trigger-enforced invariants, reservations wired into orders, adjustments + transfers + sample bucket, low-stock cron. Mehul's question #7 ("do we have stock to commit?") is now answerable in one click.
+**Slices 1 + 2 + 2.5 + 3 complete.** Slice 3 (Dealer portal) shipped: dealer master with admin CRUD + invite/revoke users; multi-persona auth (role=`dealer` routes to `/dealer-portal/*` via layout-level gating); dealer dashboard with KPIs + credit utilisation + overdue alerts; dealer-side order placement with auto-created per-dealer project + stock reservation; dealer-side invoices + ledger; performance MIS on internal `/dealers` list (this month vs last month). Mehul's question #11 ("which dealers are performing?") is now answerable in one click. The platform serves **3 of 4 commercial motions** (architect-specified, direct contractor, dealer; tenders still out).
 
-Next: **Slice 3 — Dealer portal**, then a platform-readiness sprint (see `docs/customer-2-readiness-audit.md`) before Slice 4.
+Next: **Slice 3.5 — Masters & Configuration** (vendor master, price lists, taxes, payment terms, dealer_tier + territory masters, notification templates, admin UI). Then a **platform-readiness sprint** (tenant onboarding, configurable seed packs, module visibility flags, master CSV importers). See `docs/customer-2-readiness-audit.md` for sequencing rationale.
 
-The **customer-#2 onboarding test has not yet been attempted.** Currently estimated at 4–6 months (gap unchanged from Slice 2). Slice 2.5 maintained discipline — no new lock-in — but the gap closes only with a dedicated readiness sprint. See the audit doc for the specific blockers.
+The **customer-#2 onboarding test has not yet been attempted.** Currently estimated at **3–4 months** (down from 4–6 post Slice 2.5 — Slice 3 narrowed the gap because the dealer module is one of the larger commercial surfaces a Tier-2 manufacturer needs). Closing the rest requires Slice 3.5 + Readiness sprint together. See the audit doc for specific blockers.
 
-## Known Slice 1 schema drift (flagged for review)
+## Slice 1 schema drift — RESOLVED
 
-- `app/(app)/layout.tsx` queries `notification.recipient_id` but the live schema uses `notification.user_id` (the unread-count likely returns 0).
-- `lib/actions/quotations.ts` writes to `quotation.number` / `quotation.total_amount`, but the live schema has `quotation.quotation_number` (auto-set by trigger) and `quotation.total`. `app/(app)/projects/[id]/page.tsx` selects the same wrong columns, so the Quotes tab probably shows blank fields.
-- All Slice 2 code uses the correct live-schema column names. Fix the Slice 1 drift independently when convenient.
+The three Slice 1 column-drift bugs (`notification.recipient_id`→`user_id`, `quotation.number`→`quotation_number`/`total_amount`→`total`, `sample_request.qty`→`quantity` + invalid status/activity enums) were all fixed in the post-Slice-2.5 gap-fix sprint. All Slice 1 actions now write/read the correct live-schema columns. Trigger-driven activity inserts replaced the manual duplicate inserts.
