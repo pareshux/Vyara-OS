@@ -86,7 +86,7 @@ export const pavingStageCheck = inngest.createFunction(
       // Create notification for the owner
       await supabase.from('notification').insert({
         tenant_id: project.tenant_id,
-        recipient_id: project.owner_id,
+        user_id: project.owner_id,
         type: 'paving_stage_alert',
         title: 'Project reached paving stage',
         body: `${project.name} is at the paving stage. Follow up now to avoid losing this specification.`,

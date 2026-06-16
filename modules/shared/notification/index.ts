@@ -11,7 +11,7 @@ export type NotificationChannel = 'email' | 'whatsapp' | 'sms' | 'in_app';
 export type NotificationPayload = {
   tenant_id: string;
   template: string;
-  recipient_id: string;
+  user_id: string;
   channels: NotificationChannel[];
   data: Record<string, unknown>;
 };

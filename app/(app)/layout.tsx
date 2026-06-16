@@ -24,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     supabase
       .from('notification')
       .select('id', { count: 'exact', head: true })
-      .eq('recipient_id', user.id)
+      .eq('user_id', user.id)
       .eq('is_read', false),
   ])
 
