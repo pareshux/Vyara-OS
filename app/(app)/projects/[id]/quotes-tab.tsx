@@ -41,16 +41,16 @@ interface QuoteLine {
   id: string
   quantity: number
   unit_price: number
-  total_price: number
-  description: string | null
+  line_total: number
+  notes: string | null
   product: { name: string; sku_code: string } | null
 }
 
 interface Quote {
   id: string
-  number: string
+  quotation_number: string
   status: string
-  total_amount: number | null
+  total: number | null
   valid_until: string | null
   notes: string | null
   sent_at: string | null
@@ -73,12 +73,15 @@ interface QuotesTabProps {
   userRole?: string
 }
 
+// Status map covers both UI labels and DB enum values (schema:
+// draft|sent|revised|accepted|rejected|expired). 'accepted' renders as Won.
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  draft:            { bg: '#F3F4F6', text: '#6B7280', label: 'Draft' },
-  pending_approval: { bg: '#EFF6FF', text: '#1D4ED8', label: 'Pending approval' },
-  sent:             { bg: '#FFFBEB', text: '#B45309', label: 'Sent' },
-  won:              { bg: '#F0FDF4', text: '#15803D', label: 'Won' },
-  lost:             { bg: '#FFF1F2', text: '#BE123C', label: 'Lost' },
+  draft:    { bg: '#F3F4F6', text: '#6B7280', label: 'Draft' },
+  sent:     { bg: '#FFFBEB', text: '#B45309', label: 'Sent' },
+  revised:  { bg: '#EFF6FF', text: '#1D4ED8', label: 'Revised' },
+  accepted: { bg: '#F0FDF4', text: '#15803D', label: 'Won' },
+  rejected: { bg: '#FFF1F2', text: '#BE123C', label: 'Lost' },
+  expired:  { bg: '#F3F4F6', text: '#6B7280', label: 'Expired' },
 }
 
 const lineSchema = z.object({
@@ -158,7 +161,7 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
         return
       }
 
-      toast.success(`Quote ${result.number} created`)
+      toast.success(`Quote ${result.quotation_number} created`)
       reset({ lines: [{ product_id: '', quantity: '1', unit_price: '', description: '' }] })
       setSheetOpen(false)
       router.refresh()
@@ -206,9 +209,9 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
           {quotes.map((q) => {
             const isExpanded = expandedIds.has(q.id)
             const statusStyle = STATUS_STYLES[q.status] ?? STATUS_STYLES.draft
-            const canSend = q.status === 'draft' || q.status === 'pending_approval'
-            const canMarkWon = q.status === 'sent' || q.status === 'draft' || q.status === 'pending_approval'
-            const canMarkLost = q.status !== 'lost' && q.status !== 'won'
+            const canSend = q.status === 'draft' || q.status === 'revised'
+            const canMarkWon = q.status === 'sent' || q.status === 'draft'
+            const canMarkLost = q.status !== 'rejected' && q.status !== 'accepted' && q.status !== 'expired'
 
             return (
               <Card key={q.id} size="sm">
@@ -218,7 +221,7 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
                     <div className="flex flex-col gap-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-sm font-medium text-foreground">
-                          {q.number}
+                          {q.quotation_number}
                         </span>
                         <Badge
                           variant="outline"
@@ -229,9 +232,9 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
                         </Badge>
                       </div>
                       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        {q.total_amount != null && (
+                        {q.total != null && (
                           <span className="tabular-nums font-medium text-foreground">
-                            {formatINR(q.total_amount)}
+                            {formatINR(q.total)}
                           </span>
                         )}
                         {q.valid_until && (
@@ -336,7 +339,7 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
                               >
                                 <td className="px-3 py-2">
                                   <div className="font-medium text-foreground">
-                                    {line.product?.name ?? line.description ?? '—'}
+                                    {line.product?.name ?? line.notes ?? '—'}
                                   </div>
                                   {line.product?.sku_code && (
                                     <div className="font-mono text-muted-foreground text-xs">
@@ -353,12 +356,12 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
                                   </td>
                                 )}
                                 <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground">
-                                  {formatINR(line.total_price)}
+                                  {formatINR(line.line_total)}
                                 </td>
                               </tr>
                             ))}
                           </tbody>
-                          {q.total_amount != null && (
+                          {q.total != null && (
                             <tfoot>
                               <tr className="border-t border-border bg-muted/30">
                                 <td
@@ -368,7 +371,7 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
                                   Total
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums font-semibold text-foreground">
-                                  {formatINR(q.total_amount)}
+                                  {formatINR(q.total)}
                                 </td>
                               </tr>
                             </tfoot>

@@ -122,7 +122,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .order('created_at', { ascending: false }),
     supabase
       .from('quotation')
-      .select('id, number, status, total_amount, valid_until, notes, sent_at, created_at, lines:quotation_line(id, quantity, unit_price, total_price, description, product:product_id(name, sku_code))')
+      .select('id, quotation_number, status, total, valid_until, notes, sent_at, created_at, lines:quotation_line(id, quantity, unit_price, line_total, notes, product:product_id(name, sku_code))')
       .eq('project_id', id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
@@ -542,9 +542,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             projectId={project.id}
             quotes={(quotes ?? []) as unknown as {
               id: string
-              number: string
+              quotation_number: string
               status: string
-              total_amount: number | null
+              total: number | null
               valid_until: string | null
               notes: string | null
               sent_at: string | null
@@ -553,8 +553,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 id: string
                 quantity: number
                 unit_price: number
-                total_price: number
-                description: string | null
+                line_total: number
+                notes: string | null
                 product: { name: string; sku_code: string } | null
               }[]
             }[]}
