@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronRight, MapPin, User, AlertTriangle, BookOpen } from 'lucide-react'
 import { ReceiveButton } from '@/app/(app)/inventory/receive-button'
+import { EditWarehouseButton } from './edit-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,11 +24,12 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: warehouse }, { data: stockRows }] = await Promise.all([
+  const [{ data: warehouse }, { data: stockRows }, { data: users }] = await Promise.all([
     supabase
       .from('warehouse')
       .select(
         `id, code, name, type, city, state, address, notes, is_active, created_at,
+         manager_id,
          manager:manager_id(full_name, role)`
       )
       .eq('id', id)
@@ -41,6 +43,11 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
       )
       .eq('warehouse_id', id)
       .order('available_qty', { ascending: true }),
+    supabase
+      .from('user_profile')
+      .select('id, full_name')
+      .eq('is_active', true)
+      .order('full_name'),
   ])
 
   if (!warehouse) notFound()
@@ -92,6 +99,20 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
                 )}
               </div>
             </div>
+            <EditWarehouseButton
+              warehouseId={warehouse.id as string}
+              initial={{
+                name: warehouse.name as string,
+                type: warehouse.type as 'own_plant' | 'transit' | 'samples' | 'dealer_consignment' | 'other',
+                city: (warehouse.city as string) ?? null,
+                state: (warehouse.state as string) ?? null,
+                address: (warehouse.address as string) ?? null,
+                notes: (warehouse.notes as string) ?? null,
+                is_active: warehouse.is_active as boolean,
+                manager_id: (warehouse.manager_id as string) ?? null,
+              }}
+              users={(users ?? []) as { id: string; full_name: string }[]}
+            />
           </div>
         </CardContent>
       </Card>
