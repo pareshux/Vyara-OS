@@ -22,20 +22,13 @@ export async function createSampleRequest(data: {
   project_id: string
   product_id: string
   contact_id?: string
-  qty: number
+  quantity: number
   notes?: string
 }): Promise<{ id: string } | { error: string }> {
   const ctx = await getActorContext()
   if (!ctx) return { error: 'Not authenticated' }
 
   const { supabase, userId, tenantId } = ctx
-
-  // Fetch product name for activity note
-  const { data: product } = await supabase
-    .from('product')
-    .select('name')
-    .eq('id', data.product_id)
-    .single()
 
   const { data: sample, error } = await supabase
     .from('sample_request')
@@ -44,10 +37,9 @@ export async function createSampleRequest(data: {
       project_id: data.project_id,
       product_id: data.product_id,
       contact_id: data.contact_id ?? null,
-      qty: data.qty,
+      quantity: data.quantity,
       notes: data.notes ?? null,
-      status: 'requested',
-      requested_at: new Date().toISOString(),
+      status: 'pending',
       created_by: userId,
       updated_by: userId,
     })
@@ -59,51 +51,58 @@ export async function createSampleRequest(data: {
     return { error: error.message }
   }
 
-  await supabase.from('activity').insert({
-    tenant_id: tenantId,
-    entity_type: 'sample_request',
-    entity_id: sample.id,
-    project_id: data.project_id,
-    type: 'sample',
-    actor_id: userId,
-    content: { note: `Sample requested for ${product?.name ?? 'product'}` },
-  })
+  // Activity timeline is auto-written by trg_sample_activity on INSERT
+  // ('sample_requested'). No manual activity insert needed.
 
   revalidatePath(`/projects/${data.project_id}`)
   return { id: sample.id }
 }
 
+/**
+ * UI status options:
+ *  - 'dispatched'        → DB 'dispatched' (sets dispatched_at)
+ *  - 'delivered'         → DB 'delivered'  (sets delivered_at)
+ *  - 'outcome_positive'  → DB 'outcome_positive' (customer specified us / placed order)
+ *  - 'outcome_negative'  → DB 'outcome_negative' (customer rejected / chose competitor)
+ *  - 'cancelled'         → DB 'cancelled' (request abandoned)
+ */
+export type SampleStatusUpdate =
+  | 'dispatched'
+  | 'delivered'
+  | 'outcome_positive'
+  | 'outcome_negative'
+  | 'cancelled'
+
 export async function updateSampleStatus(
   sampleId: string,
-  status: 'dispatched' | 'delivered' | 'no_outcome',
+  status: SampleStatusUpdate,
   outcomeNotes?: string
 ): Promise<{ success: true } | { error: string }> {
   const ctx = await getActorContext()
   if (!ctx) return { error: 'Not authenticated' }
 
-  const { supabase, userId, tenantId } = ctx
-
-  // Fetch sample to get project_id
-  const { data: existing, error: fetchError } = await supabase
-    .from('sample_request')
-    .select('project_id')
-    .eq('id', sampleId)
-    .single()
-
-  if (fetchError || !existing) return { error: 'Sample not found' }
+  const { supabase, userId } = ctx
 
   const updatePayload: Record<string, unknown> = {
     status,
     updated_by: userId,
     updated_at: new Date().toISOString(),
-    outcome_notes: outcomeNotes ?? null,
+  }
+  if (outcomeNotes !== undefined) {
+    updatePayload.outcome_notes = outcomeNotes
   }
 
   if (status === 'dispatched') {
     updatePayload.dispatched_at = new Date().toISOString()
-  } else if (status === 'delivered' || status === 'no_outcome') {
-    updatePayload.outcome_at = new Date().toISOString()
+  } else if (status === 'delivered') {
+    updatePayload.delivered_at = new Date().toISOString()
   }
+
+  const { data: existing } = await supabase
+    .from('sample_request')
+    .select('project_id')
+    .eq('id', sampleId)
+    .single()
 
   const { error } = await supabase
     .from('sample_request')
@@ -115,21 +114,9 @@ export async function updateSampleStatus(
     return { error: error.message }
   }
 
-  const statusLabel =
-    status === 'dispatched' ? 'Dispatched' :
-    status === 'delivered' ? 'Delivered' :
-    'No outcome'
+  // trg_sample_activity writes 'sample_updated' on any status change.
+  // No manual activity insert needed.
 
-  await supabase.from('activity').insert({
-    tenant_id: tenantId,
-    entity_type: 'sample_request',
-    entity_id: sampleId,
-    project_id: existing.project_id,
-    type: 'sample',
-    actor_id: userId,
-    content: { note: `Sample status: ${statusLabel}` },
-  })
-
-  revalidatePath(`/projects/${existing.project_id}`)
+  if (existing) revalidatePath(`/projects/${existing.project_id}`)
   return { success: true }
 }

@@ -116,7 +116,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .order('due_at', { ascending: true }),
     supabase
       .from('sample_request')
-      .select('id, status, qty, notes, outcome_notes, requested_at, product:product_id(name, sku_code), contact:contact_id(full_name)')
+      .select('id, status, quantity, notes, outcome_notes, created_at, dispatched_at, delivered_at, product:product_id(name, sku_code), contact:contact_id(full_name)')
       .eq('project_id', id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
@@ -500,10 +500,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             samples={(samples ?? []) as unknown as {
               id: string
               status: string
-              qty: number
+              quantity: number
               notes: string | null
               outcome_notes: string | null
-              requested_at: string | null
+              created_at: string
+              dispatched_at: string | null
+              delivered_at: string | null
               product: { name: string; sku_code: string } | null
               contact: { full_name: string } | null
             }[]}

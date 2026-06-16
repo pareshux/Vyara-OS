@@ -32,33 +32,38 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { PlusCircle, FlaskConical, ChevronDown } from 'lucide-react'
-import { createSampleRequest, updateSampleStatus } from '@/lib/actions/samples'
+import { createSampleRequest, updateSampleStatus, type SampleStatusUpdate } from '@/lib/actions/samples'
 
 interface SamplesTabProps {
   projectId: string
   samples: Array<{
     id: string
     status: string
-    qty: number
+    quantity: number
     notes: string | null
     outcome_notes: string | null
-    requested_at: string | null
+    created_at: string
+    dispatched_at: string | null
+    delivered_at: string | null
     product: { name: string; sku_code: string } | null
     contact: { full_name: string } | null
   }>
   products: Array<{ id: string; name: string; sku_code: string; unit: string }>
 }
 
+// Schema CHECK: pending|dispatched|delivered|outcome_positive|outcome_negative|cancelled
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  requested:  { bg: '#EFF6FF', text: '#1D4ED8', label: 'Requested' },
-  dispatched: { bg: '#FFFBEB', text: '#B45309', label: 'Dispatched' },
-  delivered:  { bg: '#F0FDF4', text: '#15803D', label: 'Delivered' },
-  no_outcome: { bg: '#F3F4F6', text: '#6B7280', label: 'No outcome' },
+  pending:          { bg: '#EFF6FF', text: '#1D4ED8', label: 'Pending' },
+  dispatched:       { bg: '#FFFBEB', text: '#B45309', label: 'Dispatched' },
+  delivered:        { bg: '#F0FDF4', text: '#15803D', label: 'Delivered' },
+  outcome_positive: { bg: '#DCFCE7', text: '#15803D', label: 'Positive outcome' },
+  outcome_negative: { bg: '#FEE2E2', text: '#B91C1C', label: 'Negative outcome' },
+  cancelled:        { bg: '#F3F4F6', text: '#6B7280', label: 'Cancelled' },
 }
 
 const requestSchema = z.object({
   product_id: z.string().min(1, 'Product is required'),
-  qty: z.string().min(1, 'Quantity is required').refine((v) => !isNaN(Number(v)) && Number(v) > 0, {
+  quantity: z.string().min(1, 'Quantity is required').refine((v) => !isNaN(Number(v)) && Number(v) > 0, {
     message: 'Enter a valid quantity',
   }),
   notes: z.string().optional(),
@@ -84,7 +89,7 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
       const result = await createSampleRequest({
         project_id: projectId,
         product_id: values.product_id,
-        qty: Number(values.qty),
+        quantity: Number(values.quantity),
         notes: values.notes,
       })
 
@@ -100,10 +105,7 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
     })
   }
 
-  function handleStatusChange(
-    sampleId: string,
-    status: 'dispatched' | 'delivered' | 'no_outcome'
-  ) {
+  function handleStatusChange(sampleId: string, status: SampleStatusUpdate) {
     startTransition(async () => {
       const result = await updateSampleStatus(sampleId, status)
       if ('error' in result) {
@@ -153,7 +155,8 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
             </thead>
             <tbody>
               {samples.map((s) => {
-                const statusStyle = STATUS_STYLES[s.status] ?? STATUS_STYLES.requested
+                const statusStyle = STATUS_STYLES[s.status] ?? STATUS_STYLES.pending
+                const isTerminal = s.status === 'outcome_positive' || s.status === 'outcome_negative' || s.status === 'cancelled'
                 return (
                   <tr
                     key={s.id}
@@ -164,29 +167,27 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
                       <div className="text-xs text-muted-foreground font-mono">{s.product?.sku_code}</div>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      {s.qty.toLocaleString('en-IN')}
+                      {s.quantity.toLocaleString('en-IN')}
                     </td>
                     <td className="px-4 py-3">
                       <Badge
                         variant="outline"
-                        className="border-0 text-xs capitalize"
+                        className="border-0 text-xs"
                         style={{ backgroundColor: statusStyle.bg, color: statusStyle.text }}
                       >
                         {statusStyle.label}
                       </Badge>
                     </td>
                     <td className="hidden px-4 py-3 text-muted-foreground tabular-nums md:table-cell">
-                      {s.requested_at
-                        ? new Date(s.requested_at).toLocaleDateString('en-IN', {
-                            day: 'numeric', month: 'short', year: 'numeric',
-                          })
-                        : '—'}
+                      {new Date(s.created_at).toLocaleDateString('en-IN', {
+                        day: 'numeric', month: 'short', year: 'numeric',
+                      })}
                     </td>
                     <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
                       {s.outcome_notes ?? s.notes ?? <span className="text-muted-foreground/40">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {s.status !== 'delivered' && s.status !== 'no_outcome' && (
+                      {!isTerminal && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm" className="gap-1 text-xs">
@@ -195,22 +196,28 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {s.status === 'requested' && (
-                              <DropdownMenuItem
-                                onClick={() => handleStatusChange(s.id, 'dispatched')}
-                              >
-                                Mark Dispatched
+                            {s.status === 'pending' && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(s.id, 'dispatched')}>
+                                Mark dispatched
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem
-                              onClick={() => handleStatusChange(s.id, 'delivered')}
-                            >
-                              Mark Delivered
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleStatusChange(s.id, 'no_outcome')}
-                            >
-                              No Outcome
+                            {(s.status === 'pending' || s.status === 'dispatched') && (
+                              <DropdownMenuItem onClick={() => handleStatusChange(s.id, 'delivered')}>
+                                Mark delivered
+                              </DropdownMenuItem>
+                            )}
+                            {s.status === 'delivered' && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleStatusChange(s.id, 'outcome_positive')}>
+                                  Outcome: positive
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleStatusChange(s.id, 'outcome_negative')}>
+                                  Outcome: negative
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            <DropdownMenuItem onClick={() => handleStatusChange(s.id, 'cancelled')}>
+                              Cancel
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -261,15 +268,15 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
               <Label htmlFor="sample_qty">Quantity *</Label>
               <Input
                 id="sample_qty"
-                {...register('qty')}
+                {...register('quantity')}
                 type="number"
                 min="1"
                 step="1"
                 placeholder="1"
                 className="tabular-nums"
               />
-              {errors.qty && (
-                <p className="text-xs text-destructive">{errors.qty.message}</p>
+              {errors.quantity && (
+                <p className="text-xs text-destructive">{errors.quantity.message}</p>
               )}
             </div>
 
