@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { FolderKanban, PlusCircle } from 'lucide-react'
 import { CreateProjectSheet } from './create-project-sheet'
+import { ScannableStatusDot } from '@/components/projects/scannable-progress-header'
+import type { Health } from '@/lib/read-models/project-progress'
 
 interface PipelineStage {
   id: string
@@ -21,6 +23,8 @@ interface Project {
   estimated_value: number | null
   current_stage: PipelineStage | null
   owner: { full_name: string } | null
+  health: Health
+  health_reason: string
 }
 
 interface Firm {
@@ -100,6 +104,7 @@ export function ProjectsClient({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground w-px"></th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Stage</th>
                 <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell">Segment</th>
@@ -114,6 +119,9 @@ export function ProjectsClient({
                   key={p.id}
                   className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
                 >
+                  <td className="px-3 py-3 w-px">
+                    <ScannableStatusDot health={p.health} label={p.health_reason} />
+                  </td>
                   <td className="px-4 py-3">
                     <Link href={`/projects/${p.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
                       {p.name}

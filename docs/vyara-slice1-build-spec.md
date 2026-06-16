@@ -72,3 +72,20 @@ Next.js (App Router) · Supabase (Mumbai — Postgres, Auth, RLS, Storage) · Ta
 ## Definition of done for Slice 1
 
 A pilot user can, end to end: capture a contact → create a project → record a specification → request and track a sample → raise and send a quote → and be **automatically reminded to follow up when the project hits paving stage** — on desktop and on a phone, with a live timeline and dashboard. That's the slice. Ship it, put it in front of Vyara, learn, then start Slice 2 (Order → Dispatch → Invoice → Collection).
+
+---
+
+## Forward note — Scannable Project Tracking pattern
+
+The Project Detail header in this slice implements the **Scannable Project Tracking** pattern (see Vision Blueprint § "Scannable Project Tracking" and `design.md` §5):
+
+- **POSITION** — the data-driven macro stepper rendered from `pipeline_stage` rows (already in scope this slice).
+- **HEALTH** — the rolled-up status pill (green / amber / red) on the header **and** a matching dot in the projects list, computed from the one rule: blocked gate → red; overdue task or stalled-past-`sla_days` → amber; else green.
+- **GATES** — required documents + required fields per stage, declared on the `gate_requirement` master, shown as done / blocked chips on the header. A missing required document renders as a red gate. (Slice 1 wires the gate-render path and a minimal gate-requirement seed — document checks themselves stay light; the load-bearing piece is the *wiring*, so Slice 2 doesn't have to retrofit the header.)
+
+**Out of scope this slice — belongs to Slice 2:**
+
+- The **phased mini-bars** (dispatch tranches "3 of 5", partial billing "₹25.2L of ₹42L · 60%", reservation "8 of 10 lines") — none of the underlying entities exist yet in Slice 1.
+- The **full Paving sub-pipeline** (`Quote → Order → Reserve stock → Dispatch → Laying → Billing`). Slice 1's Paving is a single macro stage; the sub-pipeline lands when Order / Dispatch / Invoice ship in Slice 2.
+
+**Do not change the build steps above on the basis of this note.** It's direction, not authorization to widen Slice 1. The forward note is here so the header's read-model boundary is set correctly the first time — adding sub-pipeline / mini-bars in Slice 2 should be additive, not a re-architecture.

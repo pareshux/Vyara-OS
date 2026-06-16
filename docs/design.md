@@ -107,11 +107,27 @@ Type scale (rem): 0.75 / 0.8125 / 0.875 (base UI) / 1 / 1.125 / 1.25 / 1.5 / 1.8
 
 **Timeline / activity feed.** The common spine (Constitution §3) rendered consistently on every core object: chronological, typed icons (created/assigned/advanced/document/message/call/AI-action), expandable entries.
 
+**Scannable project-progress header.** The canonical project-state component — one read-model assembled from domain events, rendered on the Project Detail header, the projects list (as a status dot), the dashboard, and mobile Today. Encodes three things at once so a viewer understands the whole project at a glance:
+
+- **POSITION** — a macro stepper rendered from `pipeline_template` stages: done / current / upcoming. Data-driven, never hardcoded.
+- **HEALTH** — the active segment's colour is `on-track` (green) / `needs-attention` (amber) / `blocked` (red), rolled up into a single status pill on the header **and** a matching dot in the list/dashboard views. Computed by one rule: blocked gate → red; overdue task or stalled-too-long → amber; else green. Same rule everywhere — no module-specific drift.
+- **COMPLETENESS** —
+  - the active stage expands into its sub-pipeline (a second, finer stepper from `pipeline_substage`);
+  - **gates** (required documents + required fields, declared on the stage/substage in the `gate_requirement` master) render as done / blocked chips; a missing required doc shows as a red gate without the user opening the Documents tab;
+  - **phased mini-bars** read from child records, not flags — dispatch: "3 of 5 tranches"; billing: "₹25.2L of ₹42L · 60%"; reservation: "8 of 10 lines reserved";
+  - the **next action** surfaces as a task banner — who · what · due.
+
+**Architecture rule (load-bearing).** All cross-module reads needed for the project header — sales_order, dispatch, invoice, stock_reservation, and their line tables — go **only through the project-progress read-model assembler** (`lib/read-models/project-progress.ts`). The header component itself, the list-view status dot, the dashboard tile, and the mobile Today card all receive one assembled object; **no other component or module reads cross-module on the project's behalf**. New modules (Complaints, Tenders, batch tracking) surface in the header by extending the assembler with one more query — never by adding direct table reads in a UI component. Consistent with Constitution Principle #0; see `docs/adr/0001-project-progress-read-model.md` for the full review rule.
+
+**States.** Empty (project just created, no stages advanced) — show the macro stepper at stage 1 with all-green and a "Start" CTA. Loading — skeleton the stepper rail and the mini-bars individually so the rest of the header doesn't jank. Error — fall back to a degraded view showing position + a "could not load progress detail" banner rather than blocking the whole project page.
+
+**Accessibility.** Health is *never* color-only — the pill carries a text label ("Blocked: drawing approval missing"), and the list-view dot is paired with the same label as a tooltip + aria-label. Tabular figures on the mini-bar numbers.
+
 ---
 
 ## 6. The Project Detail hub (signature surface)
 
-The most-used screen — design it best. Header: project name, segment, stage stepper, owner, value, key actions. Tabbed body: **Overview · Stakeholders · Specifications · Samples · Quotes · Orders · Documents · Timeline · Tasks.** Right rail (desktop): next actions, key dates, AI suggestions. On mobile, tabs collapse to a scrollable segmented control; the right rail moves inline. Everything a user needs about a project is reachable here without hunting.
+The most-used screen — design it best. **Header:** the scannable project-progress component (§5) — POSITION + HEALTH + COMPLETENESS in one place — plus project name, segment, owner, value, key actions. Tabbed body: **Overview · Stakeholders · Specifications · Samples · Quotes · Orders · Documents · Timeline · Tasks.** Right rail (desktop): next actions, key dates, AI suggestions. On mobile, tabs collapse to a scrollable segmented control; the right rail moves inline; the macro stepper compresses to dots-with-current-label and the sub-stepper appears below. Everything a user needs about a project is reachable here without hunting.
 
 ---
 

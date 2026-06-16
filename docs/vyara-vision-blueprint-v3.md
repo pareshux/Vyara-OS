@@ -83,7 +83,38 @@ All capabilities inherit the **common spine** (timeline · tasks · documents ·
 
 **3. Architect & Influencer Management.** *Purpose:* own the relationship graph that drives specs. *Users:* engineers, manager. *Workflows:* contact/firm records, role tagging (specifier/buyer/influencer), specification history per architect, nurture. *Masters:* firm, contact, role. *Own.*
 
-**4. Projects.** *Purpose:* the project lifecycle and its stakeholders. *Users:* engineers, manager, COO. *Workflows:* project → stakeholders → stage pipeline (per segment) → site photos/progress → competitors. *Masters:* project type, pipeline, stage/substage. *Own.* (A module now — not the platform spine.)
+**4. Projects.** *Purpose:* the project lifecycle and its stakeholders. *Users:* engineers, manager, COO. *Workflows:* project → stakeholders → stage pipeline (per segment) → site photos/progress → competitors → completion. *Masters:* project type, `pipeline_template`, `pipeline_stage`, `pipeline_substage`, `gate_requirement` (per stage/substage), activity type. *Own.* (A module now — not the platform spine.)
+
+> **Stage model — data-driven config, three levels deep.** Stages are not enums in code:
+>
+> - `pipeline_template` — e.g. "Tiles / Architect", "Tender", "Direct contractor", "Dealer order". Tenant-scoped; one per commercial motion.
+> - `pipeline_stage` — ordered list per template (the macro stepper).
+> - `pipeline_substage` — ordered list per stage (the sub-stepper that the Scannable Project Tracking header expands into when a stage is active).
+>
+> Each stage and sub-stage declares:
+>
+> - **Required documents** — document types that must be on file to satisfy the gate (drawings, approval letter, work order, POD, RA-bill, retention release, etc.).
+> - **Required fields** — fields that must be populated on the project (e.g. "order_value before exiting Quote", "expected_completion_at before exiting Order").
+> - **SLA in days** (`sla_days`) — if a project sits in this stage longer, the project's health flips amber.
+> - **Back-flow** — which prior stages a record may legally return to, and the allowed reasons (`stage_transition_reason` master). Most stages forbid back-flow; some explicitly allow it (e.g. Dispatch → Reserve stock when a tranche is rejected).
+>
+> These declarations power the **Scannable Project Tracking** pattern (above) — they are what make a missing approval document render as a red gate on the header without any module-specific code.
+>
+> **Tiles / Architect pipeline (launch-customer reference).** The pipeline that the launch customer runs:
+>
+> `Specified → Tracking → Paving → Delivery → Closed`
+>
+> with **Paving** modelled as a sub-pipeline:
+>
+> `Quote → Order → Reserve stock → Dispatch → Laying → Billing`
+>
+> **Data-model consequences (record now, so later slices don't fight the schema):**
+>
+> - An **Order may have many Dispatch tranches.** Phased delivery is the norm for tile/paver projects, not the exception — a single order to a township covers many bungalows or many road sections, each dispatched separately as ground prep finishes. The Dispatch module's schema is one-to-many against Order; the header's "3 of 5" dispatch mini-bar reads from Dispatch tranche rows, not from a flag on Order.
+> - **Invoices are partial.** Running bills (`is_running_bill`, `running_bill_seq`, `is_final_bill`) with `retention_pct` held back until project completion. The header's "₹25.2L of ₹42L · 60%" billing mini-bar reads sum of invoices vs order value, never a "billed" flag.
+> - **Reservations are at line level.** A partially-reservable order (some lines on stock, some on back-order) is the common case; the header's reservation mini-bar reads lines-reserved vs lines-ordered.
+>
+> Other pipeline templates (Tender, Dealer order, Direct contractor) follow the same shape: stages + sub-stages + gates + SLA + back-flow, all data-driven. The header pattern renders correctly for all of them without modification.
 
 **5. Samples.** *Purpose:* track samples to conversion + their stock. *Users:* engineers, inside sales, warehouse. *Workflows:* request → approve (if costly) → dispatch + track → outcome → ROI. *Masters:* sample type; links to **sample stock** (inventory). *Own.*
 
@@ -135,11 +166,72 @@ All capabilities inherit the **common spine** (timeline · tasks · documents ·
 - **Geography:** country, state, city, territory, zone, branch.
 - **Product:** category, SKU, brand, finish, colour, thickness, unit, packaging.
 - **Commercial:** price list, discount matrix, taxes, payment terms, credit limits.
-- **Inventory:** warehouse, stock type, movement type, reason codes.
-- **Project:** project type, pipeline, stage, substage, activity type.
+- **Inventory:** warehouse, stock type, movement type, reason codes (movement_reason).
+- **Project:** project type, **`pipeline_template`**, **`pipeline_stage`** (with `sla_days` + allowed back-flow per stage), **`pipeline_substage`**, **`gate_requirement`** (required documents + required fields, per stage/substage), activity type.
+- **Process reason codes (centralised, tenant-configurable):** `stage_transition_reason`, `dispatch_delay_reason`, `return_reason`, `complaint_root_cause`, `write_off_reason`, `payment_promise_broken_reason`. One master per reason; dropdowns across the platform consume them so no enum is hardcoded.
 - **Administration:** role, permission, notification template, workflow template, approval matrix.
 
 Every master is tenant-scoped from day one.
+
+---
+
+## Scannable Project Tracking — the project-header pattern
+
+A project's header must let a viewer understand its **whole state at a glance**. The pattern encodes three things in one progress component, computed identically across the system and reused on the Project Detail header, the projects list (as a status dot), the dashboard, and the mobile Today view.
+
+### 1. POSITION
+A macro stepper rendered from the project's `pipeline_template` stages — **done / current / upcoming**. Stages are data-driven, never hardcoded; the same component renders correctly for an architect-specified project, a tender, a direct-contractor schedule, or a dealer order.
+
+### 2. HEALTH
+The current segment's colour reflects health, not just position:
+
+- **on-track** (green)
+- **needs-attention** (amber)
+- **blocked** (red)
+
+This rolls up into a **single status pill on the header** and a matching **status dot in list/dashboard views**, so a list of many projects is scannable — a manager looks only at amber/red rows. Health is one computed rule, evaluated in the read-model assembler:
+
+| Condition | Health |
+|---|---|
+| Past the current stage's `sla_days` AND any **hard** gate is unsatisfied | **blocked** (red) |
+| Open task on the project overdue (regardless of stage progress) | **needs-attention** (amber) |
+| Past the current stage's `sla_days` with all hard gates satisfied (just stalled) | **needs-attention** (amber) |
+| Else | **on-track** (green) |
+
+The rule is deliberately tolerant of **end-of-stage gates that are naturally unsatisfied** while a stage is in progress — e.g., a "final RA bill" gate on Paving is supposed to be unsatisfied for most of Paving's life. Such gates show as red chips in the COMPLETENESS section (so the user can see what's outstanding) but **do not flip the pill to blocked until the stage runs past its SLA**. That's the difference between "you have work left to do here" and "you're stuck."
+
+Edge cases (e.g. "always-active gate" that *should* block from day one, like "drawing on file before Tracking") can be expressed in the `gate_requirement` master via a future column — out of scope for now; the current rule covers the common case cleanly.
+
+### 3. COMPLETENESS
+
+**a) Sub-pipeline expansion.** The active stage expands into its sub-pipeline — a second, finer stepper showing the `pipeline_substage` rows for that stage. The macro stepper stays visible above; the sub-stepper sits inside the current segment.
+
+**b) Gates.** Each stage and sub-stage declares **required documents** and **required fields** (the `gate_requirement` master). The component renders them as done / blocked chips. A missing required document shows as a blocked (red) gate — this is how **document presence becomes scannable** without forcing a user to click into the Documents tab to find out.
+
+**c) Phased mini-bars.** Progress for one-to-many work reads from **child records, not flags**:
+
+- **Dispatch:** tranches delivered vs planned sections — e.g. "3 of 5"
+- **Billing:** sum of invoices vs order value — e.g. "₹25.2L of ₹42.0L · 60%"
+- **Reservation:** lines reserved vs lines ordered
+
+The mini-bars are computed from the underlying records, so they're always correct without a denormalised "is_dispatched" boolean to maintain.
+
+**d) Next-action banner.** The next action surfaces as a task banner inside the header: **who · what · due**. One project, one obvious next action.
+
+### Architecture rule (load-bearing)
+
+**All cross-module reads needed for the project header go ONLY through the project-progress read-model assembler.** The header component, the list-view status dot, the dashboard tile, and the mobile Today card all consume one assembled object — `{ macro_stages, current_stage, current_substages, gates, dispatch, billing, reservation, health, next_action, ... }`. No other component or module reads `sales_order`, `dispatch`, `invoice`, or their line/reservation tables on the project's behalf.
+
+The assembler is implemented as a single server-side function (`lib/read-models/project-progress.ts`) — a pragmatic projection rather than an event-sourced materialised view. Upgrading to event sourcing later is additive: the consumer contract stays the same. See `docs/adr/0001-project-progress-read-model.md` for the full rule + the code-review checklist.
+
+Consequences:
+
+- **New modules added later** (Complaints, Tenders, Service, batch/lot tracking) surface in the header by extending the assembler — one new query per module, not by adding direct table reads in UI components.
+- The pattern is consistent with **Principle #0** (modules own their tables; communication is via events). The assembler is the *one place* where cross-module reads are sanctioned.
+- Health, gates, mini-bars, and the next-action banner are computed in the read-model, not at render time. A single source of truth for "what state is this project in" across header, list dot, dashboard, and mobile Today.
+- The health rule itself was refined during wiring: a project is **blocked** only when past the current stage's SLA AND a hard gate is unsatisfied (mid-stage projects with end-of-stage gates pending stay on-track — the chips show red, but the pill stays green until the stage stalls).
+
+This pattern is canonical. Other large objects (Order, Invoice, Dealer, Complaint) follow the same three-encoding shape on their own headers when they grow that need — each gets its own read-model assembler.
 
 ---
 

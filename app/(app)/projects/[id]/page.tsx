@@ -5,6 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { StageStepper } from '@/components/projects/stage-stepper'
+import { ScannableProgressHeader } from '@/components/projects/scannable-progress-header'
+import { getProjectProgress } from '@/lib/read-models/project-progress'
 import { SpecificationsTab } from './specifications-tab'
 import { TasksTab } from './tasks-tab'
 import { QuickNote } from './quick-note'
@@ -154,6 +156,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
   if (!project) notFound()
 
+  // Read-model: one server-side assembler for the scannable header.
+  // The component itself never touches Order/Dispatch/Invoice tables.
+  const progress = await getProjectProgress(id)
+
   const currentStage = (project.current_stage as unknown) as { id: string; label: string; color: string; is_paving_stage: boolean } | null
   const specificStages = (allStages ?? []).filter((s) => s.segment === project.segment)
   const segmentStages = specificStages.length > 0
@@ -216,6 +222,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               </div>
             </div>
           </div>
+
+          {progress && (
+            <div className="border-t border-border pt-4">
+              <ScannableProgressHeader progress={progress} />
+            </div>
+          )}
 
           {segmentStages.length > 0 && currentStage && (
             <div className="border-t border-border pt-4">

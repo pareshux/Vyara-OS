@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { ProjectsClient } from './projects-client'
+import { getProjectProgressBatch, type Health } from '@/lib/read-models/project-progress'
 
 export default async function ProjectsPage() {
   const supabase = await createClient()
@@ -23,7 +24,7 @@ export default async function ProjectsPage() {
     supabase.from('user_profile').select('id, full_name').eq('is_active', true).order('full_name'),
   ])
 
-  const projectList = (projects ?? []) as unknown as {
+  const projectListBase = (projects ?? []) as unknown as {
     id: string
     name: string
     segment: string
@@ -32,6 +33,14 @@ export default async function ProjectsPage() {
     current_stage: { id: string; label: string; color: string } | null
     owner: { full_name: string } | null
   }[]
+
+  // Batch progress lookup for the health dot — one server-side assembler.
+  const progressMap = await getProjectProgressBatch(projectListBase.map((p) => p.id))
+  const projectList = projectListBase.map((p) => ({
+    ...p,
+    health: (progressMap.get(p.id)?.health ?? 'on_track') as Health,
+    health_reason: progressMap.get(p.id)?.health_reason ?? 'On track',
+  }))
 
   const stageCounts = projectList.reduce<Record<string, { label: string; color: string; count: number }>>(
     (acc, p) => {
