@@ -1,20 +1,27 @@
 # Vyara OS — Project Memory
 
-Vyara OS is a **project-centric Manufacturing Revenue & Project OS** for Vyara Tiles (a Surat paver/landscaping manufacturer), built from scratch. **Slice 1 + Slice 2 are complete**; Slice 3 (Dealer → portal → orders) is the next vertical.
+Vyara OS is **vertical SaaS for made-to-order building-materials manufacturers** (pavers, kerbs, tiles, precast, RCC products, cement bricks, marble cut-to-size). Target: **Tier 1 (₹100cr+) and Tier 2 (₹20–100cr)** manufacturers. **Vyara Tiles Limited is the launch customer (customer #1)** — not the only customer. **The product is not** a horizontal manufacturing OS, not a CRM, not a full ERP. It is the **Manufacturing Business OS** — one system to run the **commercial and operational** side (sales → specification → samples → quotes → orders → operational inventory → dispatch → collections → service), with accounting/production integrated, not rebuilt.
+
+**Year-1 success metric:** Vyara is delighted AND we can onboard a similar Tier-1 or Tier-2 manufacturer in **under 8 weeks**. The second clause is the only thing that proves the platform thesis.
+
+**Slice 1 + Slice 2 are complete** (architect-specified commercial motion, order → dispatch → invoice → collection). Slice 2.5 (operational inventory) and Slice 3 (Dealer → portal → orders) are next candidates. Three other commercial motions — tenders, direct-contractor scheduling, dealer/distributor — are partially or not yet built; see vision blueprint.
 
 ## Read these first — they govern everything
 
-- @docs/CONSTITUTION.md — architecture law (project-centric model, integrate-don't-rebuild, tenant_id everywhere, etc.). On any conflict, the Constitution wins.
+- @docs/CONSTITUTION.md (v2) — vertical positioning, product principles (immutable), technical assumptions (revisable). On any conflict, the Constitution wins.
+- @docs/vyara-vision-blueprint-v3.md — the destination: capability catalog, four commercial motions, Tier 1+2 depth modes, scope boundary. **Always read alongside the Constitution.**
 - @docs/design.md — UX/UI law (shadcn/ui, design tokens, device tiers). Set the design tokens as the theme **before** building any screen.
-- @docs/vyara-slice1-build-spec.md — Slice 1 spec (Lead → Project → Sample → Quote → Task → Timeline → Notification). Status: complete.
-- @docs/vyara-slice2-build-spec.md — Slice 2 spec (Order → Dispatch → Invoice → Collection). Status: complete.
+- @docs/vyara-slice1-build-spec.md — Slice 1 spec. Status: complete.
+- @docs/vyara-slice2-build-spec.md — Slice 2 spec. Status: complete.
+- **Superseded / archive (do not read as authoritative):** `docs/vyara-industry-os-blueprint-v2.archived.md` (kept for history; replaced by v3).
 
 ## How we work
 
-- Build one slice at a time. If a capability isn't in the current slice spec, it is out of scope — note it and move on.
+- Build one slice at a time. If a capability isn't in the current slice spec, it is out of scope — note it and move on. The vision is the destination, not a build authorization.
 - Work the build steps **in order, one at a time**. After each step: make sure the app runs, commit, then continue. Don't jump ahead.
 - Pause only for **genuinely blocking** decisions — at most **3 blocking decisions + 5 recommendations** per step, then proceed with a clearly stated assumption.
 - Don't over-design unknowns. Assume the architecture is ~80% right and build; let the rest emerge.
+- **Platform discipline test:** for every new abstraction or schema decision, ask "does this work for customer #2 in the vertical, or am I encoding a Vyara quirk?" Vyara-specific things are configured per tenant, never hardcoded.
 
 ## Invariants (from the Constitution — repeated here because they're easy to violate)
 
@@ -31,8 +38,9 @@ Next.js (App Router) · Supabase (Mumbai region — Postgres, Auth, RLS, Storage
 
 ## Terminology
 
-- **Project** is the spine — the central object everything relates to.
+- **Business Object** is the platform spine — every domain entity (Lead, Project, Order, Inventory Item, Dealer, …) inherits the common spine (timeline, tasks, documents, comments, activities, notifications, AI, audit). **Project is a module, not the spine** (this changed in v2 — earlier docs may say otherwise).
 - **Specifier** = architect/consultant who specifies our products. **Buyer** = contractor/developer/owner who orders. **Influencer** = site engineer etc.
+- **Four commercial motions** the platform serves: (1) architect-specified projects, (2) government tenders, (3) direct contractor/developer, (4) dealers/distributors. Slices 1+2 cover motion 1 end-to-end. Motions 2/3/4 are partial or pending.
 - Slice 1 hero: **paving-stage follow-up** (won spec → auto-task + notify owner so we don't lose it).
 - Slice 2 hero: **collections engine** (automated WhatsApp dunning + ageing buckets + PTP + receipts → working-capital + IPO-readiness story).
 
@@ -44,7 +52,9 @@ Inngest jobs: `paving-stage-daily-check`, `order-on-quote-won`, `dispatch-on-ord
 
 ## Current step
 
-Slice 2 complete (commits up through `feat(slice2/finance)`). Next: **Slice 3 — Dealer portal** (read `docs/vyara-slice3-build-spec.md` when added).
+Slice 2 complete (commits up through `feat(slice2/finance)`). Vision sharpened (vertical-locked to building materials, Tier 1+2). Next move pending: **gap analysis against vyara-vision-blueprint-v3.md** to determine whether Slice 2.5 (operational inventory) or Slice 3 (Dealer portal) is the higher-priority build.
+
+The **customer-#2 onboarding test has not yet been attempted.** Until it is, the platform thesis is unproven regardless of how complete Slices 1+2 look.
 
 ## Known Slice 1 schema drift (flagged for review)
 

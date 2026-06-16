@@ -1,3 +1,10 @@
+# ⚠ ARCHIVED — Vyara Industry OS Blueprint **V2**
+
+> **This document is SUPERSEDED by `vyara-vision-blueprint-v3.md`.**
+> Kept on disk for historical reference only. Do **not** use it as a source of truth for architecture, scope, or capability decisions — many of its assumptions (notably "project as the spine," "integrate-only inventory," and the horizontal-manufacturing-platform framing) have since been explicitly revised. Future sessions and contributors should read v3 + the updated Constitution v2 instead.
+
+---
+
 # Vyara — Industry OS Blueprint **V2 (Vision Blueprint, frozen)**
 ### Manufacturing Revenue & Project OS — restructured for buildability
 
