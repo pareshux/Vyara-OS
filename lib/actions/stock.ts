@@ -16,14 +16,17 @@ async function getActorContext() {
   return { supabase, userId: user.id, tenantId: profile.tenant_id, role: profile.role }
 }
 
+export type ReceiptReason = 'opening_balance' | 'production' | 'purchase' | 'transfer_in_external' | 'return_from_customer' | 'other'
+
 /**
- * Record an opening balance for a (warehouse, product). Inserts a single
- * `receipt` movement; the trigger updates stock atomically.
+ * Record a stock receipt — generic wrapper that inserts a `receipt` movement
+ * with the given reason. Stock-movement trigger updates the `stock` row.
  */
-export async function recordOpeningBalance(params: {
+export async function recordReceipt(params: {
   warehouse_id: string
   product_id: string
   quantity: number
+  reason_code: ReceiptReason
   remark?: string
 }): Promise<{ success: true } | { error: string }> {
   const ctx = await getActorContext()
@@ -38,15 +41,32 @@ export async function recordOpeningBalance(params: {
     product_id: params.product_id,
     movement_type: 'receipt',
     quantity: params.quantity,
-    reason_code: 'opening_balance',
+    reason_code: params.reason_code,
     actor_id: userId,
-    remark: params.remark ?? 'Opening balance',
+    remark: params.remark ?? null,
   })
   if (error) return { error: error.message }
 
   revalidatePath('/inventory')
   revalidatePath(`/warehouses/${params.warehouse_id}`)
+  revalidatePath('/inventory/ledger')
   return { success: true }
+}
+
+/**
+ * Back-compat thin wrapper — opening balance is just a receipt with a fixed reason.
+ */
+export async function recordOpeningBalance(params: {
+  warehouse_id: string
+  product_id: string
+  quantity: number
+  remark?: string
+}): Promise<{ success: true } | { error: string }> {
+  return recordReceipt({
+    ...params,
+    reason_code: 'opening_balance',
+    remark: params.remark ?? 'Opening balance',
+  })
 }
 
 /**

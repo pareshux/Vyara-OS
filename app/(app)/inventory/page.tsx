@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Boxes, Upload, AlertTriangle, Warehouse, Pencil, ArrowLeftRight } from 'lucide-react'
 import { AdjustButton } from './adjust-button'
+import { ReceiveButton } from './receive-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,6 +75,7 @@ export default async function InventoryPage({
           </div>
         </div>
         <div className="flex gap-2">
+          <ReceiveButton variant="default" label="Receive stock" />
           <Button size="sm" variant="outline" asChild>
             <Link href="/inventory/adjustments"><Pencil className="size-4 mr-1.5" />Adjustments</Link>
           </Button>
@@ -199,6 +201,15 @@ export default async function InventoryPage({
                     <td className="px-3 py-2 text-right">
                       {wh && pr && (
                         <div className="flex justify-end items-center gap-1">
+                          <ReceiveButton
+                            variant="ghost"
+                            label="Receive"
+                            warehouseId={wh.id}
+                            warehouseCode={wh.code}
+                            productId={pr.id}
+                            productSkuCode={pr.sku_code}
+                            productName={pr.name}
+                          />
                           <AdjustButton
                             warehouseId={wh.id}
                             productId={pr.id}

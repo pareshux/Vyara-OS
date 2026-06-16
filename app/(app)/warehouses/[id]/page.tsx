@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronRight, MapPin, User, AlertTriangle, BookOpen } from 'lucide-react'
+import { ReceiveButton } from '@/app/(app)/inventory/receive-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -124,11 +125,18 @@ export default async function WarehouseDetailPage({ params }: { params: Promise<
               </Badge>
             )}
           </h2>
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/inventory/ledger?warehouse=${warehouse.id}`}>
-              <BookOpen className="size-4 mr-1.5" /> Full ledger
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <ReceiveButton
+              warehouseId={warehouse.id as string}
+              warehouseCode={warehouse.code as string}
+              label="Receive stock"
+            />
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/inventory/ledger?warehouse=${warehouse.id}`}>
+                <BookOpen className="size-4 mr-1.5" /> Full ledger
+              </Link>
+            </Button>
+          </div>
         </div>
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           {stock.length === 0 ? (
