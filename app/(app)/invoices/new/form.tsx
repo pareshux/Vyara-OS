@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { createInvoiceManual } from '@/lib/actions/invoices'
+import { createInvoiceManual, getInvoiceDefaults, type InvoiceDefaults } from '@/lib/actions/invoices'
 
 const NONE = '__none__'
 
@@ -22,24 +22,36 @@ interface Props {
   projects: { id: string; name: string }[]
   firms: { id: string; name: string }[]
   orders: { id: string; order_number: string; value: number; project_id: string; buyer_firm_id: string | null }[]
+  initialDefaults: InvoiceDefaults
 }
 
-export function NewInvoiceForm({ projects, firms, orders }: Props) {
+function addDays(iso: string, days: number) {
+  const d = new Date(iso)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+export function NewInvoiceForm({ projects, firms, orders, initialDefaults }: Props) {
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
-  const in30 = useMemo(() => {
-    const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10)
-  }, [])
+
+  // Snapshot-source state for the FK + microcopy. `null` if user has
+  // overridden away from the suggested value.
+  const [taxSource, setTaxSource] = useState<InvoiceDefaults['tax']>(initialDefaults.tax)
+  const [ptSource, setPtSource] = useState<InvoiceDefaults['paymentTerm']>(initialDefaults.paymentTerm)
+
+  const initialGst = initialDefaults.tax?.rate_pct ?? 18
+  const initialDays = initialDefaults.paymentTerm?.days ?? 30
 
   const [orderId, setOrderId] = useState<string>(NONE)
   const [projectId, setProjectId] = useState<string>(NONE)
   const [buyerId, setBuyerId] = useState<string>(NONE)
   const [externalNum, setExternalNum] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(today)
-  const [dueDate, setDueDate] = useState(in30)
-  const [paymentTerms, setPaymentTerms] = useState(30)
+  const [dueDate, setDueDate] = useState(addDays(today, initialDays))
+  const [paymentTerms, setPaymentTerms] = useState(initialDays)
   const [subtotal, setSubtotal] = useState(0)
-  const [gstPct, setGstPct] = useState(18)
+  const [gstPct, setGstPct] = useState(initialGst)
   const [retentionPct, setRetentionPct] = useState(0)
   const [isRunningBill, setIsRunningBill] = useState(false)
   const [billSeq, setBillSeq] = useState<number | ''>('')
@@ -63,10 +75,42 @@ export function NewInvoiceForm({ projects, firms, orders }: Props) {
     }
   }, [orderId, orders, gstPct, subtotal])
 
+  // When buyer firm changes, re-resolve payment-term (firm may have its own).
+  // Only overrides the form if the current value still matches the previous source,
+  // i.e. the user hasn't deviated manually — otherwise we'd clobber their edit.
+  useEffect(() => {
+    if (buyerId === NONE) return
+    let cancelled = false
+    void getInvoiceDefaults({ buyer_firm_id: buyerId }).then((res) => {
+      if (cancelled || !('defaults' in res)) return
+      const nextPt = res.defaults.paymentTerm
+      if (!nextPt) return
+      // Only adopt if user hasn't edited away from the prior suggestion
+      if (ptSource && paymentTerms === ptSource.days) {
+        setPaymentTerms(nextPt.days)
+        setDueDate(addDays(invoiceDate, nextPt.days))
+      }
+      setPtSource(nextPt)
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buyerId])
+
+  // Recompute due_date whenever invoice_date OR payment_terms changes.
+  // The user can still hand-edit due_date afterwards — this is just the default.
+  useEffect(() => {
+    if (!invoiceDate || !(paymentTerms >= 0)) return
+    setDueDate(addDays(invoiceDate, paymentTerms))
+  }, [invoiceDate, paymentTerms])
+
   const gstAmount = useMemo(() => Math.round((subtotal * gstPct) / 100 * 100) / 100, [subtotal, gstPct])
   const total = useMemo(() => Math.round((subtotal + gstAmount) * 100) / 100, [subtotal, gstAmount])
   const retentionAmount = useMemo(() => Math.round((total * retentionPct) / 100 * 100) / 100, [total, retentionPct])
   const billedAmount = useMemo(() => Math.round((total - retentionAmount) * 100) / 100, [total, retentionAmount])
+
+  // Did the user keep the suggested values? If yes, snapshot the FK.
+  const useTaxFk = taxSource && Math.abs(gstPct - taxSource.rate_pct) < 0.005
+  const usePtFk = ptSource && paymentTerms === ptSource.days
 
   function handleSubmit() {
     setErr(null)
@@ -88,6 +132,8 @@ export function NewInvoiceForm({ projects, firms, orders }: Props) {
         running_bill_seq: typeof billSeq === 'number' ? billSeq : undefined,
         is_final_bill: isFinalBill,
         notes: notes.trim() || undefined,
+        tax_rate_id: useTaxFk ? taxSource!.id : null,
+        payment_term_id: usePtFk ? ptSource!.id : null,
       })
       if ('error' in res) {
         setErr(res.error)
@@ -150,11 +196,27 @@ export function NewInvoiceForm({ projects, firms, orders }: Props) {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="due">Due date</Label>
           <Input id="due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          {usePtFk && ptSource && (
+            <p className="text-[10px] text-muted-foreground tabular-nums">
+              Auto from <span className="font-mono text-foreground">{ptSource.code}</span> · invoice_date + {ptSource.days}d
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="terms">Payment terms (days)</Label>
           <Input id="terms" type="number" min={0} value={paymentTerms} onChange={(e) => setPaymentTerms(Number(e.target.value))} />
+          {ptSource && (
+            <p className="text-[10px] text-muted-foreground tabular-nums flex items-center gap-1 flex-wrap">
+              <span>
+                From <span className="font-mono text-foreground">{ptSource.code}</span> · {ptSource.days}d
+                {ptSource.source === 'firm' && <span className="text-emerald-700"> · buyer override</span>}
+              </span>
+              {!usePtFk && (
+                <span className="text-amber-700">· manual</span>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="sub">Subtotal (excl. GST)</Label>
@@ -164,6 +226,16 @@ export function NewInvoiceForm({ projects, firms, orders }: Props) {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="gst">GST %</Label>
           <Input id="gst" type="number" min={0} max={50} step="0.5" value={gstPct} onChange={(e) => setGstPct(Number(e.target.value))} />
+          {taxSource && (
+            <p className="text-[10px] text-muted-foreground tabular-nums flex items-center gap-1 flex-wrap">
+              <span>
+                From <span className="font-mono text-foreground">{taxSource.code}</span> · {taxSource.rate_pct.toFixed(2)}%
+              </span>
+              {!useTaxFk && (
+                <span className="text-amber-700">· manual</span>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="ret">Retention %</Label>

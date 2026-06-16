@@ -32,6 +32,72 @@ function computeMoney(params: {
   return { gst_amount, total, retention_amount, billed_amount }
 }
 
+// ─── INVOICE DEFAULTS LOOKUP (for new-invoice form auto-fill) ────────────────
+
+export type InvoiceDefaults = {
+  tax: { id: string; code: string; label: string; rate_pct: number } | null
+  paymentTerm: {
+    id: string
+    code: string
+    label: string
+    days: number
+    source: 'firm' | 'tenant_default'
+  } | null
+}
+
+/**
+ * Returns the tenant's active default tax_rate + the payment term for
+ * the given buyer firm (falling back to the tenant default). Both lookups
+ * are tenant-scoped via RLS — no service-role key needed.
+ */
+export async function getInvoiceDefaults(params: {
+  buyer_firm_id?: string | null
+}): Promise<{ defaults: InvoiceDefaults } | { error: string }> {
+  const ctx = await getActorContext()
+  if (!ctx) return { error: 'Not authenticated' }
+
+  const [taxRes, firmRes, ptDefaultRes] = await Promise.all([
+    ctx.supabase
+      .from('tax_rate')
+      .select('id, code, label, rate_pct')
+      .is('deleted_at', null)
+      .eq('is_active', true)
+      .eq('is_default', true)
+      .maybeSingle(),
+    params.buyer_firm_id
+      ? ctx.supabase
+          .from('firm')
+          .select('default_payment_term_id, payment_term:default_payment_term_id(id, code, label, days)')
+          .eq('id', params.buyer_firm_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    ctx.supabase
+      .from('payment_term')
+      .select('id, code, label, days')
+      .is('deleted_at', null)
+      .eq('is_active', true)
+      .eq('is_default', true)
+      .maybeSingle(),
+  ])
+
+  const tax = taxRes.data
+    ? { id: taxRes.data.id, code: taxRes.data.code, label: taxRes.data.label, rate_pct: Number(taxRes.data.rate_pct) }
+    : null
+
+  // Firm-level payment_term wins if the firm has one set
+  const firmPt = firmRes.data?.payment_term
+    ? (Array.isArray(firmRes.data.payment_term) ? firmRes.data.payment_term[0] : firmRes.data.payment_term)
+    : null
+
+  const paymentTerm = firmPt
+    ? { id: firmPt.id, code: firmPt.code, label: firmPt.label, days: Number(firmPt.days), source: 'firm' as const }
+    : ptDefaultRes.data
+    ? { id: ptDefaultRes.data.id, code: ptDefaultRes.data.code, label: ptDefaultRes.data.label, days: Number(ptDefaultRes.data.days), source: 'tenant_default' as const }
+    : null
+
+  return { defaults: { tax, paymentTerm } }
+}
+
 export async function createInvoiceManual(params: {
   project_id?: string
   sales_order_id?: string
@@ -47,6 +113,8 @@ export async function createInvoiceManual(params: {
   running_bill_seq?: number
   is_final_bill?: boolean
   notes?: string
+  tax_rate_id?: string | null
+  payment_term_id?: string | null
   lines?: Array<{ description: string; sku_code?: string; quantity?: number; unit?: string; unit_price?: number; line_total: number }>
 }): Promise<{ id: string; invoice_number: string } | { error: string }> {
   const ctx = await getActorContext()
@@ -82,6 +150,8 @@ export async function createInvoiceManual(params: {
       is_final_bill: params.is_final_bill ?? false,
       status: 'draft',
       notes: params.notes ?? null,
+      tax_rate_id: params.tax_rate_id ?? null,
+      payment_term_id: params.payment_term_id ?? null,
       created_by: userId,
       updated_by: userId,
     })
@@ -132,6 +202,17 @@ export async function importInvoicesCSV(csvText: string): Promise<
     if (!header.includes(r)) return { error: `Missing required column: ${r}` }
   }
 
+  // Resolve tenant defaults once (used when a row omits gst_pct)
+  const { data: defaultTax } = await supabase
+    .from('tax_rate')
+    .select('id, rate_pct')
+    .is('deleted_at', null)
+    .eq('is_active', true)
+    .eq('is_default', true)
+    .maybeSingle()
+  const defaultGstPct = defaultTax ? Number(defaultTax.rate_pct) : 18
+  const defaultTaxId: string | null = defaultTax?.id ?? null
+
   const idx = (col: string) => header.indexOf(col)
   const errors: string[] = []
   let imported = 0
@@ -158,7 +239,10 @@ export async function importInvoicesCSV(csvText: string): Promise<
     }
 
     const subtotal = Number(row[idx('subtotal')] ?? '0')
-    const gst_pct = idx('gst_pct') >= 0 ? Number(row[idx('gst_pct')] ?? '18') : 18
+    const csvGstPct = idx('gst_pct') >= 0 ? Number(row[idx('gst_pct')]) : NaN
+    const gst_pct = Number.isFinite(csvGstPct) ? csvGstPct : defaultGstPct
+    // Snapshot the tax_rate FK only when we used the tenant default
+    const tax_rate_id = Number.isFinite(csvGstPct) ? null : defaultTaxId
     const retention_pct = idx('retention_pct') >= 0 ? Number(row[idx('retention_pct')] ?? '0') : 0
     const money = computeMoney({ subtotal, gst_pct, retention_pct })
 
@@ -179,6 +263,7 @@ export async function importInvoicesCSV(csvText: string): Promise<
       status: 'sent',  // imported invoices are considered already issued
       notes: idx('notes') >= 0 ? row[idx('notes')] : null,
       source_metadata: { csv_row: i + 1 },
+      tax_rate_id,
       created_by: userId,
       updated_by: userId,
     })
