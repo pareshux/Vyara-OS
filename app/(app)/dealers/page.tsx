@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Users, AlertTriangle } from 'lucide-react'
+import { Users, AlertTriangle, BarChart3, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { NewDealerSheet } from './new-dealer-sheet'
 
 export const dynamic = 'force-dynamic'
@@ -18,7 +18,7 @@ const TIER_STYLES: Record<string, { bg: string; color: string }> = {
 export default async function DealersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: 'active' | 'inactive' | 'dormant' }>
+  searchParams: Promise<{ filter?: 'active' | 'inactive' | 'dormant'; view?: 'overview' | 'performance' }>
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -26,6 +26,7 @@ export default async function DealersPage({
 
   const sp = await searchParams
   const filter = sp.filter ?? null
+  const view = sp.view === 'performance' ? 'performance' : 'overview'
 
   const [
     { data: dealersRaw },
@@ -47,10 +48,10 @@ export default async function DealersPage({
       .from('invoice')
       .select('buyer_firm_id, billed_amount, paid_amount, status')
       .is('deleted_at', null),
-    // Last order date per dealer firm
+    // Orders per dealer firm — needed for last-order-date AND performance metrics
     supabase
       .from('sales_order')
-      .select('buyer_firm_id, order_date')
+      .select('buyer_firm_id, order_date, value')
       .is('deleted_at', null)
       .order('order_date', { ascending: false }),
     // Firms that ARE eligible to be converted to dealer (no current dealer link)
@@ -85,11 +86,27 @@ export default async function DealersPage({
       + Math.max(0, Number(inv.billed_amount) - Number(inv.paid_amount))
   }
 
-  // Last order date per firm_id (first row in DESC-ordered list)
+  // Per-firm aggregates: last order date, this-month count/value, last-month count/value (M1)
   const lastOrderByFirm: Record<string, string> = {}
-  for (const o of (lastOrderRaw ?? []) as { buyer_firm_id: string | null; order_date: string }[]) {
+  const thisMonthByFirm: Record<string, { count: number; value: number }> = {}
+  const lastMonthByFirm: Record<string, { count: number; value: number }> = {}
+
+  const now = new Date()
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+
+  for (const o of (lastOrderRaw ?? []) as { buyer_firm_id: string | null; order_date: string; value: number }[]) {
     if (!o.buyer_firm_id) continue
     if (!lastOrderByFirm[o.buyer_firm_id]) lastOrderByFirm[o.buyer_firm_id] = o.order_date
+    const orderDate = new Date(o.order_date)
+    const value = Number(o.value)
+    if (orderDate >= thisMonthStart) {
+      const cur = thisMonthByFirm[o.buyer_firm_id] ?? { count: 0, value: 0 }
+      thisMonthByFirm[o.buyer_firm_id] = { count: cur.count + 1, value: cur.value + value }
+    } else if (orderDate >= lastMonthStart) {
+      const cur = lastMonthByFirm[o.buyer_firm_id] ?? { count: 0, value: 0 }
+      lastMonthByFirm[o.buyer_firm_id] = { count: cur.count + 1, value: cur.value + value }
+    }
   }
 
   // Eligible firms for "New dealer" sheet (not already dealers, active)
@@ -102,19 +119,22 @@ export default async function DealersPage({
     .map((f) => ({ id: f.id, name: f.name, type: f.type, city: f.city }))
 
   // Compute statuses + apply filter
-  const now = new Date()
   type Row = Dealer & {
     firmObj: { id: string; name: string; city: string | null; phone: string | null } | null
     outstanding: number
     lastOrderDate: string | null
     daysSinceOrder: number | null
     isDormant: boolean
+    thisMonth: { count: number; value: number }
+    lastMonth: { count: number; value: number }
   }
   const rows: Row[] = dealers.map((d) => {
     const firmObj = (Array.isArray(d.firm) ? d.firm[0] : d.firm) ?? null
     const fid = firmObj?.id
     const outstanding = fid ? (outstandingByFirm[fid] ?? 0) : 0
     const lastOrderDate = fid ? lastOrderByFirm[fid] ?? null : null
+    const thisMonth = fid ? (thisMonthByFirm[fid] ?? { count: 0, value: 0 }) : { count: 0, value: 0 }
+    const lastMonth = fid ? (lastMonthByFirm[fid] ?? { count: 0, value: 0 }) : { count: 0, value: 0 }
     let daysSinceOrder: number | null = null
     let isDormant = false
     if (lastOrderDate) {
@@ -125,7 +145,7 @@ export default async function DealersPage({
       const daysSinceOnboard = Math.floor((now.getTime() - new Date(d.onboarded_at).getTime()) / 86_400_000)
       isDormant = daysSinceOnboard > d.dormancy_threshold_days
     }
-    return { ...d, firmObj, outstanding, lastOrderDate, daysSinceOrder, isDormant }
+    return { ...d, firmObj, outstanding, lastOrderDate, daysSinceOrder, isDormant, thisMonth, lastMonth }
   })
 
   const filtered = rows.filter((r) => {
@@ -160,16 +180,37 @@ export default async function DealersPage({
         <NewDealerSheet eligibleFirms={eligibleFirms} />
       </div>
 
-      {/* Filter chips */}
-      <div className="flex flex-wrap gap-2">
+      {/* View toggle */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
+          {(['overview', 'performance'] as const).map((v) => {
+            const active = view === v
+            const href = `/dealers?view=${v}${filter ? `&filter=${filter}` : ''}`
+            return (
+              <Link
+                key={v}
+                href={href}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${
+                  active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {v === 'performance' && <BarChart3 className="size-3" />}
+                {v}
+              </Link>
+            )
+          })}
+        </div>
+        <span className="text-xs text-muted-foreground ml-2">Filter:</span>
         {([
-          { key: null,        label: 'All',      count: counts.all,      tone: 'default' as const },
-          { key: 'active',    label: 'Active',   count: counts.active,   tone: 'emerald' as const },
-          { key: 'dormant',   label: 'Dormant',  count: counts.dormant,  tone: 'amber'   as const },
-          { key: 'inactive',  label: 'Inactive', count: counts.inactive, tone: 'gray'    as const },
+          { key: null,        label: 'All',      count: counts.all },
+          { key: 'active',    label: 'Active',   count: counts.active },
+          { key: 'dormant',   label: 'Dormant',  count: counts.dormant },
+          { key: 'inactive',  label: 'Inactive', count: counts.inactive },
         ]).map((c) => {
           const active = filter === c.key
-          const href = c.key ? `/dealers?filter=${c.key}` : '/dealers'
+          const href = c.key
+            ? `/dealers?filter=${c.key}${view !== 'overview' ? `&view=${view}` : ''}`
+            : (view !== 'overview' ? `/dealers?view=${view}` : '/dealers')
           return (
             <Link
               key={c.label}
@@ -199,7 +240,7 @@ export default async function DealersPage({
             </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : view === 'overview' ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
             <thead>
@@ -247,6 +288,100 @@ export default async function DealersPage({
                         : 'Never'}
                       {r.daysSinceOrder != null && (
                         <span className="ml-1 text-muted-foreground/60">({r.daysSinceOrder}d)</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium">
+                      {r.outstanding > 0
+                        ? `₹${r.outstanding.toLocaleString('en-IN')}`
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      {!r.is_active ? (
+                        <Badge variant="destructive" className="text-[10px] uppercase">Inactive</Badge>
+                      ) : r.isDormant ? (
+                        <Badge variant="outline" className="text-[10px] uppercase border-0 bg-amber-50 text-amber-700">
+                          <AlertTriangle className="size-3 mr-0.5" /> Dormant
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] uppercase border-0 bg-emerald-50 text-emerald-700">
+                          Active
+                        </Badge>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        // PERFORMANCE VIEW (this month vs last month, M1)
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Code</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Firm</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">This month</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Last month</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Δ value</th>
+                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Outstanding</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => {
+                const deltaValue = r.thisMonth.value - r.lastMonth.value
+                const deltaPct = r.lastMonth.value > 0
+                  ? ((deltaValue / r.lastMonth.value) * 100)
+                  : (r.thisMonth.value > 0 ? Infinity : 0)
+                const DeltaIcon = deltaValue > 0 ? TrendingUp : deltaValue < 0 ? TrendingDown : Minus
+                const deltaColor = deltaValue > 0 ? 'text-emerald-700' : deltaValue < 0 ? 'text-destructive' : 'text-muted-foreground'
+                return (
+                  <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                    <td className="px-3 py-2 font-mono text-xs">
+                      <Link href={`/dealers/${r.id}`} className="text-foreground hover:text-primary">
+                        {r.dealer_code}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Link href={`/dealers/${r.id}`} className="text-foreground hover:text-primary">
+                        {r.firmObj?.name ?? '—'}
+                      </Link>
+                      {r.tier && (
+                        <span className="ml-1.5 text-[10px] text-muted-foreground capitalize">· {r.tier}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="tabular-nums font-medium text-foreground">
+                        ₹{r.thisMonth.value.toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-xs text-muted-foreground tabular-nums">
+                        {r.thisMonth.count} {r.thisMonth.count === 1 ? 'order' : 'orders'}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="tabular-nums text-muted-foreground">
+                        ₹{r.lastMonth.value.toLocaleString('en-IN')}
+                      </div>
+                      <div className="text-xs text-muted-foreground/70 tabular-nums">
+                        {r.lastMonth.count} {r.lastMonth.count === 1 ? 'order' : 'orders'}
+                      </div>
+                    </td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${deltaColor}`}>
+                      <div className="flex items-center justify-end gap-1">
+                        <DeltaIcon className="size-3" />
+                        {Math.abs(deltaValue) > 0 && (
+                          <span className="font-medium">
+                            {deltaValue > 0 ? '+' : ''}₹{Math.abs(deltaValue).toLocaleString('en-IN')}
+                          </span>
+                        )}
+                      </div>
+                      {isFinite(deltaPct) && r.lastMonth.value > 0 && (
+                        <div className="text-xs">{deltaPct > 0 ? '+' : ''}{deltaPct.toFixed(0)}%</div>
+                      )}
+                      {!isFinite(deltaPct) && r.thisMonth.value > 0 && (
+                        <div className="text-xs">new</div>
                       )}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums font-medium">
