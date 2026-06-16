@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { inngest } from '@/lib/inngest/client'
+import { attemptReserveOrderLines, releaseOrderReservations } from './reservations'
 
 async function getActorContext() {
   const supabase = await createClient()
@@ -133,6 +134,11 @@ export async function createOrderFromQuote(params: {
     data: { order_id: order.id, quote_id: quote.id },
   })
 
+  // Try to reserve stock for each line at the default warehouse (best-effort, non-blocking).
+  // If it fails (no warehouse, no stock, etc.) the order still exists — the UI will show
+  // back-order status per line and an operator can resolve manually.
+  await attemptReserveOrderLines(order.id)
+
   revalidatePath('/orders')
   revalidatePath(`/projects/${quote.project_id}`)
   return { id: order.id, order_number: order.order_number as string }
@@ -213,6 +219,8 @@ export async function createOrderManual(params: {
     data: { order_id: order.id, quote_id: '' },
   })
 
+  await attemptReserveOrderLines(order.id)
+
   revalidatePath('/orders')
   revalidatePath(`/projects/${params.project_id}`)
   return { id: order.id, order_number: order.order_number as string }
@@ -266,6 +274,11 @@ export async function advanceOrderStage(
       source_entity_type: 'sales_order',
       source_entity_id: orderId,
     })
+  }
+
+  // On cancellation, release any active reservations
+  if (stage?.stage_key === 'cancelled') {
+    await releaseOrderReservations(orderId, remark || 'Order cancelled')
   }
 
   revalidatePath(`/orders/${orderId}`)

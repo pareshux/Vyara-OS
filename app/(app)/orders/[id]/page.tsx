@@ -15,7 +15,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: order }, { data: allStages }, { data: history }, { data: dispatchesRaw }] = await Promise.all([
+  const [{ data: order }, { data: allStages }, { data: history }, { data: dispatchesRaw }, { data: reservationsRaw }] = await Promise.all([
     supabase
       .from('sales_order')
       .select(
@@ -25,7 +25,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
          owner:owner_id(full_name),
          quote:quote_id(id, quotation_number),
          stage:current_stage_id(id, stage_key, label, color, order_index),
-         lines:sales_order_line(id, product_name, sku_code, unit, quantity, unit_price, line_total, sort_order)`
+         lines:sales_order_line(id, product_id, product_name, sku_code, unit, quantity, unit_price, line_total, sort_order)`
       )
       .eq('id', id)
       .is('deleted_at', null)
@@ -42,6 +42,18 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       .eq('sales_order_id', id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
+    // Active reservations for this order's lines
+    (async () => {
+      const { data: lineRows } = await supabase.from('sales_order_line').select('id').eq('sales_order_id', id)
+      const lineIds = (lineRows ?? []).map((l) => l.id)
+      if (lineIds.length === 0) return { data: [] }
+      return supabase
+        .from('stock_reservation')
+        .select('id, related_entity_id, quantity, status, warehouse:warehouse_id(code)')
+        .eq('related_entity_type', 'sales_order_line')
+        .in('related_entity_id', lineIds)
+        .eq('status', 'active')
+    })(),
   ])
 
   if (!order) notFound()
@@ -63,8 +75,30 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     | null
 
   const stages = allStages ?? []
-  type LineRow = { id: string; product_name: string; sku_code: string; unit: string; quantity: number; unit_price: number; line_total: number; sort_order: number }
+  type LineRow = { id: string; product_id: string | null; product_name: string; sku_code: string; unit: string; quantity: number; unit_price: number; line_total: number; sort_order: number }
   const lines = ((order.lines ?? []) as LineRow[]).sort((a, b) => a.sort_order - b.sort_order)
+
+  // Index reservations by order_line_id for the line-items table
+  type Reservation = { id: string; related_entity_id: string; quantity: number; status: string; warehouse: { code: string } | { code: string }[] | null }
+  const reservations = (reservationsRaw ?? []) as unknown as Reservation[]
+  const resByLine = Object.fromEntries(reservations.map((r) => [r.related_entity_id, r]))
+  type ReservationStatus = { label: string; color: string; bg: string; reservedQty: number; warehouseCode: string | null }
+  const reservationStatusFor = (line: LineRow): ReservationStatus => {
+    const r = resByLine[line.id]
+    if (!r) return { label: 'Back-order', color: '#B91C1C', bg: '#FEE2E2', reservedQty: 0, warehouseCode: null }
+    const wh = Array.isArray(r.warehouse) ? r.warehouse[0] : r.warehouse
+    const qty = Number(r.quantity)
+    const requested = Number(line.quantity)
+    if (qty >= requested) return { label: 'Reserved', color: '#15803D', bg: '#DCFCE7', reservedQty: qty, warehouseCode: wh?.code ?? null }
+    return { label: `Partial (${qty}/${requested})`, color: '#B45309', bg: '#FEF3C7', reservedQty: qty, warehouseCode: wh?.code ?? null }
+  }
+  const totalRequested = lines.reduce((s, l) => s + Number(l.quantity), 0)
+  const totalReserved = lines.reduce((s, l) => s + (resByLine[l.id] ? Number(resByLine[l.id].quantity) : 0), 0)
+  const fulfilment: { label: string; color: string; bg: string } = totalReserved === 0
+    ? { label: 'Back-order risk', color: '#B91C1C', bg: '#FEE2E2' }
+    : totalReserved >= totalRequested
+    ? { label: 'Fully reserved', color: '#15803D', bg: '#DCFCE7' }
+    : { label: 'Partial reservation', color: '#B45309', bg: '#FEF3C7' }
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-6 max-w-5xl">
@@ -131,6 +165,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   }))}
                 />
               )}
+              <Badge
+                variant="outline"
+                className="border-0 text-xs ml-auto"
+                style={{ backgroundColor: fulfilment.bg, color: fulfilment.color }}
+              >
+                {fulfilment.label}
+              </Badge>
             </div>
           )}
         </CardContent>
@@ -180,22 +221,35 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">SKU</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground">Product</th>
                 <th className="px-3 py-2 text-right font-medium text-muted-foreground">Qty</th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Unit</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Reservation</th>
                 <th className="px-3 py-2 text-right font-medium text-muted-foreground">Price</th>
                 <th className="px-3 py-2 text-right font-medium text-muted-foreground">Line total</th>
               </tr>
             </thead>
             <tbody>
-              {lines.map((l) => (
-                <tr key={l.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{l.sku_code}</td>
-                  <td className="px-3 py-2 text-foreground">{l.product_name}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{l.quantity}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{l.unit}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">₹{Number(l.unit_price).toLocaleString('en-IN')}</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-medium">₹{Number(l.line_total).toLocaleString('en-IN')}</td>
-                </tr>
-              ))}
+              {lines.map((l) => {
+                const rs = reservationStatusFor(l)
+                return (
+                  <tr key={l.id} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{l.sku_code}</td>
+                    <td className="px-3 py-2 text-foreground">
+                      {l.product_name}
+                      <span className="block text-xs text-muted-foreground">{l.unit}</span>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">{l.quantity}</td>
+                    <td className="px-3 py-2">
+                      <Badge variant="outline" className="border-0 text-xs" style={{ backgroundColor: rs.bg, color: rs.color }}>
+                        {rs.label}
+                      </Badge>
+                      {rs.warehouseCode && (
+                        <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">@ {rs.warehouseCode}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">₹{Number(l.unit_price).toLocaleString('en-IN')}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium">₹{Number(l.line_total).toLocaleString('en-IN')}</td>
+                  </tr>
+                )
+              })}
               {lines.length === 0 && (
                 <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground">No line items</td></tr>
               )}
