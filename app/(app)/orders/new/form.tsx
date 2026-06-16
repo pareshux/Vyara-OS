@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Trash2, Plus } from 'lucide-react'
 import { createOrderManual } from '@/lib/actions/orders'
+import { getActivePriceForLine } from '@/lib/actions/price-lists'
 
 const NONE = '__none__'
 
@@ -26,7 +27,14 @@ interface Props {
   userRole: string
 }
 
-type Line = { product_id: string; quantity: number; unit_price: number; notes?: string }
+type PriceSource = { listCode: string; listPrice: number; entryId: string } | null
+type Line = {
+  product_id: string
+  quantity: number
+  unit_price: number
+  notes?: string
+  priceSource: PriceSource
+}
 
 export function NewOrderForm({ projects, firms, products, userRole }: Props) {
   const router = useRouter()
@@ -36,7 +44,7 @@ export function NewOrderForm({ projects, firms, products, userRole }: Props) {
   const [buyerId, setBuyerId] = useState<string>(NONE)
   const [expectedDelivery, setExpectedDelivery] = useState<string>('')
   const [notes, setNotes] = useState('')
-  const [lines, setLines] = useState<Line[]>([{ product_id: '', quantity: 0, unit_price: 0 }])
+  const [lines, setLines] = useState<Line[]>([{ product_id: '', quantity: 0, unit_price: 0, priceSource: null }])
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
@@ -56,23 +64,36 @@ export function NewOrderForm({ projects, firms, products, userRole }: Props) {
     [lines]
   )
 
-  function addLine() { setLines((p) => [...p, { product_id: '', quantity: 0, unit_price: 0 }]) }
+  function addLine() { setLines((p) => [...p, { product_id: '', quantity: 0, unit_price: 0, priceSource: null }]) }
   function removeLine(i: number) { setLines((p) => p.filter((_, idx) => idx !== i)) }
   function updateLine(i: number, patch: Partial<Line>) {
     setLines((p) =>
       p.map((l, idx) => {
         if (idx !== i) return l
-        const next = { ...l, ...patch }
-        // When product changes, auto-populate unit_price from MRP (if not already set)
-        if (patch.product_id && patch.product_id !== l.product_id) {
-          const prod = productsById[patch.product_id]
-          if (prod?.mrp && next.unit_price === 0) {
-            next.unit_price = Number(prod.mrp)
-          }
-        }
-        return next
+        return { ...l, ...patch }
       })
     )
+  }
+
+  async function resolveActivePrice(index: number, productId: string, qty: number) {
+    if (!projectId || !productId || !(qty > 0)) return
+    const res = await getActivePriceForLine({ project_id: projectId, product_id: productId, qty })
+    if ('error' in res) return
+    if (res.price) {
+      setLines((p) => p.map((l, idx) => idx === index ? {
+        ...l,
+        unit_price: res.price!.unit_price,
+        priceSource: { listCode: res.price!.price_list_code, listPrice: res.price!.unit_price, entryId: res.price!.entry_id },
+      } : l))
+    } else {
+      // Fallback to product MRP if no list match
+      const prod = productsById[productId]
+      setLines((p) => p.map((l, idx) => idx === index ? {
+        ...l,
+        unit_price: l.unit_price > 0 ? l.unit_price : Number(prod?.mrp ?? prod?.base_price ?? 0),
+        priceSource: null,
+      } : l))
+    }
   }
 
   function submit() {
@@ -83,6 +104,8 @@ export function NewOrderForm({ projects, firms, products, userRole }: Props) {
 
     const payloadLines = valid.map((l) => {
       const p = productsById[l.product_id]
+      // Only attach the entry id if the user hasn't deviated from the list price
+      const usedListPrice = l.priceSource && Math.abs(l.unit_price - l.priceSource.listPrice) < 0.005
       return {
         product_id: l.product_id,
         product_name: p.name,
@@ -90,6 +113,7 @@ export function NewOrderForm({ projects, firms, products, userRole }: Props) {
         unit: p.unit,
         quantity: l.quantity,
         unit_price: l.unit_price,
+        price_list_entry_id: usedListPrice ? l.priceSource!.entryId : null,
       }
     })
 
@@ -146,7 +170,13 @@ export function NewOrderForm({ projects, firms, products, userRole }: Props) {
             return (
               <div key={i} className="flex flex-col gap-2 rounded-md bg-card border border-border p-2">
                 <div className="flex items-center gap-2">
-                  <Select value={line.product_id} onValueChange={(v) => updateLine(i, { product_id: v })}>
+                  <Select
+                    value={line.product_id}
+                    onValueChange={(v) => {
+                      updateLine(i, { product_id: v, priceSource: null })
+                      void resolveActivePrice(i, v, line.quantity || 1)
+                    }}
+                  >
                     <SelectTrigger className="flex-1"><SelectValue placeholder="Pick a product" /></SelectTrigger>
                     <SelectContent>
                       {products.map((p) => (
@@ -169,6 +199,9 @@ export function NewOrderForm({ projects, firms, products, userRole }: Props) {
                       step="0.01"
                       value={line.quantity}
                       onChange={(e) => updateLine(i, { quantity: Number(e.target.value) })}
+                      onBlur={() => {
+                        if (line.product_id && line.quantity > 0) void resolveActivePrice(i, line.product_id, line.quantity)
+                      }}
                       className="tabular-nums h-8"
                     />
                   </div>
@@ -183,6 +216,23 @@ export function NewOrderForm({ projects, firms, products, userRole }: Props) {
                         onChange={(e) => updateLine(i, { unit_price: Number(e.target.value) })}
                         className="tabular-nums h-8"
                       />
+                      {line.priceSource && (() => {
+                        const delta = line.unit_price - line.priceSource.listPrice
+                        const deltaPct = line.priceSource.listPrice > 0 ? (delta / line.priceSource.listPrice) * 100 : 0
+                        const isMatch = Math.abs(delta) < 0.005
+                        return (
+                          <p className="text-[10px] text-muted-foreground tabular-nums flex items-center gap-1 flex-wrap">
+                            <span>
+                              From <span className="font-mono text-foreground">{line.priceSource.listCode}</span> · ₹{line.priceSource.listPrice.toLocaleString('en-IN')}
+                            </span>
+                            {!isMatch && (
+                              <span className={delta > 0 ? 'text-emerald-700' : 'text-destructive'}>
+                                · {delta > 0 ? '+' : ''}{deltaPct.toFixed(1)}%
+                              </span>
+                            )}
+                          </p>
+                        )
+                      })()}
                     </div>
                   )}
                   <div className="flex flex-col gap-1">

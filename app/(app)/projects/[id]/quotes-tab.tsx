@@ -36,6 +36,7 @@ import {
   Plus,
 } from 'lucide-react'
 import { createQuotation, updateQuotationStatus } from '@/lib/actions/quotations'
+import { getActivePriceForLine } from '@/lib/actions/price-lists'
 
 interface QuoteLine {
   id: string
@@ -127,6 +128,22 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
   const { fields, append, remove } = useFieldArray({ control, name: 'lines' })
   const linesWatch = watch('lines')
 
+  // Per-line price source { listCode, listPrice, entryId } — set when the
+  // server returns a price from the active list; cleared when product changes.
+  const [priceSources, setPriceSources] = useState<Record<number, { listCode: string; listPrice: number; entryId: string } | null>>({})
+
+  async function resolveActivePrice(index: number, productId: string, qty: number) {
+    if (!productId || !(qty > 0)) return
+    const res = await getActivePriceForLine({ project_id: projectId, product_id: productId, qty })
+    if ('error' in res) return
+    if (res.price) {
+      setPriceSources((s) => ({ ...s, [index]: { listCode: res.price!.price_list_code, listPrice: res.price!.unit_price, entryId: res.price!.entry_id } }))
+      setValue(`lines.${index}.unit_price`, String(res.price.unit_price))
+    } else {
+      setPriceSources((s) => ({ ...s, [index]: null }))
+    }
+  }
+
   const runningTotal = (linesWatch ?? []).reduce((sum, line) => {
     const qty = Number(line.quantity) || 0
     const price = Number(line.unit_price) || 0
@@ -148,11 +165,15 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
         project_id: projectId,
         notes: values.notes,
         valid_until: values.valid_until || undefined,
-        lines: values.lines.map((l) => ({
+        lines: values.lines.map((l, i) => ({
           product_id: l.product_id,
           quantity: Number(l.quantity),
           unit_price: Number(l.unit_price),
           description: l.description || undefined,
+          // Only attach the entry id if the user hasn't deviated from the list price
+          price_list_entry_id: priceSources[i] && Math.abs(Number(l.unit_price) - priceSources[i]!.listPrice) < 0.005
+            ? priceSources[i]!.entryId
+            : null,
         })),
       })
 
@@ -466,13 +487,19 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
                                 value={f.value}
                                 onValueChange={(v) => {
                                   f.onChange(v)
-                                  const product = products.find((p) => p.id === v)
-                                  if (product?.base_price != null) {
-                                    setValue(
-                                      `lines.${index}.unit_price`,
-                                      String(product.base_price)
-                                    )
-                                  }
+                                  // Clear stale source then resolve from the active price list
+                                  setPriceSources((s) => ({ ...s, [index]: null }))
+                                  const qty = Number(linesWatch?.[index]?.quantity) || 1
+                                  void resolveActivePrice(index, v, qty).then(() => {
+                                    // Fallback: if no list match, use product.base_price
+                                    if (!priceSources[index]) {
+                                      const product = products.find((p) => p.id === v)
+                                      const current = Number(linesWatch?.[index]?.unit_price) || 0
+                                      if (product?.base_price != null && current === 0) {
+                                        setValue(`lines.${index}.unit_price`, String(product.base_price))
+                                      }
+                                    }
+                                  })
                                 }}
                               >
                                 <SelectTrigger className="h-8 text-xs w-full">
@@ -515,7 +542,14 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
                         <div className="flex flex-col gap-1.5">
                           <Label className="text-xs text-muted-foreground">Qty *</Label>
                           <Input
-                            {...register(`lines.${index}.quantity`)}
+                            {...register(`lines.${index}.quantity`, {
+                              onBlur: () => {
+                                // Re-resolve in case tiered pricing changes at this qty
+                                const pid = linesWatch?.[index]?.product_id
+                                const qty = Number(linesWatch?.[index]?.quantity) || 0
+                                if (pid && qty > 0) void resolveActivePrice(index, pid, qty)
+                              },
+                            })}
                             type="number"
                             min="1"
                             step="1"
@@ -544,6 +578,25 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
                               {errors.lines[index]?.unit_price?.message}
                             </p>
                           )}
+                          {priceSources[index] && (() => {
+                            const src = priceSources[index]!
+                            const entered = Number(linesWatch?.[index]?.unit_price) || 0
+                            const delta = entered - src.listPrice
+                            const deltaPct = src.listPrice > 0 ? (delta / src.listPrice) * 100 : 0
+                            const isMatch = Math.abs(delta) < 0.005
+                            return (
+                              <p className="text-[10px] text-muted-foreground tabular-nums flex items-center gap-1.5 flex-wrap">
+                                <span>
+                                  From <span className="font-mono text-foreground">{src.listCode}</span> · ₹{src.listPrice.toLocaleString('en-IN')}
+                                </span>
+                                {!isMatch && (
+                                  <span className={delta > 0 ? 'text-emerald-700' : 'text-destructive'}>
+                                    · vs list {delta > 0 ? '+' : ''}{deltaPct.toFixed(1)}%
+                                  </span>
+                                )}
+                              </p>
+                            )
+                          })()}
                         </div>
                       </div>
 

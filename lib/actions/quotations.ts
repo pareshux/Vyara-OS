@@ -22,7 +22,7 @@ export async function createQuotation(data: {
   project_id: string
   notes?: string
   valid_until?: string
-  lines: Array<{ product_id: string; quantity: number; unit_price: number; description?: string }>
+  lines: Array<{ product_id: string; quantity: number; unit_price: number; description?: string; price_list_entry_id?: string | null }>
 }): Promise<{ id: string; quotation_number: string } | { error: string }> {
   const ctx = await getActorContext()
   if (!ctx) return { error: 'Not authenticated' }
@@ -93,6 +93,7 @@ export async function createQuotation(data: {
       line_total: line.quantity * line.unit_price,
       notes: line.description ?? null,
       sort_order: i,
+      price_list_entry_id: line.price_list_entry_id ?? null,
     }
   })
 

@@ -47,7 +47,7 @@ export async function createOrderFromQuote(params: {
     .select(
       `id, project_id, quotation_number, total, status,
        project:project_id(buyer_firm_id, owner_id),
-       lines:quotation_line(product_id, product_name, sku_code, unit, quantity, unit_price, line_total, sort_order)`
+       lines:quotation_line(product_id, product_name, sku_code, unit, quantity, unit_price, line_total, sort_order, price_list_entry_id)`
     )
     .eq('id', params.quote_id)
     .single()
@@ -91,6 +91,7 @@ export async function createOrderFromQuote(params: {
     unit_price: number
     line_total: number
     sort_order: number
+    price_list_entry_id: string | null
   }>
 
   if (lines.length > 0) {
@@ -106,6 +107,7 @@ export async function createOrderFromQuote(params: {
         unit_price: l.unit_price,
         line_total: l.line_total,
         sort_order: l.sort_order,
+        price_list_entry_id: l.price_list_entry_id ?? null,
       }))
     )
     if (lineErr) return { error: lineErr.message }
@@ -149,7 +151,7 @@ export async function createOrderManual(params: {
   buyer_firm_id?: string
   expected_delivery_at?: string
   notes?: string
-  lines: Array<{ product_id?: string; product_name: string; sku_code: string; unit: string; quantity: number; unit_price: number }>
+  lines: Array<{ product_id?: string; product_name: string; sku_code: string; unit: string; quantity: number; unit_price: number; price_list_entry_id?: string | null }>
 }): Promise<{ id: string; order_number: string } | { error: string }> {
   const ctx = await getActorContext()
   if (!ctx) return { error: 'Not authenticated' }
@@ -201,6 +203,7 @@ export async function createOrderManual(params: {
       unit_price: l.unit_price,
       line_total: l.quantity * l.unit_price,
       sort_order: i,
+      price_list_entry_id: l.price_list_entry_id ?? null,
     }))
   )
   if (lineErr) return { error: lineErr.message }

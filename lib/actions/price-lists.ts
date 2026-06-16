@@ -192,3 +192,70 @@ export async function deletePriceListEntry(
   revalidatePath(`/admin/price-lists/${priceListId}`)
   return { success: true }
 }
+
+// ─── ACTIVE-PRICE LOOKUP (for quote + order line forms) ──────────────────────
+
+export type ActivePrice = {
+  unit_price: number
+  price_list_id: string
+  price_list_code: string
+  price_list_label: string
+  entry_id: string
+} | null
+
+/**
+ * Resolves the active price for a product on a given project. Wraps the
+ * get_active_price() SQL function (migration 0014) which already encodes
+ * resolution priority: (segment+region) > (segment) > (region) > (default).
+ *
+ * Returns null if no price list covers the product — caller should fall
+ * back to product.base_price / mrp.
+ */
+export async function getActivePriceForLine(params: {
+  project_id: string
+  product_id: string
+  qty: number
+}): Promise<{ price: ActivePrice } | { error: string }> {
+  const ctx = await getActorContext()
+  if (!ctx) return { error: 'Not authenticated' }
+  if (!params.product_id || !params.project_id) return { error: 'Missing project or product' }
+
+  // Read project segment + (text) territory — RLS handles tenant isolation
+  const { data: project } = await ctx.supabase
+    .from('project')
+    .select('segment, territory')
+    .eq('id', params.project_id)
+    .maybeSingle()
+  if (!project) return { error: 'Project not found' }
+
+  // Resolve the price (returns price_list_id + entry_id + unit_price, or NULL row)
+  const { data: row, error } = await ctx.supabase.rpc('get_active_price', {
+    p_tenant: ctx.tenantId,
+    p_product: params.product_id,
+    p_segment: project.segment ?? null,
+    p_region: project.territory ?? null,
+    p_qty: params.qty,
+  })
+  if (error) return { error: error.message }
+
+  // RPC returns an array of rows (a SETOF function); take the first non-null one
+  const first = Array.isArray(row) ? row[0] : row
+  if (!first || !first.price_list_id) return { price: null }
+
+  // Resolve the price-list code/label for display
+  const { data: list } = await ctx.supabase
+    .from('price_list')
+    .select('code, label')
+    .eq('id', first.price_list_id)
+    .maybeSingle()
+
+  return {
+    price: {
+      unit_price: Number(first.unit_price),
+      price_list_id: first.price_list_id,
+      price_list_code: list?.code ?? '—',
+      price_list_label: list?.label ?? '—',
+      entry_id: first.entry_id,
+    },
+  }
+}
