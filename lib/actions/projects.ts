@@ -118,6 +118,34 @@ async function insertProject(
   return { id: project.id }
 }
 
+export async function addProjectStakeholder(params: {
+  project_id: string
+  contact_id: string
+  role: 'specifier' | 'buyer' | 'influencer' | 'decision_maker' | 'contractor'
+  is_primary?: boolean
+}): Promise<{ success: true } | { error: string }> {
+  const ctx = await getActorContext()
+  if (!ctx) return { error: 'Not authenticated' }
+
+  const { supabase, tenantId } = ctx
+
+  const { error } = await supabase.from('project_stakeholder').insert({
+    tenant_id: tenantId,
+    project_id: params.project_id,
+    contact_id: params.contact_id,
+    role: params.role,
+    is_primary: params.is_primary ?? false,
+  })
+
+  if (error) {
+    console.error('addProjectStakeholder error', error)
+    return { error: error.message }
+  }
+
+  revalidatePath(`/projects/${params.project_id}`)
+  return { success: true }
+}
+
 export async function advanceStage(
   projectId: string,
   toStageId: string,

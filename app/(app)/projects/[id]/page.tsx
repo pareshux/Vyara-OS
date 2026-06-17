@@ -13,6 +13,7 @@ import { QuickNote } from './quick-note'
 import { SamplesTab } from './samples-tab'
 import { QuotesTab } from './quotes-tab'
 import { OrdersTab } from './orders-tab'
+import { StakeholdersTab } from './stakeholders-tab'
 import {
   ChevronRight,
   MapPin,
@@ -20,12 +21,10 @@ import {
   Building2,
   DollarSign,
   Clock,
-  CheckCircle2,
   CheckSquare,
   FolderOpen,
   AlertCircle,
   FileText,
-  Users,
 } from 'lucide-react'
 
 const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
@@ -71,6 +70,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     { data: samples },
     { data: quotes },
     { data: profile },
+    { data: contacts },
   ] = await Promise.all([
     supabase
       .from('project')
@@ -133,6 +133,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .select('role')
       .eq('id', user.id)
       .single(),
+    supabase
+      .from('contact')
+      .select('id, full_name, role_title, firm:firm_id(name)')
+      .is('deleted_at', null)
+      .order('full_name'),
   ])
 
   // Slice 2: Orders module — read for the project's Orders tab
@@ -363,66 +368,20 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </TabsContent>
 
         <TabsContent value="stakeholders" className="mt-4">
-          {(stakeholders ?? []).length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-12 text-center">
-              <Users className="size-7 mb-3 text-muted-foreground/50" />
-              <p className="text-sm font-medium text-foreground">No stakeholders recorded</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Stakeholders will be added when contacts are linked to this project.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Role</th>
-                    <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell">Firm</th>
-                    <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell">Phone</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(stakeholders ?? []).map((s, i) => {
-                    const contact = (s.contact as unknown) as {
-                      full_name: string
-                      role_title: string | null
-                      phone: string | null
-                      email: string | null
-                      firm: { name: string } | null
-                    } | null
-                    return (
-                      <tr
-                        key={i}
-                        className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-foreground">{contact?.full_name ?? '—'}</div>
-                          {contact?.role_title && (
-                            <div className="text-xs text-muted-foreground">{contact.role_title}</div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge variant="secondary" className="text-xs capitalize">
-                            {s.role}
-                            {s.is_primary && (
-                              <CheckCircle2 className="size-3 ml-1 text-primary" />
-                            )}
-                          </Badge>
-                        </td>
-                        <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                          {contact?.firm?.name ?? '—'}
-                        </td>
-                        <td className="hidden px-4 py-3 text-muted-foreground tabular-nums lg:table-cell">
-                          {contact?.phone ?? '—'}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <StakeholdersTab
+            projectId={project.id}
+            stakeholders={(stakeholders ?? []) as unknown as {
+              role: string
+              is_primary: boolean
+              contact: { full_name: string; role_title: string | null; phone: string | null; firm: { name: string } | null } | null
+            }[]}
+            contacts={(contacts ?? []) as unknown as {
+              id: string
+              full_name: string
+              role_title: string | null
+              firm: { name: string } | null
+            }[]}
+          />
         </TabsContent>
 
         <TabsContent value="specifications" className="mt-4">
