@@ -34,6 +34,7 @@ import {
   ChevronUp,
   Trash2,
   Plus,
+  Download,
 } from 'lucide-react'
 import { createQuotation, updateQuotationStatus } from '@/lib/actions/quotations'
 import { getActivePriceForLine } from '@/lib/actions/price-lists'
@@ -287,6 +288,17 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
 
                     {/* Quick actions */}
                     <div className="flex items-center gap-1.5 shrink-0">
+                      <a
+                        href={`/quotes/${q.id}/boq`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open BOQ"
+                      >
+                        <Button variant="outline" size="sm" className="text-xs gap-1">
+                          <Download className="size-3" />
+                          BOQ
+                        </Button>
+                      </a>
                       {canSend && !isSalesEngineer && (
                         <Button
                           variant="outline"
