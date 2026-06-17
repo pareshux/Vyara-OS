@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import Link from 'next/link'
 import {
   PlusCircle,
   FileText,
@@ -35,6 +36,7 @@ import {
   Trash2,
   Plus,
   Download,
+  Upload,
 } from 'lucide-react'
 import { createQuotation, updateQuotationStatus } from '@/lib/actions/quotations'
 import { getActivePriceForLine } from '@/lib/actions/price-lists'
@@ -209,10 +211,18 @@ export function QuotesTab({ projectId, quotes, products, userRole }: QuotesTabPr
         <p className="text-sm text-muted-foreground">
           {quotes.length} {quotes.length === 1 ? 'quotation' : 'quotations'}
         </p>
-        <Button size="sm" onClick={() => setSheetOpen(true)}>
-          <PlusCircle className="size-4 mr-1.5" />
-          Create Quote
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href={`/projects/${projectId}/import-boq`}>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs">
+              <Upload className="size-3.5" />
+              Import BOQ
+            </Button>
+          </Link>
+          <Button size="sm" onClick={() => setSheetOpen(true)}>
+            <PlusCircle className="size-4 mr-1.5" />
+            Create Quote
+          </Button>
+        </div>
       </div>
 
       {quotes.length === 0 ? (
