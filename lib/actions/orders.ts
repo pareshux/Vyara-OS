@@ -130,16 +130,22 @@ export async function createOrderFromQuote(params: {
     .eq('id', quote.id)
     .neq('status', 'accepted')
 
-  // Emit event so other modules (Dispatch, Finance) can react.
-  await inngest.send({
-    name: 'order.created',
-    data: { order_id: order.id, quote_id: quote.id },
-  })
+  // Emit event — non-critical side effect, must not crash order creation.
+  try {
+    await inngest.send({
+      name: 'order.created',
+      data: { order_id: order.id, quote_id: quote.id },
+    })
+  } catch (e) {
+    console.warn('inngest.send(order.created) failed (non-fatal):', e)
+  }
 
-  // Try to reserve stock for each line at the default warehouse (best-effort, non-blocking).
-  // If it fails (no warehouse, no stock, etc.) the order still exists — the UI will show
-  // back-order status per line and an operator can resolve manually.
-  await attemptReserveOrderLines(order.id)
+  // Reserve stock — best-effort, non-blocking.
+  try {
+    await attemptReserveOrderLines(order.id)
+  } catch (e) {
+    console.warn('attemptReserveOrderLines failed (non-fatal):', e)
+  }
 
   revalidatePath('/orders')
   revalidatePath(`/projects/${quote.project_id}`)
@@ -217,12 +223,20 @@ export async function createOrderManual(params: {
     remark: 'Order created manually',
   })
 
-  await inngest.send({
-    name: 'order.created',
-    data: { order_id: order.id, quote_id: '' },
-  })
+  try {
+    await inngest.send({
+      name: 'order.created',
+      data: { order_id: order.id, quote_id: '' },
+    })
+  } catch (e) {
+    console.warn('inngest.send(order.created) failed (non-fatal):', e)
+  }
 
-  await attemptReserveOrderLines(order.id)
+  try {
+    await attemptReserveOrderLines(order.id)
+  } catch (e) {
+    console.warn('attemptReserveOrderLines failed (non-fatal):', e)
+  }
 
   revalidatePath('/orders')
   revalidatePath(`/projects/${params.project_id}`)

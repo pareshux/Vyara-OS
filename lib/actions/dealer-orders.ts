@@ -222,14 +222,16 @@ export async function placeDealerOrder(params: {
     remark: 'Order placed via dealer portal',
   })
 
-  // Emit order.created event (Slice 2 dispatch handler reacts)
-  await inngest.send({
-    name: 'order.created',
-    data: { order_id: order.id, quote_id: '' },
-  })
+  try {
+    await inngest.send({
+      name: 'order.created',
+      data: { order_id: order.id, quote_id: '' },
+    })
+  } catch (e) { console.warn('inngest.send(order.created/dealer) failed (non-fatal):', e) }
 
-  // Attempt stock reservation (Slice 2.5)
-  await attemptReserveOrderLines(order.id)
+  try {
+    await attemptReserveOrderLines(order.id)
+  } catch (e) { console.warn('attemptReserveOrderLines failed (non-fatal):', e) }
 
   revalidatePath('/dealer-portal/orders')
   revalidatePath('/dealer-portal/dashboard')

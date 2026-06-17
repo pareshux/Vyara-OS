@@ -177,7 +177,9 @@ export async function createInvoiceManual(params: {
     if (lineErr) return { error: lineErr.message }
   }
 
-  await inngest.send({ name: 'invoice.synced', data: { invoice_id: invoice.id, source: 'manual' } })
+  try {
+    await inngest.send({ name: 'invoice.synced', data: { invoice_id: invoice.id, source: 'manual' } })
+  } catch (e) { console.warn('inngest.send(invoice.synced) failed (non-fatal):', e) }
 
   revalidatePath('/invoices')
   revalidatePath('/collections')

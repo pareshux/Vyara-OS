@@ -105,10 +105,12 @@ export async function scheduleDispatch(params: {
     remark: 'Dispatch scheduled',
   })
 
-  await inngest.send({
-    name: 'dispatch.scheduled',
-    data: { dispatch_id: dispatch.id, order_id: params.sales_order_id },
-  })
+  try {
+    await inngest.send({
+      name: 'dispatch.scheduled',
+      data: { dispatch_id: dispatch.id, order_id: params.sales_order_id },
+    })
+  } catch (e) { console.warn('inngest.send(dispatch.scheduled) failed (non-fatal):', e) }
 
   revalidatePath('/dispatches')
   revalidatePath('/warehouse')
@@ -160,10 +162,12 @@ export async function advanceDispatchStage(
   })
 
   if (stageKey === 'delivered') {
-    await inngest.send({
-      name: 'dispatch.completed',
-      data: { dispatch_id: dispatchId },
-    })
+    try {
+      await inngest.send({
+        name: 'dispatch.completed',
+        data: { dispatch_id: dispatchId },
+      })
+    } catch (e) { console.warn('inngest.send(dispatch.completed) failed (non-fatal):', e) }
 
     // Auto-create a "POD pending" task if no POD yet
     await supabase.from('task').insert({
@@ -235,10 +239,12 @@ export async function recordPOD(params: {
     .eq('type', 'dispatch_pod_pending')
     .eq('is_done', false)
 
-  await inngest.send({
-    name: 'dispatch.completed',
-    data: { dispatch_id: params.dispatch_id, pod_url: params.pod_url },
-  })
+  try {
+    await inngest.send({
+      name: 'dispatch.completed',
+      data: { dispatch_id: params.dispatch_id, pod_url: params.pod_url },
+    })
+  } catch (e) { console.warn('inngest.send(dispatch.completed/pod) failed (non-fatal):', e) }
 
   revalidatePath(`/dispatches/${params.dispatch_id}`)
   revalidatePath('/dispatches')

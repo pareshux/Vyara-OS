@@ -104,10 +104,12 @@ export async function recordReceipt(params: {
     .single()
   if (error) return { error: error.message }
 
-  await inngest.send({
-    name: 'payment.received',
-    data: { invoice_id: params.invoice_id, amount: params.amount },
-  })
+  try {
+    await inngest.send({
+      name: 'payment.received',
+      data: { invoice_id: params.invoice_id, amount: params.amount },
+    })
+  } catch (e) { console.warn('inngest.send(payment.received) failed (non-fatal):', e) }
 
   revalidatePath('/collections')
   revalidatePath('/invoices')
@@ -157,10 +159,12 @@ export async function recordPromiseToPay(params: {
     source_entity_id: params.collection_id,
   })
 
-  await inngest.send({
-    name: 'payment.promised',
-    data: { promise_id: data.id, amount: params.amount, promise_date: params.promise_date },
-  })
+  try {
+    await inngest.send({
+      name: 'payment.promised',
+      data: { promise_id: data.id, amount: params.amount, promise_date: params.promise_date },
+    })
+  } catch (e) { console.warn('inngest.send(payment.promised) failed (non-fatal):', e) }
 
   revalidatePath('/collections')
   revalidatePath(`/invoices/${params.invoice_id}`)
