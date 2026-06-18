@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
-import { Settings, Percent, Calendar, Truck, BadgePercent, BookmarkIcon, Map } from 'lucide-react'
+import { Settings, Percent, Calendar, Truck, BadgePercent, BookmarkIcon, Map, Sparkles, Car, Bike, Fuel, Gauge } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +47,41 @@ const SECTIONS = [
     title: 'Territories',
     blurb: 'Regional hierarchy. Used for projects, dealers, and salesperson assignment.',
     icon: Map,
+    available: true,
+  },
+  {
+    href: '/admin/vehicles',
+    title: 'Vehicles',
+    blurb: 'Field-force vehicles and their assignments. Picks up the rate from the matrix unless a custom rate is set.',
+    icon: Car,
+    available: true,
+  },
+  {
+    href: '/admin/vehicle-types',
+    title: 'Vehicle types',
+    blurb: 'Bike, car, auto, pickup, van — the categories the matrix rates against.',
+    icon: Bike,
+    available: true,
+  },
+  {
+    href: '/admin/fuel-types',
+    title: 'Fuel types',
+    blurb: 'Petrol, diesel, CNG, EV, hybrid — pairs with vehicle type to resolve ₹/km.',
+    icon: Fuel,
+    available: true,
+  },
+  {
+    href: '/admin/vehicle-rates',
+    title: 'Reimbursement rates',
+    blurb: 'Effective-dated ₹/km matrix per (vehicle type × fuel). Auto-fills the field-sales claim on check-out.',
+    icon: Gauge,
+    available: true,
+  },
+  {
+    href: '/admin/ai-playground',
+    title: 'AI playground',
+    blurb: 'Internal test surface. Upload an image, see Claude’s extraction + token usage. Validates the AI plumbing.',
+    icon: Sparkles,
     available: true,
   },
 ]
