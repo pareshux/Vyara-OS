@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   Users,
+  UserPlus,
   CheckSquare,
   BuildingIcon,
   Package,
@@ -17,11 +18,14 @@ import {
   Boxes,
   Store,
   Settings,
+  MapPin,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Field', href: '/field', icon: MapPin },
+  { label: 'Leads', href: '/leads', icon: UserPlus },
   { label: 'Projects', href: '/projects', icon: FolderKanban },
   { label: 'Orders', href: '/orders', icon: Package },
   { label: 'Inventory', href: '/inventory', icon: Boxes },
@@ -49,7 +53,7 @@ export function Sidebar({ userRole }: SidebarProps) {
         <div className="flex size-7 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
           <BuildingIcon className="size-4" />
         </div>
-        <span className="font-semibold text-sidebar-foreground tracking-tight">Vyara OS</span>
+        <span className="font-semibold text-sidebar-foreground tracking-tight">CRMOS</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 p-3">
