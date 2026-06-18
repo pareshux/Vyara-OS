@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CalendarClock, MapPin, ClipboardList, History } from 'lucide-react'
+import { CalendarClock, MapPin, ClipboardList, History, ThumbsUp, ThumbsDown, Phone } from 'lucide-react'
 import { getTodayVisitsContext } from '@/lib/actions/field-visits'
 import { PlanOrStartVisitSheet } from './plan-or-start-visit-sheet'
 import { StartPlannedVisitButton } from './start-planned-visit-button'
@@ -30,8 +30,10 @@ const PRIORITY_TINT: Record<'low' | 'medium' | 'high' | 'urgent', string> = {
 
 export async function VisitsSection({
   checkInOdometerKm,
+  readOnly = false,
 }: {
   checkInOdometerKm: number | null
+  readOnly?: boolean
 }) {
   const res = await getTodayVisitsContext()
   if ('error' in res) {
@@ -81,7 +83,7 @@ export async function VisitsSection({
   return (
     <div className="flex flex-col gap-4">
       {/* ── Currently visiting (live) ─────────────────────────── */}
-      {hasLive && live && (
+      {!readOnly && hasLive && live && (
         <Card className="border-emerald-200 bg-emerald-50/30">
           <CardContent className="py-4 flex flex-col gap-3">
             <div className="flex items-start gap-3">
@@ -117,6 +119,7 @@ export async function VisitsSection({
       )}
 
       {/* ── Today's plan ──────────────────────────────────────── */}
+      {!readOnly && (
       <Card>
         <CardContent className="py-4 flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
@@ -179,6 +182,7 @@ export async function VisitsSection({
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* ── Today's visits (completed) ────────────────────────── */}
       {completedSorted.length > 0 && (
@@ -192,6 +196,7 @@ export async function VisitsSection({
             <div className="flex flex-col gap-2">
               {completedSorted.map((v) => {
                 const legKm = legKmByVisitId[v.visit_id]
+                const contactDisplay = v.contact_name ?? v.contact_name_raw
                 return (
                   <div key={v.visit_id} className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
                     <div className="flex items-start gap-2">
@@ -206,24 +211,46 @@ export async function VisitsSection({
                               {v.subject_type}
                             </Badge>
                           )}
+                          {v.is_interested === true && (
+                            <Badge variant="outline" className="text-[10px] uppercase border-0 bg-emerald-50 text-emerald-700">
+                              <ThumbsUp className="size-3 mr-0.5" /> Interested
+                            </Badge>
+                          )}
+                          {v.is_interested === false && (
+                            <Badge variant="outline" className="text-[10px] uppercase border-0 bg-rose-50 text-rose-700">
+                              <ThumbsDown className="size-3 mr-0.5" /> Not
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
                           {formatTime(v.visited_at)}
                           {v.duration_minutes != null && <> · {v.duration_minutes} min</>}
                           {legKm != null && <> · <span className="text-foreground font-medium">{legKm} km</span></>}
-                          {v.contact_name && <> · {v.contact_name}</>}
                         </p>
-                        <p className="text-[11px] mt-0.5">
-                          {v.purpose_label && (
-                            <span className="text-muted-foreground">{v.purpose_label}</span>
-                          )}
-                          {v.outcome_label && (
-                            <>
-                              {v.purpose_label && <span className="text-muted-foreground mx-1">→</span>}
-                              <span className="font-medium">{v.outcome_label}</span>
-                            </>
-                          )}
-                        </p>
+                        {contactDisplay && (
+                          <p className="text-[11px] mt-0.5">
+                            <span className="text-muted-foreground">Met: </span>
+                            <span className="text-foreground">{contactDisplay}</span>
+                            {v.contact_phone_raw && (
+                              <>
+                                {' '}·{' '}
+                                <a
+                                  href={`tel:${v.contact_phone_raw}`}
+                                  className="text-foreground hover:underline tabular-nums inline-flex items-center gap-0.5"
+                                >
+                                  <Phone className="size-2.5" />
+                                  {v.contact_phone_raw}
+                                </a>
+                              </>
+                            )}
+                          </p>
+                        )}
+                        {v.outcome_label && (
+                          <p className="text-[11px] mt-0.5">
+                            <span className="text-muted-foreground">Next: </span>
+                            <span className="font-medium">{v.outcome_label}</span>
+                          </p>
+                        )}
                         {v.notes_text && (
                           <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{v.notes_text}</p>
                         )}

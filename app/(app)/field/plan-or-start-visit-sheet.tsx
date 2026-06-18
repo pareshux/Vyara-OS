@@ -126,12 +126,12 @@ export function PlanOrStartVisitSheet({
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline">
-          <PlusCircle className="size-3.5 mr-1.5" /> Plan / start
+          <PlusCircle className="size-3.5 mr-1.5" /> Add a visit
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{mode === 'plan' ? 'Plan a visit' : 'Start a visit'}</DialogTitle>
+          <DialogTitle>{mode === 'plan' ? 'Plan a visit' : 'Visit started'}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           {/* Mode switch */}
@@ -144,7 +144,7 @@ export function PlanOrStartVisitSheet({
               onClick={() => setMode('start_now')}
               disabled={disableStartNow}
             >
-              Start now
+              I just arrived
             </button>
             <button
               type="button"
@@ -158,7 +158,7 @@ export function PlanOrStartVisitSheet({
           </div>
           {disableStartNow && mode === 'plan' && (
             <p className="text-[10px] text-muted-foreground italic">
-              You have a visit in progress — wrap that up before starting a new one.
+              A visit is in progress — wrap that up before logging a new arrival.
             </p>
           )}
 
@@ -242,7 +242,7 @@ export function PlanOrStartVisitSheet({
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
             <Button onClick={submit} disabled={busy}>
-              {busy ? 'Saving…' : mode === 'plan' ? 'Save plan' : 'Start visit'}
+              {busy ? 'Saving…' : mode === 'plan' ? 'Save plan' : 'Confirm'}
             </Button>
           </div>
         </div>

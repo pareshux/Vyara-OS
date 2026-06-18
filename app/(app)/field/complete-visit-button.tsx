@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -20,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { completeVisit, listVisitMasters } from '@/lib/actions/field-visits'
 
 const NONE_VALUE = '__none__'
@@ -34,11 +35,12 @@ export function CompleteVisitButton({
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [purposes, setPurposes] = useState<Array<{ id: string; label: string }>>([])
   const [outcomes, setOutcomes] = useState<Array<{ id: string; label: string; requires_followup: boolean }>>([])
-  const [purposeId, setPurposeId] = useState<string>(NONE_VALUE)
-  const [outcomeId, setOutcomeId] = useState<string>(NONE_VALUE)
+  const [contactName, setContactName] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
   const [notes, setNotes] = useState<string>('')
+  const [interested, setInterested] = useState<true | false | null>(null)
+  const [outcomeId, setOutcomeId] = useState<string>(NONE_VALUE)
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
@@ -46,89 +48,136 @@ export function CompleteVisitButton({
     if (!open) return
     listVisitMasters().then((r) => {
       if ('error' in r) return
-      setPurposes(r.purposes)
       setOutcomes(r.outcomes)
     })
   }, [open])
 
   function submit() {
     setErr(null)
+    if (interested === null) { setErr('Tap Interested or Not interested first'); return }
     startTransition(async () => {
       const r = await completeVisit(visitId, {
-        visit_purpose_id: purposeId === NONE_VALUE ? null : purposeId,
-        visit_outcome_id: outcomeId === NONE_VALUE ? null : outcomeId,
         contact_id: initialContactId,
+        contact_name_raw: contactName.trim() || null,
+        contact_phone_raw: contactPhone.trim() || null,
+        is_interested: interested,
+        visit_outcome_id: outcomeId === NONE_VALUE ? null : outcomeId,
         notes_text: notes.trim() || null,
       })
       if ('error' in r) { setErr(r.error); toast.error(r.error); return }
-      toast.success('Visit completed'); setOpen(false); router.refresh()
+      toast.success('Visit logged')
+      setOpen(false)
+      router.refresh()
     })
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setErr(null) }}>
       <DialogTrigger asChild>
         <Button size="sm">
-          <CheckCircle2 className="size-3.5 mr-1.5" /> Complete
+          <CheckCircle2 className="size-3.5 mr-1.5" /> Visit completed
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Complete visit</DialogTitle>
+          <DialogTitle>Wrap up the visit</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-3">
+          {/* Contact name + phone */}
+          <div className="grid grid-cols-[1fr_auto] gap-2">
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Purpose</Label>
-              <Select value={purposeId} onValueChange={setPurposeId}>
-                <SelectTrigger><SelectValue placeholder="Pick" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE_VALUE}>
-                    <span className="italic text-muted-foreground">Not set</span>
-                  </SelectItem>
-                  {purposes.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="cname" className="text-xs">Who you met</Label>
+              <Input
+                id="cname"
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+                placeholder="Name"
+              />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Outcome</Label>
-              <Select value={outcomeId} onValueChange={setOutcomeId}>
-                <SelectTrigger><SelectValue placeholder="Pick" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE_VALUE}>
-                    <span className="italic text-muted-foreground">Not set</span>
-                  </SelectItem>
-                  {outcomes.map((o) => (
-                    <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="cphone" className="text-xs">Phone</Label>
+              <Input
+                id="cphone"
+                type="tel"
+                inputMode="tel"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                placeholder="98xxxxxxxx"
+                className="w-32 tabular-nums"
+              />
             </div>
           </div>
 
+          {/* Notes */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="notes" className="text-xs">What happened?</Label>
+            <Label htmlFor="notes" className="text-xs">What was discussed?</Label>
             <Textarea
               id="notes"
               rows={4}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Who you met, what they said, next steps…"
-              autoFocus
+              placeholder="Topic, next steps, anything the team should know…"
             />
             <p className="text-[10px] text-muted-foreground italic">
-              Voice-first note input + AI structured-fill comes in Step 5.
+              Voice notes + AI structured-fill arrive in Step 5.
             </p>
           </div>
+
+          {/* Interested chips */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Their interest</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setInterested(true)}
+                className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  interested === true
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted/30'
+                }`}
+              >
+                <ThumbsUp className="size-4" /> Interested
+              </button>
+              <button
+                type="button"
+                onClick={() => { setInterested(false); setOutcomeId(NONE_VALUE) }}
+                className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  interested === false
+                    ? 'border-rose-600 bg-rose-50 text-rose-800'
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted/30'
+                }`}
+              >
+                <ThumbsDown className="size-4" /> Not interested
+              </button>
+            </div>
+          </div>
+
+          {/* Outcome detail — only when Interested */}
+          {interested === true && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">What's next? <span className="text-muted-foreground">— optional</span></Label>
+              <Select value={outcomeId} onValueChange={setOutcomeId}>
+                <SelectTrigger><SelectValue placeholder="Pick a next step" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_VALUE}>
+                    <span className="italic text-muted-foreground">No specific next step</span>
+                  </SelectItem>
+                  {outcomes
+                    .filter((o) => o.label !== 'Lost / no interest')
+                    .map((o) => (
+                      <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {err && <p className="text-xs text-destructive">{err}</p>}
 
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
             <Button onClick={submit} disabled={busy}>
-              {busy ? 'Saving…' : 'Mark complete'}
+              {busy ? 'Saving…' : 'Submit'}
             </Button>
           </div>
         </div>

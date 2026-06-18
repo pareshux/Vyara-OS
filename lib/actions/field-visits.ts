@@ -124,6 +124,9 @@ export type TodayVisitsContext = {
     subject_label: string
     contact_id: string | null
     contact_name: string | null
+    contact_name_raw: string | null
+    contact_phone_raw: string | null
+    is_interested: boolean | null
     purpose_label: string | null
     outcome_label: string | null
     notes_text: string | null
@@ -206,7 +209,7 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
     .select(`
       id, started_at, visited_at, odometer_km_at_arrival, duration_minutes, state,
       planned_task_id, project_id, lead_id, firm_id, dealer_id, contact_id,
-      notes_text,
+      notes_text, contact_name_raw, contact_phone_raw, is_interested,
       visit_purpose:visit_purpose_id(label),
       visit_outcome:visit_outcome_id(label),
       contact:contact_id(name),
@@ -262,6 +265,9 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
         subject_label: subjectLabel,
         contact_id: (v.contact_id as string | null) ?? null,
         contact_name: contactName ?? null,
+        contact_name_raw: (v.contact_name_raw as string | null) ?? null,
+        contact_phone_raw: (v.contact_phone_raw as string | null) ?? null,
+        is_interested: (v.is_interested as boolean | null) ?? null,
         purpose_label: purposeLabel ?? null,
         outcome_label: outcomeLabel ?? null,
         notes_text: (v.notes_text as string | null) ?? null,
@@ -522,6 +528,9 @@ export async function completeVisit(
     visit_purpose_id?: string | null
     visit_outcome_id?: string | null
     contact_id?: string | null
+    contact_name_raw?: string | null
+    contact_phone_raw?: string | null
+    is_interested?: boolean | null
     notes_text?: string | null
     photo_urls?: string[]
     duration_minutes?: number | null
@@ -560,6 +569,9 @@ export async function completeVisit(
       visit_purpose_id: params.visit_purpose_id ?? null,
       visit_outcome_id: params.visit_outcome_id ?? null,
       contact_id: params.contact_id ?? null,
+      contact_name_raw: params.contact_name_raw?.trim() || null,
+      contact_phone_raw: params.contact_phone_raw?.trim() || null,
+      is_interested: params.is_interested ?? null,
       notes_text: params.notes_text?.trim() || null,
       photo_urls: params.photo_urls ?? [],
       updated_by: ctx.userId,
@@ -596,6 +608,9 @@ export async function completeVisit(
         purpose_id: params.visit_purpose_id ?? null,
         outcome_id: params.visit_outcome_id ?? null,
         contact_id: params.contact_id ?? null,
+        contact_name_raw: params.contact_name_raw?.trim() || null,
+        contact_phone_raw: params.contact_phone_raw?.trim() || null,
+        is_interested: params.is_interested ?? null,
         from_planned_task: !!visit.planned_task_id,
       },
     })

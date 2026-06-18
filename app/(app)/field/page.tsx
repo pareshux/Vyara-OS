@@ -65,7 +65,7 @@ export default async function FieldPage() {
     )
   }
 
-  const { date, attendance, vehicles, autoApproveThresholdRupees } = ctxResult
+  const { date, attendance, vehicles, autoApproveThresholdRupees, lastKnownOdometer } = ctxResult
   const isAdminish = profile.role === 'admin' || profile.role === 'manager'
 
   // Effective rate for a vehicle: custom > matrix > null.
@@ -111,7 +111,7 @@ export default async function FieldPage() {
       {/* ── State 1: nothing yet ──────────────────────────────── */}
       {!attendance && (
         <>
-          <CheckInCard vehicles={vehiclesForUi} />
+          <CheckInCard vehicles={vehiclesForUi} lastKnownOdometer={lastKnownOdometer} />
           <DayStatusPicker mode="not-going-out" />
         </>
       )}
@@ -141,7 +141,7 @@ export default async function FieldPage() {
       {/* ── State 3: marked on_duty but no check-in yet ───────── */}
       {attendance && isOnDuty && !checkedIn && (
         <>
-          <CheckInCard vehicles={vehiclesForUi} />
+          <CheckInCard vehicles={vehiclesForUi} lastKnownOdometer={lastKnownOdometer} />
           <DayStatusPicker mode="not-going-out" />
         </>
       )}
@@ -195,7 +195,10 @@ export default async function FieldPage() {
 
       {/* ── State 5: checked out — day done ──────────────────── */}
       {attendance && checkedOut && (
-        <ClaimSummary attendance={attendance} autoApproveThresholdRupees={autoApproveThresholdRupees} />
+        <>
+          <ClaimSummary attendance={attendance} autoApproveThresholdRupees={autoApproveThresholdRupees} />
+          <VisitsSection checkInOdometerKm={attendance.check_in_odometer_km} readOnly />
+        </>
       )}
     </div>
   )

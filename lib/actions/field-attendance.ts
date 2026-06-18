@@ -72,6 +72,10 @@ export type TodayContext = {
     matrix_rate_per_km: number | null
   }>
   autoApproveThresholdRupees: number
+  /** Pre-fill suggestion for the rep's next odometer reading. Pulled
+   *  from their most recent attendance row (yesterday's check-out, or
+   *  their last check-in if that's all there is). null = first day. */
+  lastKnownOdometer: number | null
 }
 
 export async function getTodayContext(): Promise<TodayContext | { error: string }> {
@@ -89,6 +93,21 @@ export async function getTodayContext(): Promise<TodayContext | { error: string 
   const settings = (tenantRow?.settings ?? {}) as Record<string, unknown>
   const fieldSettings = (settings.field ?? {}) as Record<string, unknown>
   const threshold = Number(fieldSettings.auto_approve_threshold_rupees ?? DEFAULT_AUTO_APPROVE_THRESHOLD)
+
+  // Last known odometer — for pre-filling the check-in screen across days.
+  // We look at the rep's most recent attendance row (today's if it exists,
+  // else previous days) and pick whichever odometer was most recently set.
+  const { data: priorAttendance } = await ctx.supabase
+    .from('field_attendance')
+    .select('check_in_odometer_km, check_out_odometer_km, attendance_date')
+    .eq('user_id', ctx.userId)
+    .is('deleted_at', null)
+    .order('attendance_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const lastKnownOdometer = priorAttendance
+    ? (priorAttendance.check_out_odometer_km ?? priorAttendance.check_in_odometer_km ?? null)
+    : null
 
   // Today's attendance row (if any).
   const { data: attRaw } = await ctx.supabase
@@ -156,6 +175,7 @@ export async function getTodayContext(): Promise<TodayContext | { error: string 
       : null,
     vehicles: vehiclesOut,
     autoApproveThresholdRupees: threshold,
+    lastKnownOdometer: lastKnownOdometer != null ? Number(lastKnownOdometer) : null,
   }
 }
 
@@ -311,6 +331,19 @@ export async function checkOut(params: {
   if (row.check_out_at) return { error: 'Already checked out for today' }
   if (row.check_in_odometer_km != null && params.odometer_km < Number(row.check_in_odometer_km)) {
     return { error: 'Check-out odometer must be ≥ check-in odometer' }
+  }
+
+  // Block end-of-day if a visit is still live — otherwise it'd be orphaned.
+  const { data: inProgressVisit } = await ctx.supabase
+    .from('field_visit')
+    .select('id')
+    .eq('user_id', ctx.userId)
+    .eq('state', 'in_progress')
+    .is('deleted_at', null)
+    .limit(1)
+    .maybeSingle()
+  if (inProgressVisit) {
+    return { error: 'Complete or cancel your live visit before ending the day.' }
   }
 
   // Resolve rate: vehicle.custom_rate > current matrix row > null.

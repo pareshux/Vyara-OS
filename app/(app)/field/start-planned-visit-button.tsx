@@ -65,12 +65,12 @@ export function StartPlannedVisitButton({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" disabled={disabled}>
-          <Play className="size-3.5 mr-1.5" /> Start visit
+          <Play className="size-3.5 mr-1.5" /> Visit started
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Start visit · {subjectLabel}</DialogTitle>
+          <DialogTitle>Visit started · {subjectLabel}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
@@ -139,7 +139,7 @@ export function StartPlannedVisitButton({
           <div className="flex gap-2 justify-end">
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
             <Button onClick={submit} disabled={busy}>
-              {busy ? 'Starting…' : 'Start visit'}
+              {busy ? 'Saving…' : 'Confirm'}
             </Button>
           </div>
         </div>
