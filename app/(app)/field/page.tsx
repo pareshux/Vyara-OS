@@ -98,13 +98,11 @@ export default async function FieldPage() {
         </div>
         {isAdminish && (
           <Link
-            href="/field"
+            href="/field/team"
             className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mt-1"
-            aria-disabled
-            tabIndex={-1}
           >
             <Users className="size-3.5" />
-            <span className="italic">Team view — coming Step 6</span>
+            Team view
           </Link>
         )}
       </div>
