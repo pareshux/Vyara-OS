@@ -9,6 +9,7 @@ import { CheckInCard } from './check-in-card'
 import { CheckOutCard } from './check-out-card'
 import { DayStatusPicker } from './day-status-picker'
 import { ClaimSummary } from './claim-summary'
+import { VisitsSection } from './visits-section'
 
 export const dynamic = 'force-dynamic'
 
@@ -178,6 +179,8 @@ export default async function FieldPage() {
             </CardContent>
           </Card>
 
+          <VisitsSection checkInOdometerKm={attendance.check_in_odometer_km} />
+
           <CheckOutCard
             checkInOdometerKm={attendance.check_in_odometer_km}
             vehicleEffectiveRate={
@@ -187,15 +190,6 @@ export default async function FieldPage() {
             }
             autoApproveThresholdRupees={autoApproveThresholdRupees}
           />
-
-          <Card>
-            <CardContent className="py-4">
-              <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Today's visits</p>
-              <p className="text-sm text-muted-foreground italic">
-                Logging visits + calls comes in Step 4 — for now, just check in/out works.
-              </p>
-            </CardContent>
-          </Card>
         </>
       )}
 
