@@ -68,6 +68,7 @@ export default async function FieldPage() {
   const isAdminish = profile.role === 'admin' || profile.role === 'manager'
 
   // Effective rate for a vehicle: custom > matrix > null.
+  // The list is already filtered to the rep's assigned vehicles.
   const vehiclesForUi = vehicles.map((v) => ({
     ...v,
     effective_rate_per_km: v.custom_rate_per_km ?? v.matrix_rate_per_km,
@@ -77,10 +78,6 @@ export default async function FieldPage() {
         ? 'matrix'
         : 'none') as 'custom' | 'matrix' | 'none',
   }))
-
-  // Prefer the rep's own assigned vehicle for the picker default.
-  const defaultVehicleId =
-    vehiclesForUi.find((v) => v.is_assigned_to_me)?.id ?? null
 
   const isOnDuty = attendance?.status_for_day === 'on_duty'
   const checkedIn = !!attendance?.check_in_at
@@ -113,10 +110,7 @@ export default async function FieldPage() {
       {/* ── State 1: nothing yet ──────────────────────────────── */}
       {!attendance && (
         <>
-          <CheckInCard
-            vehicles={vehiclesForUi}
-            defaultVehicleId={defaultVehicleId}
-          />
+          <CheckInCard vehicles={vehiclesForUi} />
           <DayStatusPicker mode="not-going-out" />
         </>
       )}
@@ -146,10 +140,7 @@ export default async function FieldPage() {
       {/* ── State 3: marked on_duty but no check-in yet ───────── */}
       {attendance && isOnDuty && !checkedIn && (
         <>
-          <CheckInCard
-            vehicles={vehiclesForUi}
-            defaultVehicleId={attendance.vehicle_id ?? defaultVehicleId}
-          />
+          <CheckInCard vehicles={vehiclesForUi} />
           <DayStatusPicker mode="not-going-out" />
         </>
       )}

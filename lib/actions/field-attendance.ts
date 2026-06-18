@@ -68,7 +68,6 @@ export type TodayContext = {
     vehicle_number: string
     type_label: string
     fuel_label: string
-    is_assigned_to_me: boolean
     custom_rate_per_km: number | null
     matrix_rate_per_km: number | null
   }>
@@ -105,18 +104,17 @@ export async function getTodayContext(): Promise<TodayContext | { error: string 
     .is('deleted_at', null)
     .maybeSingle()
 
-  // Pull all active vehicles in the tenant so reps can pick a different
-  // one for the day (carpool / swap). Tag the ones currently assigned
-  // to the rep so the UI surfaces those first.
+  // Only the rep's own assigned vehicles. Reps don't pick from a
+  // tenant-wide pool every morning — assignment happens in /admin/vehicles.
   const { data: vehicles } = await ctx.supabase
     .from('vehicle')
     .select(`
       id, vehicle_number, vehicle_type_id, fuel_type_id, custom_rate_per_km,
-      assigned_user_id,
       vehicle_type:vehicle_type_id(label),
       fuel_type:fuel_type_id(label)
     `)
     .eq('is_active', true)
+    .eq('assigned_user_id', ctx.userId)
     .is('deleted_at', null)
     .order('vehicle_number')
 
@@ -139,7 +137,6 @@ export async function getTodayContext(): Promise<TodayContext | { error: string 
       vehicle_number: v.vehicle_number as string,
       type_label: (type?.label as string) ?? '—',
       fuel_label: (fuel?.label as string) ?? '—',
-      is_assigned_to_me: v.assigned_user_id === ctx.userId,
       custom_rate_per_km: v.custom_rate_per_km != null ? Number(v.custom_rate_per_km) : null,
       matrix_rate_per_km: rateMap.get(`${v.vehicle_type_id}::${v.fuel_type_id}`) ?? null,
     }
