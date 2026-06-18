@@ -15,17 +15,20 @@ import {
 } from '@/components/ui/dialog'
 import { Play, MapPin, MapPinOff, CheckCircle2 } from 'lucide-react'
 import { startVisit } from '@/lib/actions/field-visits'
+import { OdometerInput } from './odometer-input'
 
 export function StartPlannedVisitButton({
   taskId,
   subjectLabel,
   lastKnownOdometer,
   disabled,
+  tenantId,
 }: {
   taskId: string
   subjectLabel: string
   lastKnownOdometer: number | null
   disabled: boolean
+  tenantId: string
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -75,16 +78,13 @@ export function StartPlannedVisitButton({
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="odo" className="text-xs">Odometer at arrival (km)</Label>
-            <Input
+            <OdometerInput
               id="odo"
-              type="number"
-              inputMode="numeric"
-              min={lastKnownOdometer ?? 0}
-              step={1}
               value={odometer}
-              onChange={(e) => setOdometer(e.target.value)}
+              onChange={setOdometer}
+              min={lastKnownOdometer ?? 0}
               placeholder={lastKnownOdometer != null ? `≥ ${lastKnownOdometer.toLocaleString('en-IN')}` : 'reading'}
-              className="h-11 tabular-nums text-base"
+              tenantId={tenantId}
               autoFocus
             />
             {lastKnownOdometer != null && (

@@ -30,9 +30,11 @@ const PRIORITY_TINT: Record<'low' | 'medium' | 'high' | 'urgent', string> = {
 
 export async function VisitsSection({
   checkInOdometerKm,
+  tenantId,
   readOnly = false,
 }: {
   checkInOdometerKm: number | null
+  tenantId: string
   readOnly?: boolean
 }) {
   const res = await getTodayVisitsContext()
@@ -133,6 +135,7 @@ export async function VisitsSection({
             <PlanOrStartVisitSheet
               lastKnownOdometer={lastKnownOdometer}
               disableStartNow={hasLive}
+              tenantId={tenantId}
             />
           </div>
 
@@ -174,6 +177,7 @@ export async function VisitsSection({
                       subjectLabel={p.subject_label}
                       lastKnownOdometer={lastKnownOdometer}
                       disabled={hasLive}
+                      tenantId={tenantId}
                     />
                   </div>
                 </div>

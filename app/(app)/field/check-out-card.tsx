@@ -10,15 +10,18 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { MapPin, MapPinOff, LogOut, CheckCircle2 } from 'lucide-react'
 import { checkOut } from '@/lib/actions/field-attendance'
+import { OdometerInput } from './odometer-input'
 
 export function CheckOutCard({
   checkInOdometerKm,
   vehicleEffectiveRate,
   autoApproveThresholdRupees,
+  tenantId,
 }: {
   checkInOdometerKm: number | null
   vehicleEffectiveRate: number | null
   autoApproveThresholdRupees: number
+  tenantId: string
 }) {
   const router = useRouter()
   const [odometer, setOdometer] = useState<string>('')
@@ -98,16 +101,13 @@ export function CheckOutCard({
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="odo-out" className="text-xs">Odometer reading (km)</Label>
-          <Input
+          <OdometerInput
             id="odo-out"
-            type="number"
-            inputMode="numeric"
-            min={checkInOdometerKm ?? 0}
-            step={1}
             value={odometer}
-            onChange={(e) => setOdometer(e.target.value)}
+            onChange={setOdometer}
+            min={checkInOdometerKm ?? 0}
             placeholder={checkInOdometerKm != null ? `≥ ${checkInOdometerKm.toLocaleString('en-IN')}` : 'e.g. 42 418'}
-            className="h-11 tabular-nums text-base"
+            tenantId={tenantId}
           />
           {preview && (
             <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs tabular-nums">

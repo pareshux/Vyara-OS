@@ -24,15 +24,18 @@ import {
 import { PlusCircle, MapPin, MapPinOff, CheckCircle2 } from 'lucide-react'
 import { createPlannedVisit, startVisit, type SubjectSearchHit } from '@/lib/actions/field-visits'
 import { SubjectPicker } from './subject-picker'
+import { OdometerInput } from './odometer-input'
 
 type Mode = 'plan' | 'start_now'
 
 export function PlanOrStartVisitSheet({
   lastKnownOdometer,
   disableStartNow,
+  tenantId,
 }: {
   lastKnownOdometer: number | null
   disableStartNow: boolean
+  tenantId: string
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -214,15 +217,12 @@ export function PlanOrStartVisitSheet({
             <>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="odo" className="text-xs">Odometer at arrival (km)</Label>
-                <Input
+                <OdometerInput
                   id="odo"
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={1}
                   value={odometer}
-                  onChange={(e) => setOdometer(e.target.value)}
-                  className="tabular-nums"
+                  onChange={setOdometer}
+                  min={lastKnownOdometer ?? 0}
+                  tenantId={tenantId}
                 />
                 {lastKnownOdometer != null && (
                   <p className="text-[10px] text-muted-foreground tabular-nums">

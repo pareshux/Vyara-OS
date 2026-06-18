@@ -51,10 +51,11 @@ export default async function FieldPage() {
 
   const { data: profile } = await supabase
     .from('user_profile')
-    .select('full_name, role')
+    .select('full_name, role, tenant_id')
     .eq('id', user.id)
     .single()
   if (!profile) redirect('/login')
+  const tenantId = profile.tenant_id as string
 
   const ctxResult = await getTodayContext()
   if ('error' in ctxResult) {
@@ -111,7 +112,7 @@ export default async function FieldPage() {
       {/* ── State 1: nothing yet ──────────────────────────────── */}
       {!attendance && (
         <>
-          <CheckInCard vehicles={vehiclesForUi} lastKnownOdometer={lastKnownOdometer} />
+          <CheckInCard vehicles={vehiclesForUi} lastKnownOdometer={lastKnownOdometer} tenantId={tenantId} />
           <DayStatusPicker mode="not-going-out" />
         </>
       )}
@@ -141,7 +142,7 @@ export default async function FieldPage() {
       {/* ── State 3: marked on_duty but no check-in yet ───────── */}
       {attendance && isOnDuty && !checkedIn && (
         <>
-          <CheckInCard vehicles={vehiclesForUi} lastKnownOdometer={lastKnownOdometer} />
+          <CheckInCard vehicles={vehiclesForUi} lastKnownOdometer={lastKnownOdometer} tenantId={tenantId} />
           <DayStatusPicker mode="not-going-out" />
         </>
       )}
@@ -179,7 +180,7 @@ export default async function FieldPage() {
             </CardContent>
           </Card>
 
-          <VisitsSection checkInOdometerKm={attendance.check_in_odometer_km} />
+          <VisitsSection checkInOdometerKm={attendance.check_in_odometer_km} tenantId={tenantId} />
 
           <CheckOutCard
             checkInOdometerKm={attendance.check_in_odometer_km}
@@ -189,6 +190,7 @@ export default async function FieldPage() {
                 : null
             }
             autoApproveThresholdRupees={autoApproveThresholdRupees}
+            tenantId={tenantId}
           />
         </>
       )}
@@ -197,7 +199,7 @@ export default async function FieldPage() {
       {attendance && checkedOut && (
         <>
           <ClaimSummary attendance={attendance} autoApproveThresholdRupees={autoApproveThresholdRupees} />
-          <VisitsSection checkInOdometerKm={attendance.check_in_odometer_km} readOnly />
+          <VisitsSection checkInOdometerKm={attendance.check_in_odometer_km} tenantId={tenantId} readOnly />
         </>
       )}
     </div>

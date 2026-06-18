@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MapPin, MapPinOff, CheckCircle2, Play } from 'lucide-react'
 import { checkIn } from '@/lib/actions/field-attendance'
+import { OdometerInput } from './odometer-input'
 
 interface VehicleOption {
   id: string
@@ -27,9 +28,11 @@ interface VehicleOption {
 export function CheckInCard({
   vehicles,
   lastKnownOdometer,
+  tenantId,
 }: {
   vehicles: VehicleOption[]
   lastKnownOdometer: number | null
+  tenantId: string
 }) {
   const router = useRouter()
   const [odometer, setOdometer] = useState<string>(
@@ -86,21 +89,18 @@ export function CheckInCard({
       <CardContent className="py-6 flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="odo-in" className="text-xs">Odometer reading (km)</Label>
-          <Input
+          <OdometerInput
             id="odo-in"
-            type="number"
-            inputMode="numeric"
-            min={lastKnownOdometer ?? 0}
-            step={1}
             value={odometer}
-            onChange={(e) => setOdometer(e.target.value)}
+            onChange={setOdometer}
+            min={lastKnownOdometer ?? 0}
             placeholder={lastKnownOdometer != null ? `≥ ${lastKnownOdometer.toLocaleString('en-IN')}` : 'e.g. 42 318'}
-            className="h-11 tabular-nums text-base"
+            tenantId={tenantId}
             autoFocus
           />
           {lastKnownOdometer != null && (
             <p className="text-[10px] text-muted-foreground tabular-nums">
-              Pre-filled from your last reading. Edit if it changed.
+              Pre-filled from your last reading. Snap a photo or type to confirm.
             </p>
           )}
         </div>

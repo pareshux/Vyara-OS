@@ -21,8 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CheckCircle2, ThumbsUp, ThumbsDown } from 'lucide-react'
+import { CheckCircle2, ThumbsUp, ThumbsDown, Sparkles } from 'lucide-react'
 import { completeVisit, listVisitMasters } from '@/lib/actions/field-visits'
+import { extractVoiceVisitNote } from '@/lib/actions/voice-visit-note'
+import { VoiceCapture } from './voice-capture'
 
 const NONE_VALUE = '__none__'
 
@@ -41,8 +43,22 @@ export function CompleteVisitButton({
   const [notes, setNotes] = useState<string>('')
   const [interested, setInterested] = useState<true | false | null>(null)
   const [outcomeId, setOutcomeId] = useState<string>(NONE_VALUE)
+  const [aiPrefilled, setAiPrefilled] = useState(false)
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
+
+  async function handleVoiceTranscript(transcript: string) {
+    const r = await extractVoiceVisitNote(transcript)
+    if (!r.ok) { toast.error(r.error); return }
+    const d = r.data
+    if (d.contact_name && !contactName) setContactName(d.contact_name)
+    if (d.contact_phone && !contactPhone) setContactPhone(d.contact_phone)
+    if (d.notes) setNotes((prev) => prev ? `${prev}\n${d.notes}` : d.notes)
+    if (d.is_interested !== null) setInterested(d.is_interested)
+    if (d.resolved_outcome_id) setOutcomeId(d.resolved_outcome_id)
+    setAiPrefilled(true)
+    toast.success(`Read your note in ${(r.latency_ms / 1000).toFixed(1)}s — please review.`)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -83,6 +99,15 @@ export function CompleteVisitButton({
           <DialogTitle>Wrap up the visit</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
+          {/* Voice capture — speak the whole summary and AI fills the form */}
+          <VoiceCapture onTranscript={handleVoiceTranscript} />
+
+          {aiPrefilled && (
+            <p className="text-[10px] text-primary inline-flex items-center gap-1">
+              <Sparkles className="size-3" /> Pre-filled from your voice note. Please review before submitting.
+            </p>
+          )}
+
           {/* Contact name + phone */}
           <div className="grid grid-cols-[1fr_auto] gap-2">
             <div className="flex flex-col gap-1.5">
