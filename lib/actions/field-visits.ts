@@ -151,7 +151,7 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
       id, title, description, due_at, priority, is_done, created_by_id,
       project_id, source_entity_type, source_entity_id, contact_id,
       project:project_id(name),
-      contact:contact_id(name)
+      contact:contact_id(full_name)
     `)
     .eq('type', 'planned_visit')
     .eq('assignee_id', ctx.userId)
@@ -185,7 +185,7 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
   const planned: TodayPlanItem[] = tasks.map((t) => {
     const subject = subjectFromTask(t)
     const projectName = Array.isArray(t.project) ? t.project[0]?.name : (t.project as { name?: string } | null)?.name
-    const contactName = Array.isArray(t.contact) ? t.contact[0]?.name : (t.contact as { name?: string } | null)?.name
+    const contactName = Array.isArray(t.contact) ? t.contact[0]?.full_name : (t.contact as { full_name?: string } | null)?.full_name
     let subjectLabel = '—'
     if (subject.type === 'project') subjectLabel = projectName ?? '—'
     else if (subject.type === 'lead' && subject.id) subjectLabel = leadById.get(subject.id) ?? '—'
@@ -217,7 +217,7 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
       lat, lng, location_label,
       visit_purpose:visit_purpose_id(label),
       visit_outcome:visit_outcome_id(label),
-      contact:contact_id(name),
+      contact:contact_id(full_name),
       project:project_id(name),
       lead:lead_id(title),
       firm:firm_id(name),
@@ -243,7 +243,7 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
       subject.type === 'lead' ? (leadTitle ?? '—') :
       subject.type === 'firm' ? (firmName ?? '—') :
       (dealerName ?? '—')
-    const contactName = Array.isArray(v.contact) ? v.contact[0]?.name : (v.contact as { name?: string } | null)?.name
+    const contactName = Array.isArray(v.contact) ? v.contact[0]?.full_name : (v.contact as { full_name?: string } | null)?.full_name
 
     if (v.state === 'in_progress') {
       inProgress.push({

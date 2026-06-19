@@ -128,7 +128,7 @@ export async function getVisitDetail(visitId: string): Promise<VisitDetail | nul
        user:user_profile!field_visit_user_id_fkey(full_name),
        purpose:visit_purpose(id, label, category),
        outcome:visit_outcome(id, label, requires_followup),
-       contact:contact(id, name, phone)`,
+       contact:contact(id, full_name, phone)`,
     )
     .eq('id', visitId)
     .is('deleted_at', null)
@@ -164,7 +164,7 @@ export async function getVisitDetail(visitId: string): Promise<VisitDetail | nul
     user: { full_name: string | null } | { full_name: string | null }[] | null
     purpose: { id: string; label: string; category: string | null } | { id: string; label: string; category: string | null }[] | null
     outcome: { id: string; label: string; requires_followup: boolean } | { id: string; label: string; requires_followup: boolean }[] | null
-    contact: { id: string; name: string | null; phone: string | null } | { id: string; name: string | null; phone: string | null }[] | null
+    contact: { id: string; full_name: string | null; phone: string | null } | { id: string; full_name: string | null; phone: string | null }[] | null
   }
   const userRow = Array.isArray(v.user) ? v.user[0] ?? null : v.user
   const purposeRow = Array.isArray(v.purpose) ? v.purpose[0] ?? null : v.purpose
@@ -330,7 +330,7 @@ export async function getVisitDetail(visitId: string): Promise<VisitDetail | nul
     subject,
     contact: {
       id: contactRow?.id ?? null,
-      name: contactRow?.name ?? null,
+      name: contactRow?.full_name ?? null,
       phone: contactRow?.phone ?? null,
     },
     contact_name_raw: v.contact_name_raw,

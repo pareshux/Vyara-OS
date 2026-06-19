@@ -247,63 +247,88 @@ export default async function TeamPage({
         <div className="flex flex-col gap-2">
           {reps.map((r) => {
             const stale = isStale(r, isToday)
+            const att = r.attendance
+            const isOnDuty = !!att?.check_in_at && !att?.check_out_at
             return (
-              <div
+              <Link
                 key={r.user_id}
-                className="rounded-lg border border-border bg-card px-3 py-3"
+                href={`/field/team/${r.user_id}?date=${date}`}
+                className="block rounded-lg border border-border bg-card px-3 py-3 hover:bg-muted/20 transition-colors"
               >
+                {/* Row 1 — identity + status */}
                 <div className="flex items-start gap-3">
-                  <Link
-                    href={`/field/team/${r.user_id}?date=${date}`}
-                    className="flex items-start gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity"
-                  >
-                    <div className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground shrink-0">
-                      {initials(r.full_name)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium">{r.full_name}</p>
-                        <Badge variant="outline" className="text-[10px] uppercase border-0 bg-muted text-muted-foreground">
-                          {r.role.replace('_', ' ')}
-                        </Badge>
-                        <StatusPill rep={r} isToday={isToday} />
-                        {stale && (
-                          <Badge variant="outline" className="text-[10px] uppercase border-0 bg-amber-50 text-amber-700">
-                            <Clock className="size-2.5 mr-0.5" /> Quiet 2h+
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
-                        {repSummary(r)}
-                      </p>
-                    </div>
-                  </Link>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    {r.latest_location && (
-                      <a
-                        href={`https://www.google.com/maps?q=${r.latest_location.lat},${r.latest_location.lng}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[10px] max-w-[180px] hover:bg-blue-100 transition-colors"
-                        title={`${r.latest_location.source === 'visit' ? 'Latest visit pin' : 'Check-in spot'} · open Google Maps`}
-                      >
-                        <MapPin className="size-2.5 shrink-0" />
-                        <span className="truncate">
-                          {r.latest_location.label
-                            ?? `${r.latest_location.lat.toFixed(2)}°, ${r.latest_location.lng.toFixed(2)}°`}
-                        </span>
-                        <ExternalLink className="size-2.5 shrink-0" />
-                      </a>
-                    )}
-                    <Link
-                      href={`/field/team/${r.user_id}?date=${date}`}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Link>
+                  <div className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground shrink-0">
+                    {initials(r.full_name)}
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium">{r.full_name}</p>
+                      <Badge variant="outline" className="text-[10px] uppercase border-0 bg-muted text-muted-foreground">
+                        {r.role.replace('_', ' ')}
+                      </Badge>
+                      <StatusPill rep={r} isToday={isToday} />
+                      {stale && (
+                        <Badge variant="outline" className="text-[10px] uppercase border-0 bg-amber-50 text-amber-700">
+                          <Clock className="size-2.5 mr-0.5" /> Quiet 2h+
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-1" />
                 </div>
-              </div>
+
+                {/* Row 2 — visit counts + time strip */}
+                {att && (att.check_in_at || att.status_for_day !== 'on_duty') && (
+                  <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums flex-wrap">
+                    <span>
+                      <span className="text-foreground font-medium">{r.visits_today}</span> done
+                      {' · '}
+                      <span className="text-foreground font-medium">{r.planned_count}</span> planned
+                      {r.in_progress_count > 0 && (
+                        <> · <span className="text-emerald-700 font-medium">{r.in_progress_count} live</span></>
+                      )}
+                    </span>
+                    {att.check_in_at && <span>· in {formatTime(att.check_in_at)}</span>}
+                    {att.check_out_at && <span>· out {formatTime(att.check_out_at)}</span>}
+                    {att.total_km != null
+                      ? <span>· {att.total_km.toLocaleString('en-IN')} km</span>
+                      : att.running_km != null
+                        ? <span>· {att.running_km.toLocaleString('en-IN')} km so far</span>
+                        : null}
+                    {att.reimbursement_amount != null && <span>· {rs(att.reimbursement_amount)}</span>}
+                    {r.last_activity_at && isOnDuty && (
+                      <span>· active {formatRelative(r.last_activity_at)}</span>
+                    )}
+                  </div>
+                )}
+                {!att && isToday && (
+                  <p className="mt-2 text-[11px] text-muted-foreground italic">Not checked in yet</p>
+                )}
+
+                {/* Row 3 — where they are right now */}
+                {r.latest_location && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <MapPin className="size-3.5 text-blue-700 shrink-0" />
+                    <a
+                      href={`https://www.google.com/maps?q=${r.latest_location.lat},${r.latest_location.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-blue-700 hover:underline inline-flex items-center gap-1 truncate"
+                      title={r.latest_location.source === 'visit' ? 'Latest visit pin' : 'Check-in spot'}
+                    >
+                      <span className="truncate">
+                        {r.latest_location.label
+                          ?? `${r.latest_location.lat.toFixed(4)}°, ${r.latest_location.lng.toFixed(4)}°`}
+                      </span>
+                      <ExternalLink className="size-3 shrink-0" />
+                    </a>
+                    <span className="text-[10px] text-muted-foreground">
+                      ({r.latest_location.source === 'visit' ? 'last visit' : 'check-in'})
+                    </span>
+                  </div>
+                )}
+              </Link>
             )
           })}
         </div>
@@ -315,32 +340,6 @@ export default async function TeamPage({
     </div>
   )
 
-  // ─── helpers
-  function repSummary(r: TeamRepRow): string {
-    const att = r.attendance
-    if (!att) {
-      return isToday ? 'Not checked in yet' : 'No record for this day'
-    }
-    const parts: string[] = []
-    if (att.check_in_at) parts.push(`In ${formatTime(att.check_in_at)}`)
-    if (att.check_out_at) parts.push(`Out ${formatTime(att.check_out_at)}`)
-    // Visits: "3 of 5 planned" if there's a plan, else "X visits".
-    const visitedAndOpen = r.visits_today + r.planned_count
-    if (r.planned_count > 0) {
-      parts.push(`${r.visits_today} of ${visitedAndOpen} planned`)
-    } else if (r.visits_today > 0) {
-      parts.push(`${r.visits_today} visit${r.visits_today === 1 ? '' : 's'}`)
-    }
-    if (r.in_progress_count > 0) parts.push(`${r.in_progress_count} live`)
-    // Distance: prefer total_km (settled at checkout); else running_km mid-day.
-    if (att.total_km != null) parts.push(`${att.total_km.toLocaleString('en-IN')} km`)
-    else if (att.running_km != null) parts.push(`${att.running_km.toLocaleString('en-IN')} km so far`)
-    if (att.reimbursement_amount != null) parts.push(rs(att.reimbursement_amount))
-    if (r.last_activity_at && att.check_in_at && !att.check_out_at) {
-      parts.push(`active ${formatRelative(r.last_activity_at)}`)
-    }
-    return parts.join(' · ')
-  }
 }
 
 function RollupChip({

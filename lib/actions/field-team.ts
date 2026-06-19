@@ -406,7 +406,7 @@ export async function getRepDayDetail(
         contact_name_raw, contact_phone_raw, is_interested, notes_text,
         visit_purpose:visit_purpose_id(label),
         visit_outcome:visit_outcome_id(label),
-        contact:contact_id(name),
+        contact:contact_id(full_name),
         project:project_id(name),
         lead:lead_id(title),
         firm:firm_id(name),
@@ -423,7 +423,7 @@ export async function getRepDayDetail(
         id, title, due_at, priority, is_done,
         project_id, source_entity_type, source_entity_id, contact_id,
         project:project_id(name),
-        contact:contact_id(name)
+        contact:contact_id(full_name)
       `)
       .eq('tenant_id', ctx.tenantId)
       .eq('type', 'planned_visit')
@@ -455,7 +455,7 @@ export async function getRepDayDetail(
       subj.type === 'firm' ? (firmName ?? '—') :
       (dealerName ?? '—')
 
-    const contactName = Array.isArray(v.contact) ? v.contact[0]?.name : (v.contact as { name?: string } | null)?.name
+    const contactName = Array.isArray(v.contact) ? v.contact[0]?.full_name : (v.contact as { full_name?: string } | null)?.full_name
     const purpose = Array.isArray(v.visit_purpose) ? v.visit_purpose[0]?.label : (v.visit_purpose as { label?: string } | null)?.label
     const outcome = Array.isArray(v.visit_outcome) ? v.visit_outcome[0]?.label : (v.visit_outcome as { label?: string } | null)?.label
 
@@ -519,7 +519,7 @@ export async function getRepDayDetail(
       priority: t.priority as 'low' | 'medium' | 'high' | 'urgent',
       subject_type: subjectType,
       subject_label: subjectLabel,
-      contact_name: (contact as { name?: string } | null)?.name ?? null,
+      contact_name: (contact as { full_name?: string } | null)?.full_name ?? null,
     }
   })
 
