@@ -21,7 +21,7 @@
 
 ## 2026-06-19
 
-### Sprint 2.1c — visit_purpose system rows + broader vocabulary (pending commit)
+### Sprint 2.1c — visit_purpose system rows + broader vocabulary (1b44972)
 - **Tracks:** FLD-009
 - **Capability:** Field Operations
 - **Tier:** Must-have C#2
