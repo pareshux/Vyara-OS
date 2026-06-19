@@ -23,7 +23,7 @@
 
 ## 2026-06-20
 
-### FO-7 — Field-Activity Day read-model (pending commit)
+### FO-7 — Field-Activity Day read-model (84c0446)
 - **Tracks:** FLD-015
 - **Capability:** Field Operations
 - **Tier:** Must-have post-C#2
