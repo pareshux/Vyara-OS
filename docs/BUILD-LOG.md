@@ -21,7 +21,7 @@
 
 ## 2026-06-19
 
-### Sprint 1.6 — Observability capture chokepoint + AI wiring (pending commit)
+### Sprint 1.6 — Observability capture chokepoint + AI wiring (6e41977)
 - **Tracks:** PLAT-009
 - **Capability:** Platform
 - **Tier:** Must-have C#2
