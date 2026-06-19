@@ -21,7 +21,7 @@
 
 ## 2026-06-19
 
-### Sprint 1.5 — TS types from DB schema (browser client typed; server + npm script deferred)
+### Sprint 1.5 — TS types from DB schema · browser client typed; server + npm script deferred (fd44182)
 - **Tracks:** PLAT-008
 - **Capability:** Platform
 - **Tier:** Must-have C#2
