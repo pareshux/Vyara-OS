@@ -23,7 +23,7 @@
 
 ## 2026-06-20
 
-### FO-4 — Generic approval engine (pending commit)
+### FO-4 — Generic approval engine (422de80)
 - **Tracks:** PLAT-014
 - **Capability:** Platform
 - **Tier:** Must-have post-C#2 (lifted into Sprint 2.2 so FO-5 has a real engine to consume)
