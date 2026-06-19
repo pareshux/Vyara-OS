@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-20 (FO-4 generic approval engine shipped — sequential + parallel multi-level; PLAT-014 ✅. Expense claims (FO-5) is the first real consumer)
+> **Last updated:** 2026-06-20 (FO-5 multi-category expense module shipped — FIN-006 ✅, FIN-007 ✅ Partial, FLD-016 ✅. Engine, attachment, and approval are all working together)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -758,7 +758,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | FLD-013 | AI activity prep brief | Should-have | 📋 | First copilot move |
 | FLD-014 | Visit Hub (book order / log expense / log complaint from visit) | Must-have post-C#2 | 📋 | — |
 | FLD-015 | Sales Day / Field-Activity Day read-model | Must-have post-C#2 | 📋 | — |
-| FLD-016 | Multi-category Expense consumer surface | Should-have | 📋 | Built by FIN-006 |
+| FLD-016 | Multi-category Expense consumer surface | Should-have | ✅ | FO-5 · `<LogExpenseSheet>` wired into `/field` (in-progress visit card). End-of-day catchall lives at `/expenses`. |
 | FLD-017 | Attention Centre v1 surfacing field signals | Should-have | 📋 | Built by INT-004 |
 | FLD-018 | Live team last-known location (Google Maps deep-link) | Should-have | ✅ Partial | `2c57297` |
 | FLD-019 | Light fraud detection (heuristics from stamps) | Nice-have | 📋 | — |
@@ -801,8 +801,8 @@ Authoritative item-by-item state. **Updated on every commit.**
 | FIN-003 | WhatsApp PTP AI capture | Foundation | ✅ | `d28302b` |
 | FIN-004 | Invoice photo OCR | Foundation | ✅ | `d28302b`, `67b3f38` |
 | FIN-005 | Approval engine consumed (claim approval as first consumer) | Must-have post-C#2 | 📋 | Built by PLAT-014 |
-| FIN-006 | Multi-category Expense module | Must-have post-C#2 | 📋 | — |
-| FIN-007 | Expense policy master | Must-have post-C#2 | 📋 | — |
+| FIN-006 | Multi-category Expense module | Must-have post-C#2 | ✅ | FO-5 · Migration 0035 — `expense` + `expense_category` master (12 system seeds: fuel/tolls/food_self/food_client/taxi/train_air/accommodation/mobile_recharge/gift/sample_courier/site_supplies/other). `lib/actions/expenses.ts` (create / submit / cancel / list / get) + `<LogExpenseSheet>` (bottom sheet, 2-step capture → receipt) + `/expenses` page with status rollups. Consumes FO-4 — submit raises an `approval_request` when amount hits a policy band; auto-approves when no policy. Consumes FO-2 — receipts via `(entity_type='expense', kind='receipt')`. Wired into the in-progress visit card so an expense can be tied to a visit (`subject_type='field_visit'`). |
+| FIN-007 | Expense policy master | Must-have post-C#2 | ✅ Partial | FO-5 · Approval policy is the expense policy — `approval_policy` rows with `entity_type='expense'` and amount bands ARE the policy. No separate table needed. Per-tenant policy CRUD UI deferred (admin seeds via SQL today; lifts to UI when tenant #2 needs to differentiate). |
 | FIN-008 | E-invoicing (mandatory ₹5cr+ India) | Should-have | 📋 | — |
 | FIN-009 | Credit limit + risk scoring | Should-have | 📋 | — |
 | FIN-010 | Target engine (per-rep per-period) | Should-have | 📋 | — |

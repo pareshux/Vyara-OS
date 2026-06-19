@@ -6,6 +6,7 @@ import { PlanOrStartVisitSheet } from './plan-or-start-visit-sheet'
 import { StartPlannedVisitButton } from './start-planned-visit-button'
 import { CompleteVisitButton } from './complete-visit-button'
 import { CancelVisitButton } from './cancel-visit-button'
+import { LogExpenseSheet } from '@/components/expense/log-expense-sheet'
 
 function formatTime(iso: string | null): string {
   if (!iso) return ''
@@ -112,11 +113,17 @@ export async function VisitsSection({
                 {live.subject_type}
               </Badge>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <CompleteVisitButton
                 visitId={live.visit_id}
                 initialContactId={live.contact_id}
                 tenantId={tenantId}
+              />
+              <LogExpenseSheet
+                tenantId={tenantId}
+                subjectType="field_visit"
+                subjectId={live.visit_id}
+                triggerLabel="Expense"
               />
               <CancelVisitButton visitId={live.visit_id} />
             </div>

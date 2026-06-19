@@ -13,6 +13,7 @@ import {
   Truck,
   FileText,
   Wallet,
+  Receipt,
   TrendingUp,
   Warehouse,
   Boxes,
@@ -81,6 +82,7 @@ const NAV_ITEMS: NavItem[] = [
   // Finance — receivables, payables, claims (Blueprint §2.6).
   { label: 'Invoices',    href: '/invoices',    icon: FileText,        group: 'finance' },
   { label: 'Collections', href: '/collections', icon: Wallet,          group: 'finance',       feature: 'enable_collections' },
+  { label: 'Expenses',    href: '/expenses',    icon: Receipt,         group: 'finance' },
   { label: 'Finance',     href: '/finance',     icon: TrendingUp,      group: 'finance',       feature: 'enable_finance' },
 
   // Utility — cross-cutting platform surfaces.

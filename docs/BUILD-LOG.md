@@ -23,6 +23,13 @@
 
 ## 2026-06-20
 
+### FO-5 — Multi-category expense module (pending commit)
+- **Tracks:** FIN-006 (✅), FIN-007 (✅ Partial), FLD-016 (✅)
+- **Capability:** Finance + Field Operations
+- **Tier:** Must-have post-C#2 (FIN-006), Should-have (FLD-016)
+- **Status change:** FIN-006 📋 → ✅; FIN-007 📋 → ✅ Partial; FLD-016 📋 → ✅
+- **Notes:** Migration 0035 — `expense_category` master (system + tenant rows, same pattern as task_type / activity_type / relationship_type — 12 cross-industry seeds: fuel, tolls, food_self, food_client, taxi, train_air, accommodation, mobile_recharge, gift, sample_courier, site_supplies, other) + `expense` table (status state machine: draft → submitted → approved | rejected → exported; with `cancelled` and `subject_type/id` for tying an expense to a visit / project / lead / firm). RLS: reps see own, managers see team; rep can only update own *drafts*; managers/admins always. `lib/actions/expenses.ts` ships create / submit / cancel / list / get; on `submitExpense` the engine calls `requestApproval({ entityType: 'expense', amount })` — when a policy band matches it raises an approval request and the expense lands at `status='submitted'`; when no policy matches it auto-approves directly. `approval_request.status` is read-back at list time via `syncExpenseFromApproval` (cheap denormalisation; replaces the Inngest write-back that doesn't exist yet). `<LogExpenseSheet>` is a 2-step bottom sheet: capture (category grid, amount, date, notes) → receipt (snap via FO-2 AttachmentUploadButton kind='receipt'). Abandoned drafts soft-cancel on sheet close (no DB litter). `/expenses` page rolls up by status + groups by date. Sidebar gets a new "Expenses" item under Finance. Wired into `/field`'s in-progress visit card so an expense can be tied to the live visit via `subject_type='field_visit'`. **FIN-007 partial** because the approval_policy table IS the expense policy table — no new master needed; per-tenant policy CRUD UI deferred.
+
 ### FO-4 — Generic approval engine (422de80)
 - **Tracks:** PLAT-014
 - **Capability:** Platform
