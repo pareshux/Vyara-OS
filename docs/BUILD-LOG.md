@@ -23,7 +23,7 @@
 
 ## 2026-06-20
 
-### FO-3 — Visit completion: photos + documents + signature (pending commit)
+### FO-3 — Visit completion: photos + documents + signature (54865a3)
 - **Tracks:** PLAT-013 (consumer wiring)
 - **Capability:** Field Operations
 - **Tier:** part of Field Operations vertical (Sprint 2.2)

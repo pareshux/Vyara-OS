@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-20 (FO-2 attachment framework shipped — PLAT-013 flipped to ✅; visit completion UI is next)
+> **Last updated:** 2026-06-20 (FO-3 visit proof shipped — photos / documents / signature wired into visit completion; PLAT-013 has its first consumer)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -663,7 +663,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | PLAT-010 | Code-prefix configuration — wire consumers (replace triggers) | Must-have C#2 | ✅ | `8af733a` (Sprint 1.7) · hybrid path: RPC `next_code_sequence(kind)` + `lib/codes/next-code.ts` helper. Triggers stay as safety net. Wired into `createQuotation` (quotation_number now comes from `tenant.settings.codes.quotation` template). Other 5 entities (sales_order, invoice, dispatch, dealer, lead) migrate opportunistically as their actions are touched. |
 | PLAT-011 | Tenant lifecycle (create + seed) + subdomain routing | Must-have C#2 | ✅ Partial | Provisioning CLI shipped (Sprint 2.1a): `scripts/onboard-tenant.ts`. Idempotent on slug, JSON config, Zod-validated, creates tenant + features + admin user. Subdomain middleware deferred (UX improvement; not strictly blocking — JWT already carries tenant_id). |
 | PLAT-012 | Notification transport (in-app + WhatsApp + email) | Must-have post-C#2 | 📋 | — |
-| PLAT-013 | Attachment framework | Must-have post-C#2 | ✅ | `d114708` (FO-2) · Migration 0033 + `lib/actions/attachments.ts` + `components/attachment/{upload-button,list,signature-pad}.tsx`. Polymorphic `attachment` table (entity_type TEXT + entity_id UUID), 5 kinds (photo/document/voice_note/signature/receipt). Reuses existing `ai-uploads` bucket via path prefix `<tenant>/attachment/<entity_type>/yyyy/mm/`. RLS = tenant isolation only; per-entity parent-readability lives in `canAccessParent` (Option C — admin/manager always; field_visit ⇒ owner). First consumer wires in FO-3 (visit completion). Old TEXT[] photo_urls columns stay one slice for backwards-compat. |
+| PLAT-013 | Attachment framework | Must-have post-C#2 | ✅ | `d114708` (FO-2) · Migration 0033 + `lib/actions/attachments.ts` + `components/attachment/{upload-button,list,signature-pad}.tsx`. Polymorphic `attachment` table (entity_type TEXT + entity_id UUID), 5 kinds (photo/document/voice_note/signature/receipt). Reuses existing `ai-uploads` bucket via path prefix `<tenant>/attachment/<entity_type>/yyyy/mm/`. RLS = tenant isolation only; per-entity parent-readability lives in `canAccessParent` (Option C — admin/manager always; field_visit ⇒ owner). First consumer: `54865a3` (FO-3) wires it into visit completion. Old TEXT[] photo_urls columns stay one slice for backwards-compat. |
 | PLAT-014 | Generic Approval engine | Must-have post-C#2 | 📋 | — |
 | PLAT-015 | Audit log writer (broader coverage) | Should-have | 📋 | — |
 | PLAT-016 | Module registry | Future | 💭 | When 3+ tenants |
