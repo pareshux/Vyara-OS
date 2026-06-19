@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-20 (FO-3 visit proof shipped — photos / documents / signature wired into visit completion; PLAT-013 has its first consumer)
+> **Last updated:** 2026-06-20 (FO-4 generic approval engine shipped — sequential + parallel multi-level; PLAT-014 ✅. Expense claims (FO-5) is the first real consumer)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -664,7 +664,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | PLAT-011 | Tenant lifecycle (create + seed) + subdomain routing | Must-have C#2 | ✅ Partial | Provisioning CLI shipped (Sprint 2.1a): `scripts/onboard-tenant.ts`. Idempotent on slug, JSON config, Zod-validated, creates tenant + features + admin user. Subdomain middleware deferred (UX improvement; not strictly blocking — JWT already carries tenant_id). |
 | PLAT-012 | Notification transport (in-app + WhatsApp + email) | Must-have post-C#2 | 📋 | — |
 | PLAT-013 | Attachment framework | Must-have post-C#2 | ✅ | `d114708` (FO-2) · Migration 0033 + `lib/actions/attachments.ts` + `components/attachment/{upload-button,list,signature-pad}.tsx`. Polymorphic `attachment` table (entity_type TEXT + entity_id UUID), 5 kinds (photo/document/voice_note/signature/receipt). Reuses existing `ai-uploads` bucket via path prefix `<tenant>/attachment/<entity_type>/yyyy/mm/`. RLS = tenant isolation only; per-entity parent-readability lives in `canAccessParent` (Option C — admin/manager always; field_visit ⇒ owner). First consumer: `54865a3` (FO-3) wires it into visit completion. Old TEXT[] photo_urls columns stay one slice for backwards-compat. |
-| PLAT-014 | Generic Approval engine | Must-have post-C#2 | 📋 | — |
+| PLAT-014 | Generic Approval engine | Must-have post-C#2 | ✅ | FO-4 · Migration 0034 (4 tables: `approval_policy`, `approval_policy_step`, `approval_request`, `approval_step_action`) + `lib/actions/approvals.ts` + `/approvals` queue page + `<ApprovalCard>` for inline rendering. Multi-level by design — both **sequential** (step 1 → 2 → 3) and **parallel** (all open at once, with `require_all_parallel` toggle for all-N vs any-1). Step approvers resolve via `role` (any active user with that role) or `specific_user`. `requestApproval()` finds the matching policy by `(entity_type + amount band)`; `autoApproveIfNoPolicy` defaults true so small-value cases don't clog the queue. **Deferred:** auto-escalation cron (Inngest), reports_to-based step resolution (needs `user_profile.reports_to_user_id`), seeded policies (consumers seed per-tenant as they ship). First real consumer wires in FO-5 (expense claims). |
 | PLAT-015 | Audit log writer (broader coverage) | Should-have | 📋 | — |
 | PLAT-016 | Module registry | Future | 💭 | When 3+ tenants |
 | PLAT-017 | Master Data Engine | Future | 💭 | When 20+ masters |

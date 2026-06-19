@@ -23,6 +23,13 @@
 
 ## 2026-06-20
 
+### FO-4 — Generic approval engine (pending commit)
+- **Tracks:** PLAT-014
+- **Capability:** Platform
+- **Tier:** Must-have post-C#2 (lifted into Sprint 2.2 so FO-5 has a real engine to consume)
+- **Status change:** 📋 → ✅
+- **Notes:** Migration 0034 — 4 tables: `approval_policy` (rules per entity_type + amount band), `approval_policy_step` (N ordered steps; `approver_via='role'|'specific_user'`), `approval_request` (one row per ask; status: pending/approved/rejected/cancelled; sequential mode tracks `current_step_order`, parallel leaves it NULL), `approval_step_action` (per-step decision log). Full **multi-level** by design — sequential (each step waits for prior) and parallel (all open at once; `require_all_parallel` toggles all-N vs any-1). A single rejection always closes the request. Approver resolution: role → any active user_profile with `role=X`; specific_user → that uid. Admin can act on any open step (escape hatch for stuck requests). `requestApproval` picks the policy by `(entity_type + amount in band)`; `autoApproveIfNoPolicy` defaults true so a ₹500 expense doesn't manufacture a queue item. `/approvals` page renders the actor-filtered queue (eligibility computed in the action, since RLS only does tenant isolation); `<ApprovalCard>` is a server component for inline rendering on the consumer's detail page (status pill + step ladder + decision history + Approve/Reject when pending). `DecideButtons` is the client island that captures a comment and calls `decideApproval`. **Deferred:** Inngest auto-escalation cron (schema has the column), `reports_to_user_id` on user_profile (the moment a customer asks for hierarchical chains), seeded policies (consumers seed per-tenant). entity_type detail-link resolver registered in `/approvals/page.tsx` — new consumers add one switch case.
+
 ### FO-3 — Visit completion: photos + documents + signature (54865a3)
 - **Tracks:** PLAT-013 (consumer wiring)
 - **Capability:** Field Operations

@@ -19,6 +19,7 @@ import {
   Store,
   Settings,
   MapPin,
+  ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -84,6 +85,7 @@ const NAV_ITEMS: NavItem[] = [
 
   // Utility — cross-cutting platform surfaces.
   { label: 'Tasks',       href: '/tasks',       icon: CheckSquare,     group: 'utility' },
+  { label: 'Approvals',   href: '/approvals',   icon: ShieldCheck,     group: 'utility' },
 ]
 
 interface SidebarProps {
