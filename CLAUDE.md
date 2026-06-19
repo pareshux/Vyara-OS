@@ -8,20 +8,52 @@ Vyara OS is **vertical SaaS for made-to-order building-materials manufacturers**
 
 ## Read these first — they govern everything
 
-- @docs/CONSTITUTION.md (v2) — vertical positioning, product principles (immutable), technical assumptions (revisable). On any conflict, the Constitution wins.
-- @docs/vyara-vision-blueprint-v3.md — the destination: capability catalog, four commercial motions, Tier 1+2 depth modes, scope boundary. **Always read alongside the Constitution.**
+- **@docs/PRODUCT-BLUEPRINT-v3.md — THE SOURCE OF TRUTH.** Eight locked capabilities + Status Tracker (§11) for every planned/in-progress/shipped item. Read this before any non-trivial work.
+- @docs/CONSTITUTION.md (v2) — vertical positioning, product principles (immutable), technical assumptions (revisable). On any conflict, the Constitution wins on principles; the Blueprint wins on capability partitioning.
+- @docs/BUILD-LOG.md — chronological record of what shipped, when, against which Blueprint item.
 - @docs/design.md — UX/UI law (shadcn/ui, design tokens, device tiers). Set the design tokens as the theme **before** building any screen.
 - @docs/vyara-slice1-build-spec.md — Slice 1 spec. Status: complete.
 - @docs/vyara-slice2-build-spec.md — Slice 2 spec. Status: complete.
-- **Superseded / archive (do not read as authoritative):** `docs/vyara-industry-os-blueprint-v2.archived.md` (kept for history; replaced by v3).
+- **Superseded / archive (do not read as authoritative):** `docs/vyara-industry-os-blueprint-v2.archived.md`, `docs/vyara-vision-blueprint-v3.archived.md` (kept for history; replaced by `PRODUCT-BLUEPRINT-v3.md`).
+
+## Blueprint-driven workflow (locked)
+
+This is a hard rule, not a suggestion. Every meaningful change touches the Blueprint.
+
+**Before any non-trivial work:**
+1. Find the item ID in the Blueprint Status Tracker (§11), e.g. `PLAT-007`, `FLD-014`.
+2. Confirm the priority tier matches the current sprint focus.
+3. If no item exists for what you're about to build, **stop and add it first** (status `💭 Considered` or `📋 Planned`) before starting work.
+4. Confirm your change belongs to one capability — if it spans more, name the primary.
+
+**During the work:**
+- Update the Status Tracker row to `🚧 In Progress` when you start.
+- In the commit message, include `Tracks: <ID>` for every Blueprint item the change affects.
+- New migration files start with a capability tag comment.
+
+**On commit:**
+- Flip the Status Tracker row to `✅ Shipped` (or appropriate status).
+- Add the short commit SHA to the row.
+- Update the "Last updated" line at the top of the Blueprint.
+- Append a one-line entry to `BUILD-LOG.md` under today's date, following the format shown there.
+
+**When the conversation surfaces a new idea:**
+- Don't start building. Run it through the Blueprint:
+  - Which of the 8 capabilities owns it? (If none, the answer is "no module.")
+  - Which priority tier? (Be honest — most new ideas are Nice-have or Future.)
+  - Add the row to §11 with status `💭`.
+- Only `📋` items get worked on. The lift from `💭` to `📋` is a deliberate decision, not a default.
+
+**The eight capabilities are locked** (Relationship, Revenue, Delivery, Field Operations, Customer Success, Finance, Intelligence, Platform). A new top-level capability requires evidence from three customers, not one feature request. See Blueprint §0.2 and §5.
 
 ## How we work
 
-- Build one slice at a time. If a capability isn't in the current slice spec, it is out of scope — note it and move on. The vision is the destination, not a build authorization.
-- Work the build steps **in order, one at a time**. After each step: make sure the app runs, commit, then continue. Don't jump ahead.
-- Pause only for **genuinely blocking** decisions — at most **3 blocking decisions + 5 recommendations** per step, then proceed with a clearly stated assumption.
+- **Follow the Blueprint Status Tracker**, not free-form module thinking. Items in tier "Must-have C#2" come before "Should-have"; "Future" items wait. Pick the next `📋` item; update it to `🚧`; ship it; flip to `✅`.
+- Work tasks **one at a time**. After each: make sure the app runs, commit, update the Blueprint + Build Log, then continue.
+- Pause only for **genuinely blocking** decisions — at most **3 blocking decisions + 5 recommendations** per task, then proceed with a clearly stated assumption.
 - Don't over-design unknowns. Assume the architecture is ~80% right and build; let the rest emerge.
 - **Platform discipline test:** for every new abstraction or schema decision, ask "does this work for customer #2 in the vertical, or am I encoding a Vyara quirk?" Vyara-specific things are configured per tenant, never hardcoded.
+- **No new top-level modules.** If a need doesn't fit into one of the eight capabilities, the answer is to extend the capability, not create a new one. See Blueprint §0.2.
 
 ## Foundational audit — run BEFORE building any feature, page, or module
 
@@ -66,13 +98,22 @@ Inngest jobs: `paving-stage-daily-check`, `order-on-quote-won`, `dispatch-on-ord
 
 ## Current step
 
-**Slices 1 + 2 + 2.5 + 3 + 3.5 complete.** Slice 3.5 (Masters & Configuration) shipped six tenant-configurable masters that were previously hardcoded or missing: `tax_rate`, `payment_term`, `price_list` + `price_list_entry` (with `get_active_price()` resolution: segment+region > segment > region > tenant-default), `vendor`, `dealer_tier` (with `color`/`bg_color` replacing the hardcoded TIER_STYLES map), and hierarchical `territory`. Each has an `/admin/*` CRUD page gated to admin|manager. Wiring: quote + manual-order forms auto-fill unit_price from `get_active_price()` with "From DEFAULT_2026 · ₹450" microcopy + a "vs list +5%" delta when overridden; the new-invoice form auto-fills `gst_pct` from the tenant default tax, auto-fills `payment_terms_days` from `firm.default_payment_term_id` (falling back to tenant default), auto-derives `due_date`, and shows an amber "manual" tag on override. Snapshot FKs throughout (`quotation_line.price_list_entry_id`, `sales_order_line.price_list_entry_id`, `invoice.tax_rate_id`, `invoice.payment_term_id`) — informational, ON DELETE SET NULL, set only when saved values still match the master so manual overrides read as "manual" not stale attribution.
+**Slices 1 + 2 + 2.5 + 3 + 3.5 + 4 complete.** Slice 4 (Field Operations — formerly "Field Sales") shipped check-in/out, planned visits with per-leg km, voice + photo AI, manager team view, and claim approval. Steps 1–6 + UX patches all in `main`.
 
-Admin surfaces (admin|manager only — "Settings" sidebar entry): `/admin` · `/admin/taxes` · `/admin/payment-terms` · `/admin/price-lists` · `/admin/price-lists/[id]` · `/admin/vendors` · `/admin/dealer-tiers` · `/admin/territories`.
+**Now in Sprint 1 — Platform foundations for Customer #2.** See `docs/PRODUCT-BLUEPRINT-v3.md` §11 (Status Tracker) for the per-item ledger. Sprint 1 deliverables in priority order:
 
-Next: **Platform-readiness sprint** — tenant onboarding UI, module visibility flags (Principle #11), configurable seed packs, code-prefix config, subdomain routing, runbooks. CSV importers parallel/optional. Then the first real **customer-#2 onboarding attempt** — that test is what proves the platform thesis. Slice 4 (Tenders / Complaints / etc.) follows, driven by whatever the second customer needs.
+- ✅ PLAT-004 — Feature flags (`203239d`)
+- ✅ PLAT-005 — Tenant config schema + code renderer (`56c8dde`)
+- ✅ PLAT-006 — task_type / activity_type masters (`d2c9115`)
+- 🚧 PLAT-007 — Sensitive-column mask helper (in progress)
+- 📋 PLAT-008 — TS types from DB
+- 📋 PLAT-009 — Sentry observability
+- 📋 PLAT-010 — Code-prefix configuration consumers (replace per-table triggers)
+- 📋 PLAT-011 — Tenant lifecycle + subdomain routing
 
-The **customer-#2 onboarding test has not yet been attempted.** Currently estimated at **~2 months** (down from 3–4 post Slice 3 — Slice 3.5 closed most of the master-data debt). 8 weeks becomes honest if the readiness sprint ships and customer #2 accepts entering masters one-by-one via UI instead of bulk CSV. See `docs/customer-2-readiness-audit.md` for the full breakdown.
+After Sprint 1 closes, **Customer #2 onboarding** is the gate. Sprint 2 begins post-Customer-#2 with the queue under "Must-have post-C#2" in §11.
+
+The **customer-#2 onboarding test has not yet been attempted.** Currently estimated at **~2 months** post Sprint 1. The Platform foundations above are what makes 8 weeks honest.
 
 ## Slice 1 schema drift — RESOLVED
 
