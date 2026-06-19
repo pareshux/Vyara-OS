@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-19 (REL-006 shipped — relationship_type_master in place; firm.type CHECK dropped)
+> **Last updated:** 2026-06-19 (FLD-009 shipped — visit_purpose now supports system rows + 16 cross-industry seeds. **All three Must-have C#2 items closed.**)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -751,7 +751,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | FLD-006 | Manager team view + claim approval | Foundation | ✅ | Slice 4 Step 6 |
 | FLD-007 | Per-vehicle claim auto-compute | Foundation | ✅ | Slice 4 Step 3 |
 | FLD-008 | Role-aware UX + manager gap fixes | Foundation | ✅ | `2c57297` |
-| FLD-009 | visit_purpose → field_activity_type (broader vocabulary) | Must-have C#2 | 📋 | — |
+| FLD-009 | visit_purpose → field_activity_type (broader vocabulary) | Must-have C#2 | ✅ | Sprint 2.1c · Migration 0032. visit_purpose now supports system rows (tenant_id NULL); 16 seeds across 7 categories (sales, finance, service, installation, audit, training, other). Existing Vyara tenant rows untouched. **Table not renamed** — conceptual mapping to "field_activity_type" lives in the Blueprint; data model stays `visit_purpose` to avoid the FK column rename ripple. |
 | FLD-010 | Polymorphic subject → data-driven `field_subject_type` master | Must-have post-C#2 | 📋 | — |
 | FLD-011 | Mandatory outcome on activity close | Must-have post-C#2 | 📋 | — |
 | FLD-012 | Visit edit lock with manager override | Must-have post-C#2 | 📋 | — |

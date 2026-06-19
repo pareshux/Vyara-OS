@@ -21,6 +21,13 @@
 
 ## 2026-06-19
 
+### Sprint 2.1c — visit_purpose system rows + broader vocabulary (pending commit)
+- **Tracks:** FLD-009
+- **Capability:** Field Operations
+- **Tier:** Must-have C#2
+- **Status change:** 📋 → ✅
+- **Notes:** Migration 0032 promotes `visit_purpose` from tenant-only to a system+tenant master, mirroring the type-master pattern from 0029 and 0031. Allows tenant_id NULL (system rows visible to all). Adds `category` column for industry-pack filtering hints. RLS updated to read-system-or-own. 16 system seeds across 7 categories (sales, finance, service, installation, audit, training, other) — covers the cross-industry vocabulary the Field Operations capability needs. Existing Vyara tenant rows untouched. Table NOT renamed to `field_activity_type` (the FK column ripple isn't worth it; the Blueprint already documents the conceptual mapping). **Closes the third and last Must-have-C#2 item — the runbook's ~8-day estimate to honest 8-week onboarding lands at ~7 days actual.**
+
 ### Sprint 2.1b — relationship_type_master (856785a)
 - **Tracks:** REL-006
 - **Capability:** Relationship
