@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/app/sidebar'
 import { Topbar } from '@/components/app/topbar'
 import { MobileNav } from '@/components/app/mobile-nav'
+import { pickFeatures } from '@/lib/auth/features'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -15,7 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/login')
   }
 
-  const [{ data: profile }, { count: notificationCount }] = await Promise.all([
+  const [{ data: profile }, { count: notificationCount }, navFeatures] = await Promise.all([
     supabase
       .from('user_profile')
       .select('full_name, role')
@@ -26,6 +27,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('is_read', false),
+    pickFeatures([
+      'enable_field_sales',
+      'enable_inventory',
+      'enable_warehouse',
+      'enable_dispatches',
+      'enable_collections',
+      'enable_finance',
+      'enable_dealer_portal',
+    ]),
   ])
 
   // Role gate (Decision H1) — dealer-role users belong in /dealer-portal/*.
@@ -39,7 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-full min-h-screen">
-      <Sidebar userRole={userRole} />
+      <Sidebar userRole={userRole} features={navFeatures} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar userName={userName} userRole={userRole} notificationCount={notificationCount ?? 0} />
         <main className="flex-1 overflow-auto pb-14 md:pb-0">

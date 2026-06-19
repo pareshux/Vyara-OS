@@ -22,30 +22,52 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const NAV_ITEMS = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Field', href: '/field', icon: MapPin },
-  { label: 'Leads', href: '/leads', icon: UserPlus },
-  { label: 'Projects', href: '/projects', icon: FolderKanban },
-  { label: 'Orders', href: '/orders', icon: Package },
-  { label: 'Inventory', href: '/inventory', icon: Boxes },
-  { label: 'Warehouses', href: '/warehouses', icon: Warehouse },
-  { label: 'Dispatches', href: '/dispatches', icon: Truck },
-  { label: 'Invoices', href: '/invoices', icon: FileText },
-  { label: 'Collections', href: '/collections', icon: Wallet },
-  { label: 'Finance', href: '/finance', icon: TrendingUp },
-  { label: 'Dealers', href: '/dealers', icon: Store },
-  { label: 'Contacts', href: '/contacts', icon: Users },
-  { label: 'Tasks', href: '/tasks', icon: CheckSquare },
+type FeatureKey =
+  | 'enable_field_sales'
+  | 'enable_inventory'
+  | 'enable_warehouse'
+  | 'enable_dispatches'
+  | 'enable_collections'
+  | 'enable_finance'
+  | 'enable_dealer_portal'
+
+const NAV_ITEMS: Array<{
+  label: string
+  href: string
+  icon: typeof LayoutDashboard
+  feature?: FeatureKey
+}> = [
+  { label: 'Dashboard',   href: '/dashboard',   icon: LayoutDashboard },
+  { label: 'Field',       href: '/field',       icon: MapPin,         feature: 'enable_field_sales' },
+  { label: 'Leads',       href: '/leads',       icon: UserPlus },
+  { label: 'Projects',    href: '/projects',    icon: FolderKanban },
+  { label: 'Orders',      href: '/orders',      icon: Package },
+  { label: 'Inventory',   href: '/inventory',   icon: Boxes,          feature: 'enable_inventory' },
+  { label: 'Warehouses',  href: '/warehouses',  icon: Warehouse,      feature: 'enable_warehouse' },
+  { label: 'Dispatches',  href: '/dispatches',  icon: Truck,          feature: 'enable_dispatches' },
+  { label: 'Invoices',    href: '/invoices',    icon: FileText },
+  { label: 'Collections', href: '/collections', icon: Wallet,         feature: 'enable_collections' },
+  { label: 'Finance',     href: '/finance',     icon: TrendingUp,     feature: 'enable_finance' },
+  { label: 'Dealers',     href: '/dealers',     icon: Store,          feature: 'enable_dealer_portal' },
+  { label: 'Contacts',    href: '/contacts',    icon: Users },
+  { label: 'Tasks',       href: '/tasks',       icon: CheckSquare },
 ]
 
 interface SidebarProps {
   userRole?: string
+  features?: Partial<Record<FeatureKey, boolean>>
 }
 
-export function Sidebar({ userRole }: SidebarProps) {
+export function Sidebar({ userRole, features }: SidebarProps) {
   const pathname = usePathname()
   const isAdminish = userRole === 'admin' || userRole === 'manager'
+
+  // Hide items whose feature flag is explicitly false. Absence of the
+  // flag from the prop = "show" (backwards-compat with callers that
+  // don't pass features yet).
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.feature || features?.[item.feature] !== false,
+  )
 
   return (
     <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
@@ -57,7 +79,7 @@ export function Sidebar({ userRole }: SidebarProps) {
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 p-3">
-        {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
+        {visibleItems.map(({ label, href, icon: Icon }) => {
           // Field link is role-aware: admin / manager land on the team
           // dashboard by default (they're not running the personal
           // check-in flow most days). Both pages stay reachable via the
