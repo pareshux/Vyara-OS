@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getFieldSettings } from '@/lib/tenants/settings'
+import { reverseGeocode } from '@/lib/geo/reverse-geocode'
 
 /** ─────────────────────────────────────────────────────────────
  *  Field Attendance — server actions
@@ -259,12 +260,17 @@ export async function checkIn(params: {
 
   if (existing?.check_in_at) return { error: 'Already checked in for today' }
 
+  // Reverse-geocode at check-in. Fails gracefully — label stays null
+  // and UI falls back to coords + Maps deep-link.
+  const geo = await reverseGeocode(params.lat, params.lng)
+
   const payload = {
     status_for_day: 'on_duty' as const,
     vehicle_id: params.vehicle_id,
     check_in_at: now,
     check_in_lat: params.lat,
     check_in_lng: params.lng,
+    check_in_location_label: geo?.label ?? null,
     check_in_odometer_km: Math.round(params.odometer_km),
     check_in_photo_url: params.photo_url ?? null,
   }
@@ -376,12 +382,16 @@ export async function checkOut(params: {
   const { auto_approve_threshold_rupees: threshold } = await getFieldSettings()
   const autoApprove = amount != null && amount <= threshold
 
+  // Reverse-geocode the check-out spot too.
+  const checkOutGeo = await reverseGeocode(params.lat, params.lng)
+
   const { error } = await ctx.supabase
     .from('field_attendance')
     .update({
       check_out_at: now,
       check_out_lat: params.lat,
       check_out_lng: params.lng,
+      check_out_location_label: checkOutGeo?.label ?? null,
       check_out_odometer_km: Math.round(params.odometer_km),
       check_out_photo_url: params.photo_url ?? null,
       rate_applied: rateApplied,

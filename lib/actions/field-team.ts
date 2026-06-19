@@ -63,10 +63,14 @@ export type TeamRepRow = {
   planned_count: number
   last_activity_at: string | null
   /** Latest known coordinates — preferred source is the most recent
-   *  visit's lat/lng, falling back to check-in lat/lng. null if neither. */
+   *  visit's lat/lng, falling back to check-in lat/lng. null if neither.
+   *  `label` is the reverse-geocoded human-readable address (e.g.
+   *  "Bopal Rd, Ahmedabad"); null when geocoding failed or the row
+   *  predates the geocoder. */
   latest_location: {
     lat: number
     lng: number
+    label: string | null
     source: 'check_in' | 'visit'
   } | null
 }
@@ -102,7 +106,8 @@ export async function getTeamSnapshot(date?: string): Promise<TeamSnapshot | { e
     .from('field_attendance')
     .select(`
       user_id, status_for_day, check_in_at, check_in_lat, check_in_lng,
-      check_out_at, total_km, reimbursement_amount, claim_status, updated_at,
+      check_in_location_label, check_out_at, total_km, reimbursement_amount,
+      claim_status, updated_at,
       vehicle:vehicle_id(vehicle_number)
     `)
     .eq('attendance_date', queryDate)
@@ -116,7 +121,7 @@ export async function getTeamSnapshot(date?: string): Promise<TeamSnapshot | { e
   //    latest_location and running_km in-code.
   const { data: todayVisits } = await ctx.supabase
     .from('field_visit')
-    .select('user_id, state, updated_at, started_at, lat, lng, odometer_km_at_arrival')
+    .select('user_id, state, updated_at, started_at, lat, lng, location_label, odometer_km_at_arrival')
     .in('user_id', userIds)
     .gte('started_at', dayStartIso)
     .lte('started_at', dayEndIso)
@@ -126,7 +131,7 @@ export async function getTeamSnapshot(date?: string): Promise<TeamSnapshot | { e
   const totalByUser = new Map<string, number>()
   const inProgressByUser = new Map<string, number>()
   const lastActivityByUser = new Map<string, string>()
-  const latestVisitLocByUser = new Map<string, { lat: number; lng: number }>()
+  const latestVisitLocByUser = new Map<string, { lat: number; lng: number; label: string | null }>()
   const maxVisitOdoByUser = new Map<string, number>()
   for (const v of todayVisits ?? []) {
     const u = v.user_id as string
@@ -138,7 +143,11 @@ export async function getTeamSnapshot(date?: string): Promise<TeamSnapshot | { e
     }
     if (v.lat != null && v.lng != null) {
       // Iteration is in started_at asc order, so the last assignment wins → latest visit.
-      latestVisitLocByUser.set(u, { lat: Number(v.lat), lng: Number(v.lng) })
+      latestVisitLocByUser.set(u, {
+        lat: Number(v.lat),
+        lng: Number(v.lng),
+        label: (v.location_label as string | null) ?? null,
+      })
     }
     if (v.odometer_km_at_arrival != null) {
       const odo = Number(v.odometer_km_at_arrival)
@@ -199,9 +208,19 @@ export async function getTeamSnapshot(date?: string): Promise<TeamSnapshot | { e
     const visitLoc = latestVisitLocByUser.get(u.id)
     let latestLocation: TeamRepRow['latest_location'] = null
     if (visitLoc) {
-      latestLocation = { lat: visitLoc.lat, lng: visitLoc.lng, source: 'visit' }
+      latestLocation = {
+        lat: visitLoc.lat,
+        lng: visitLoc.lng,
+        label: visitLoc.label,
+        source: 'visit',
+      }
     } else if (att?.check_in_lat != null && att?.check_in_lng != null) {
-      latestLocation = { lat: Number(att.check_in_lat), lng: Number(att.check_in_lng), source: 'check_in' }
+      latestLocation = {
+        lat: Number(att.check_in_lat),
+        lng: Number(att.check_in_lng),
+        label: (att.check_in_location_label as string | null) ?? null,
+        source: 'check_in',
+      }
     }
 
     return {

@@ -284,12 +284,15 @@ export default async function TeamPage({
                         href={`https://www.google.com/maps?q=${r.latest_location.lat},${r.latest_location.lng}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[10px] tabular-nums hover:bg-blue-100 transition-colors"
+                        className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[10px] max-w-[180px] hover:bg-blue-100 transition-colors"
                         title={`${r.latest_location.source === 'visit' ? 'Latest visit pin' : 'Check-in spot'} · open Google Maps`}
                       >
-                        <MapPin className="size-2.5" />
-                        {r.latest_location.lat.toFixed(2)}°, {r.latest_location.lng.toFixed(2)}°
-                        <ExternalLink className="size-2.5" />
+                        <MapPin className="size-2.5 shrink-0" />
+                        <span className="truncate">
+                          {r.latest_location.label
+                            ?? `${r.latest_location.lat.toFixed(2)}°, ${r.latest_location.lng.toFixed(2)}°`}
+                        </span>
+                        <ExternalLink className="size-2.5 shrink-0" />
                       </a>
                     )}
                     <Link

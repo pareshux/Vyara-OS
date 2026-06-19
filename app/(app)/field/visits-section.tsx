@@ -124,6 +124,17 @@ export async function VisitsSection({
                     <> · <span className="text-emerald-700 font-medium">{inProgressLegFromCheckpoint} km</span> from previous checkpoint</>
                   )}
                 </p>
+                {(live.location_label || (live.lat != null && live.lng != null)) && (
+                  <a
+                    href={`https://www.google.com/maps?q=${live.lat},${live.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-primary hover:underline mt-1 inline-flex items-center gap-1"
+                  >
+                    <MapPin className="size-3" />
+                    {live.location_label ?? `${live.lat?.toFixed(4)}, ${live.lng?.toFixed(4)}`}
+                  </a>
+                )}
                 {isStale && (
                   <p className="text-[11px] text-amber-800 mt-1.5">
                     This visit has been open for {Math.floor(ageMinutes / 60)}h{' '}

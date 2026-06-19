@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { reverseGeocode } from '@/lib/geo/reverse-geocode'
 
 /** ─────────────────────────────────────────────────────────────
  *  Field Visit lifecycle — server actions
@@ -111,6 +112,9 @@ export type TodayVisitsContext = {
     subject_label: string
     contact_id: string | null
     planned_task_id: string | null
+    lat: number | null
+    lng: number | null
+    location_label: string | null
   }>
   planned: TodayPlanItem[]
   completed: Array<{
@@ -210,6 +214,7 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
       id, started_at, visited_at, odometer_km_at_arrival, duration_minutes, state,
       planned_task_id, project_id, lead_id, firm_id, dealer_id, contact_id,
       notes_text, contact_name_raw, contact_phone_raw, is_interested,
+      lat, lng, location_label,
       visit_purpose:visit_purpose_id(label),
       visit_outcome:visit_outcome_id(label),
       contact:contact_id(name),
@@ -250,6 +255,9 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
         subject_label: subjectLabel,
         contact_id: (v.contact_id as string | null) ?? null,
         planned_task_id: (v.planned_task_id as string | null) ?? null,
+        lat: v.lat != null ? Number(v.lat) : null,
+        lng: v.lng != null ? Number(v.lng) : null,
+        location_label: (v.location_label as string | null) ?? null,
       })
     } else {
       const purposeLabel = Array.isArray(v.visit_purpose) ? v.visit_purpose[0]?.label : (v.visit_purpose as { label?: string } | null)?.label
@@ -511,6 +519,11 @@ export async function startVisit(params: {
     .maybeSingle()
 
   const now = new Date().toISOString()
+  // Reverse-geocode the arrival point so the UI shows "Bopal Rd,
+  // Ahmedabad" rather than coords. Fails gracefully (label stays null
+  // and the UI falls back to the Maps deep-link).
+  const geo = await reverseGeocode(params.lat, params.lng)
+
   const insertRow: Record<string, unknown> = {
     tenant_id: ctx.tenantId,
     attendance_id: att?.id ?? null,
@@ -521,6 +534,7 @@ export async function startVisit(params: {
     odometer_km_at_arrival: Math.round(params.odometer_km_at_arrival),
     lat: params.lat,
     lng: params.lng,
+    location_label: geo?.label ?? null,
     contact_id: contactId,
     planned_task_id: params.planned_task_id ?? null,
     created_by: ctx.userId,
