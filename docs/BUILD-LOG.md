@@ -21,7 +21,7 @@
 
 ## 2026-06-19
 
-### Customer onboarding runbook · draft 1 (pending commit)
+### Customer onboarding runbook · draft 1 (1f22b3b)
 - **Tracks:** ARCH-003 (primary) · added PLAT-022, PLAT-023, PLAT-024, PLAT-025, PLAT-026, PLAT-027, FLD-029, FIN-018, ARCH-006, ARCH-007 (11 gaps surfaced)
 - **Capability:** Cross-cutting (operational doc)
 - **Tier:** Must-have C#2 (ARCH-003) · Should-have for the surfaced items
