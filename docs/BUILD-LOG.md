@@ -21,6 +21,13 @@
 
 ## 2026-06-19
 
+### Sprint 1.4 — Sensitive-column mask helper (pending commit)
+- **Tracks:** PLAT-007
+- **Capability:** Platform
+- **Tier:** Must-have C#2
+- **Status change:** 🚧 → ✅
+- **Notes:** `lib/auth/mask.ts` — `maskRow` / `maskRows` / `isMaskedRole` / `maskedColumnsFor`. Per-table sensitive-column registry mirroring Constitution §7. Shipped without an initial consumer migration: a sweep of `lib/actions/` confirmed no current SELECT returns the listed columns (`base_price`, `discount_pct`, `order_value`) to the client. The helper makes future leaks reviewable as missing call sites; mask.ts docstring documents the audit grep + the usage pattern.
+
 ### Product Blueprint v3 locked + status tracking process introduced
 - **Tracks:** governance
 - **Capability:** Cross-cutting / governance

@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-19
+> **Last updated:** 2026-06-19 (PLAT-007 shipped)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -657,7 +657,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | PLAT-004 | Per-tenant feature flags | Must-have C#2 | ✅ | `203239d` (Sprint 1.1) |
 | PLAT-005 | Tenant settings Zod schema + code-template renderer | Must-have C#2 | ✅ | `56c8dde` (Sprint 1.2) |
 | PLAT-006 | task_type_master + activity_type_master (de-CHECK) | Must-have C#2 | ✅ | `d2c9115` (Sprint 1.3) |
-| PLAT-007 | Sensitive-column mask helper | Must-have C#2 | 🚧 | Sprint 1.4 |
+| PLAT-007 | Sensitive-column mask helper | Must-have C#2 | ✅ | Sprint 1.4 · helper shipped; no current consumer required migration (sensitive columns happen to already be omitted from existing SELECTs) — future consumers wrap returns via `maskRow` / `maskRows`. |
 | PLAT-008 | TS types generated from DB schema | Must-have C#2 | 📋 | Sprint 1.5 |
 | PLAT-009 | Sentry + Inngest observability baseline | Must-have C#2 | 📋 | Sprint 1.6 |
 | PLAT-010 | Code-prefix configuration — wire consumers (replace triggers) | Must-have C#2 | 📋 | Sprint 1.7 |
