@@ -21,6 +21,13 @@
 
 ## 2026-06-19
 
+### Customer onboarding runbook · draft 1 (pending commit)
+- **Tracks:** ARCH-003 (primary) · added PLAT-022, PLAT-023, PLAT-024, PLAT-025, PLAT-026, PLAT-027, FLD-029, FIN-018, ARCH-006, ARCH-007 (11 gaps surfaced)
+- **Capability:** Cross-cutting (operational doc)
+- **Tier:** Must-have C#2 (ARCH-003) · Should-have for the surfaced items
+- **Status change:** 📋 → ✅ (ARCH-003); new items added as 💭 Considered
+- **Notes:** `docs/customer-onboarding-runbook.md` — the operational playbook for onboarding a new tenant end-to-end. 12 phases, ~6–8 week wall-clock estimate, owner + time per phase, gap callouts where tooling is missing. Distinct from the existing `customer-2-readiness-audit.md` (which is a gap analysis — readiness asks *can we*?; runbook answers *how*). The runbook surfaced 11 gaps not yet tracked in the Blueprint; added them as 💭 in §11. The runbook itself revises after every real onboarding via §12 "Revisions". 8-week onboarding remains honest if PLAT-011, REL-006, FLD-009 ship in Sprint 2's first half (~8 dev-days).
+
 ### Sprint 1.7 — Code-prefix configuration consumers · hybrid path · first consumer: quotation (8af733a)
 - **Tracks:** PLAT-010
 - **Capability:** Platform

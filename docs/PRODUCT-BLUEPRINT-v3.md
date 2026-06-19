@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-19 (PLAT-010 shipped — first consumer: quotation. Other 5 entities migrate as touched.)
+> **Last updated:** 2026-06-19 (ARCH-003 runbook shipped + 11 new gap items surfaced and added to Status Tracker as 💭)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -672,6 +672,12 @@ Authoritative item-by-item state. **Updated on every commit.**
 | PLAT-019 | Push notifications | Should-have | 📋 | — |
 | PLAT-020 | Super Admin role + cross-tenant access | Future | 💭 | — |
 | PLAT-021 | Pluggable AI provider abstraction | Future | 💭 | — |
+| PLAT-022 | Tenant admin UI for `tenant.settings` (no SQL needed) | Should-have post-C#2 | 💭 | Surfaced by ARCH-003 §3.1. Cumbersome SQL today. |
+| PLAT-023 | Self-service user invite UI (`/admin/users`) | Should-have post-C#2 | 💭 | Surfaced by ARCH-003 §6. SQL-only today. |
+| PLAT-024 | Per-tenant integration credentials (Tally, AiSensy, AI provider) in `tenant.settings.integrations` | Should-have post-C#2 | 💭 | Surfaced by ARCH-003 §7. Env-only today. |
+| PLAT-025 | CSV importers for masters + initial entities | Should-have post-C#2 | 💭 | Surfaced by ARCH-003 §5. Ad-hoc SQL today; tenant-#5+ will demand. |
+| PLAT-026 | Pipeline / gate editor UI | Should-have post-C#2 | 💭 | Surfaced by ARCH-003 §4.1. SQL-only today. |
+| PLAT-027 | Logo upload + brand-colour tenant settings UI | Nice-have | 💭 | Surfaced by ARCH-003 §2.1. Manual S3 + JSON edit today. |
 
 ### 11.2 Relationship (REL)
 
@@ -765,6 +771,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | FLD-026 | Live AI coaching mid-visit | Future | ❌ | — |
 | FLD-027 | Native mobile apps | Future | ❌ | PWA covers 95% |
 | FLD-028 | Mobile bottom-nav for sales-rep role | Should-have | 📋 | — |
+| FLD-029 | `visit_purpose` / `visit_outcome` admin UI | Should-have post-C#2 | 💭 | Surfaced by ARCH-003 §4.2. Cheap; SQL today. |
 
 ### 11.6 Customer Success (CS)
 
@@ -806,6 +813,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | FIN-015 | Multi-currency | Future | ❌ | — |
 | FIN-016 | Bank reconciliation | Future | 💭 | — |
 | FIN-017 | Payment gateway (Razorpay) | Future | ❌ | — |
+| FIN-018 | AiSensy template registry per tenant | Should-have | 💭 | Surfaced by ARCH-003 §7.2. Template names hardcoded today. |
 
 ### 11.8 Intelligence (INT)
 
@@ -831,9 +839,11 @@ Authoritative item-by-item state. **Updated on every commit.**
 |---|---|---|---|---|
 | ARCH-001 | Lib/ai infrastructure committed | Foundation | ✅ | `e68187e` |
 | ARCH-002 | Inngest event bus + events catalogue | Foundation | ✅ | Slice 2 |
-| ARCH-003 | Customer #2 onboarding runbook | Must-have C#2 | 📋 | Sprint 2 |
+| ARCH-003 | Customer #2 onboarding runbook | Must-have C#2 | ✅ | `docs/customer-onboarding-runbook.md` · draft 1 · sharpens after first real onboarding |
 | ARCH-004 | Tenant lifecycle + subdomain routing | Must-have C#2 | 📋 | Tied to PLAT-011 |
 | ARCH-005 | Industry-pack engine (concrete artefacts) | Future | 💭 | When industry #2 |
+| ARCH-006 | SLA + support agreement template | Should-have | 💭 | Surfaced by ARCH-003 §2.3. No SLA doc exists yet. |
+| ARCH-007 | Training videos / customer-facing docs | Should-have | 💭 | Surfaced by ARCH-003 §6.3. Live sessions only today. |
 
 ---
 
