@@ -13,9 +13,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Play, MapPin, MapPinOff, CheckCircle2 } from 'lucide-react'
+import { Play } from 'lucide-react'
 import { startVisit } from '@/lib/actions/field-visits'
 import { OdometerInput } from './odometer-input'
+import { LocationCaptureChip, type CapturedLocation } from './location-capture-chip'
 
 export function StartPlannedVisitButton({
   taskId,
@@ -33,20 +34,9 @@ export function StartPlannedVisitButton({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [odometer, setOdometer] = useState<string>(lastKnownOdometer != null ? String(lastKnownOdometer) : '')
-  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null)
-  const [geoStatus, setGeoStatus] = useState<'idle' | 'capturing' | 'denied' | 'unavailable' | 'ok'>('idle')
+  const [geo, setGeo] = useState<CapturedLocation | null>(null)
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
-
-  function captureLocation() {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) { setGeoStatus('unavailable'); return }
-    setGeoStatus('capturing')
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGeoStatus('ok') },
-      (e) => { setGeoStatus(e.code === e.PERMISSION_DENIED ? 'denied' : 'unavailable') },
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
-    )
-  }
 
   function submit() {
     setErr(null)
@@ -96,42 +86,7 @@ export function StartPlannedVisitButton({
 
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs">Location</Label>
-            {geoStatus === 'ok' && geo ? (
-              <button
-                type="button"
-                onClick={captureLocation}
-                className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2.5 text-left"
-              >
-                <CheckCircle2 className="size-4 shrink-0" />
-                <span className="flex-1 tabular-nums">{geo.lat.toFixed(4)}°, {geo.lng.toFixed(4)}°</span>
-                <span className="text-[10px] uppercase opacity-70">Refresh</span>
-              </button>
-            ) : geoStatus === 'capturing' ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-lg border border-border px-3 py-2.5">
-                <MapPin className="size-4 animate-pulse" /> Capturing…
-              </div>
-            ) : geoStatus === 'denied' ? (
-              <button
-                type="button"
-                onClick={captureLocation}
-                className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2.5 text-left"
-              >
-                <MapPinOff className="size-4 shrink-0" /> Permission denied — tap to retry
-              </button>
-            ) : geoStatus === 'unavailable' ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-lg border border-border px-3 py-2.5">
-                <MapPinOff className="size-4" /> Location unavailable
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={captureLocation}
-                className="flex items-center gap-2 text-sm rounded-lg border border-border px-3 py-2.5 text-left hover:bg-muted/30"
-              >
-                <MapPin className="size-4 shrink-0 text-muted-foreground" />
-                <span className="flex-1">Use my location <span className="text-[10px] text-muted-foreground italic ml-1">optional</span></span>
-              </button>
-            )}
+            <LocationCaptureChip value={geo} onChange={setGeo} />
           </div>
 
           {err && <p className="text-xs text-destructive">{err}</p>}
