@@ -23,6 +23,13 @@
 
 ## 2026-06-20
 
+### FO-6 — Visit Hub (pending commit)
+- **Tracks:** FLD-014 (✅ Partial)
+- **Capability:** Field Operations
+- **Tier:** Must-have post-C#2
+- **Status change:** 📋 → ✅ Partial
+- **Notes:** `lib/read-models/visit-detail.ts` — the second cross-capability read-model (after `project-progress.ts`). Assembles the field_visit + contact + subject (project/lead/firm/dealer w/ href back) + attachments (FO-2) + expenses (FO-5) + activity timeline + follow-up tasks into one object. New page `/field/visits/[id]` consumes one assembled object — no cross-module reads in the UI. Sections: header card (subject, state, contact, location with Maps deep-link, outcome, notes, quick-actions row), proof gallery, expenses-on-this-visit list, follow-up tasks, activity timeline. Quick actions wired: add photo, attach file, signature, log expense (subject pre-filled). Completed-visit cards on `/field` now `<Link>` into the hub; in-progress card gets an "Open hub" affordance alongside Complete/Expense/Cancel. **Partial** because the FLD-014 spec also calls for "book order from visit" and "log complaint from visit" — both deferred to their owner capabilities (order action exists but no prefilled flow; complaint module CS-001 not yet built). Read-model is ready for both — they slot in by extending the assembler with one query each. Manager team-detail page deep-link wires when FO-7 (Field-Activity Day read-model) ships.
+
 ### FO-5 — Multi-category expense module (82dcba4)
 - **Tracks:** FIN-006 (✅), FIN-007 (✅ Partial), FLD-016 (✅)
 - **Capability:** Finance + Field Operations

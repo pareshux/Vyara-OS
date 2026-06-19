@@ -1,6 +1,7 @@
+import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CalendarClock, MapPin, ClipboardList, History, ThumbsUp, ThumbsDown, Phone } from 'lucide-react'
+import { CalendarClock, MapPin, ClipboardList, History, ThumbsUp, ThumbsDown, Phone, ChevronRight } from 'lucide-react'
 import { getTodayVisitsContext } from '@/lib/actions/field-visits'
 import { PlanOrStartVisitSheet } from './plan-or-start-visit-sheet'
 import { StartPlannedVisitButton } from './start-planned-visit-button'
@@ -125,6 +126,13 @@ export async function VisitsSection({
                 subjectId={live.visit_id}
                 triggerLabel="Expense"
               />
+              <Link
+                href={`/field/visits/${live.visit_id}`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/40"
+              >
+                Open hub
+                <ChevronRight className="size-3" />
+              </Link>
               <CancelVisitButton visitId={live.visit_id} />
             </div>
           </CardContent>
@@ -213,7 +221,11 @@ export async function VisitsSection({
                 const legKm = legKmByVisitId[v.visit_id]
                 const contactDisplay = v.contact_name ?? v.contact_name_raw
                 return (
-                  <div key={v.visit_id} className="rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+                  <Link
+                    key={v.visit_id}
+                    href={`/field/visits/${v.visit_id}`}
+                    className="rounded-lg border border-border bg-muted/20 px-3 py-2.5 hover:bg-muted/40 transition-colors block"
+                  >
                     <div className="flex items-start gap-2">
                       <div className="flex flex-col items-center pt-0.5">
                         <div className="size-1.5 rounded-full bg-emerald-500" />
@@ -270,8 +282,9 @@ export async function VisitsSection({
                           <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{v.notes_text}</p>
                         )}
                       </div>
+                      <ChevronRight className="size-3.5 text-muted-foreground shrink-0 mt-1" />
                     </div>
-                  </div>
+                  </Link>
                 )
               })}
             </div>

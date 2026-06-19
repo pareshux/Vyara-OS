@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-20 (FO-5 multi-category expense module shipped — FIN-006 ✅, FIN-007 ✅ Partial, FLD-016 ✅. Engine, attachment, and approval are all working together)
+> **Last updated:** 2026-06-20 (FO-6 Visit Hub shipped — `/field/visits/[id]` with the cross-capability assembler; FLD-014 ✅ Partial. Book-order-from-visit and complaint-from-visit deferred to their owners)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -756,7 +756,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | FLD-011 | Mandatory outcome on activity close | Must-have post-C#2 | 📋 | — |
 | FLD-012 | Visit edit lock with manager override | Must-have post-C#2 | 📋 | — |
 | FLD-013 | AI activity prep brief | Should-have | 📋 | First copilot move |
-| FLD-014 | Visit Hub (book order / log expense / log complaint from visit) | Must-have post-C#2 | 📋 | — |
+| FLD-014 | Visit Hub (book order / log expense / log complaint from visit) | Must-have post-C#2 | ✅ Partial | FO-6 · `/field/visits/[id]` page + `lib/read-models/visit-detail.ts` assembler (cross-capability reads: field_visit + contact + subject + attachments + expenses + activity + tasks). UI sections: header (subject, contact, state, location), proof gallery, expenses (FO-5), follow-up tasks, activity timeline. Quick actions wired: add photo, attach file, signature, log expense. Completed-visit cards on `/field` deep-link in. **Deferred:** book order from visit (needs the order-create-with-prefill flow), log complaint (CS-001 not built yet). Both unlock once their owners ship — the read-model is ready for them. |
 | FLD-015 | Sales Day / Field-Activity Day read-model | Must-have post-C#2 | 📋 | — |
 | FLD-016 | Multi-category Expense consumer surface | Should-have | ✅ | FO-5 · `<LogExpenseSheet>` wired into `/field` (in-progress visit card). End-of-day catchall lives at `/expenses`. |
 | FLD-017 | Attention Centre v1 surfacing field signals | Should-have | 📋 | Built by INT-004 |
