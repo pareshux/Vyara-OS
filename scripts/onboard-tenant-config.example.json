@@ -1,0 +1,42 @@
+{
+  "tenant": {
+    "name": "Nitco Tiles Limited",
+    "slug": "nitco",
+    "plan": "pilot",
+    "settings": {
+      "codes": {
+        "quotation":   "NT-QT-{yyyy}-{nnnn}",
+        "sales_order": "NT-SO-{yyyy}-{nnnn}",
+        "invoice":     "NT-INV-{yyyy}-{nnnn}",
+        "dispatch":    "NT-DC-{yyyy}-{nnnn}",
+        "lead":        "NT-LD-{yyyy}-{nnnn}",
+        "dealer":      "NT-DLR-{nnnn}"
+      },
+      "field": {
+        "auto_approve_threshold_rupees": 500,
+        "working_hours": {
+          "start_ist": 10,
+          "end_ist":   18
+        }
+      }
+    }
+  },
+  "admin": {
+    "email": "admin@nitco.example",
+    "password": "CHANGE-ME-strong-pw-123",
+    "full_name": "Mr Mehta",
+    "phone": "+91-9876543210"
+  },
+  "features": {
+    "enable_field_sales":   true,
+    "enable_dealer_portal": true,
+    "enable_collections":   true,
+    "enable_tally_sync":    true,
+    "enable_ai_surfaces":   true,
+    "enable_inventory":     true,
+    "enable_warehouse":     true,
+    "enable_dispatches":    true,
+    "enable_finance":       true,
+    "enable_daily_digest":  true
+  }
+}

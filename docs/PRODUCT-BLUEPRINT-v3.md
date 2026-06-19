@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-19 (ARCH-003 runbook shipped + 11 new gap items surfaced and added to Status Tracker as 💭)
+> **Last updated:** 2026-06-19 (PLAT-011 partial · ARCH-004 partial — tenant provisioning script shipped; subdomain middleware deferred)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -661,7 +661,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | PLAT-008 | TS types generated from DB schema | Must-have C#2 | ✅ | `fd44182` (Sprint 1.5) · `database.ts` generated + browser client typed. Server client + `db:types` npm script deferred (server.ts and package.json have outstanding WIP; will land in a follow-up commit alongside that work). |
 | PLAT-009 | Sentry + Inngest observability baseline | Must-have C#2 | ✅ | `6e41977` (Sprint 1.6) · `lib/observability/` chokepoint shipped (`captureError`, `captureMessage`, `withCapture`, PII `scrub`). AI extract wired (both image + text paths). Today's transport = structured stderr; Sentry SDK swap is a single-file edit documented in `lib/observability/README.md`. SDK install + `sentry.*.config.ts` + Inngest onFailure wiring deferred (waits for `package.json` WIP). |
 | PLAT-010 | Code-prefix configuration — wire consumers (replace triggers) | Must-have C#2 | ✅ | `8af733a` (Sprint 1.7) · hybrid path: RPC `next_code_sequence(kind)` + `lib/codes/next-code.ts` helper. Triggers stay as safety net. Wired into `createQuotation` (quotation_number now comes from `tenant.settings.codes.quotation` template). Other 5 entities (sales_order, invoice, dispatch, dealer, lead) migrate opportunistically as their actions are touched. |
-| PLAT-011 | Tenant lifecycle (create + seed) + subdomain routing | Must-have C#2 | 📋 | Sprint 2 |
+| PLAT-011 | Tenant lifecycle (create + seed) + subdomain routing | Must-have C#2 | ✅ Partial | Provisioning CLI shipped (Sprint 2.1a): `scripts/onboard-tenant.ts`. Idempotent on slug, JSON config, Zod-validated, creates tenant + features + admin user. Subdomain middleware deferred (UX improvement; not strictly blocking — JWT already carries tenant_id). |
 | PLAT-012 | Notification transport (in-app + WhatsApp + email) | Must-have post-C#2 | 📋 | — |
 | PLAT-013 | Attachment framework | Must-have post-C#2 | 📋 | — |
 | PLAT-014 | Generic Approval engine | Must-have post-C#2 | 📋 | — |
@@ -840,7 +840,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | ARCH-001 | Lib/ai infrastructure committed | Foundation | ✅ | `e68187e` |
 | ARCH-002 | Inngest event bus + events catalogue | Foundation | ✅ | Slice 2 |
 | ARCH-003 | Customer #2 onboarding runbook | Must-have C#2 | ✅ | `docs/customer-onboarding-runbook.md` · draft 1 · sharpens after first real onboarding |
-| ARCH-004 | Tenant lifecycle + subdomain routing | Must-have C#2 | 📋 | Tied to PLAT-011 |
+| ARCH-004 | Tenant lifecycle + subdomain routing | Must-have C#2 | ✅ Partial | Tracks PLAT-011 (same scope). Tenant lifecycle CLI shipped; subdomain routing deferred. |
 | ARCH-005 | Industry-pack engine (concrete artefacts) | Future | 💭 | When industry #2 |
 | ARCH-006 | SLA + support agreement template | Should-have | 💭 | Surfaced by ARCH-003 §2.3. No SLA doc exists yet. |
 | ARCH-007 | Training videos / customer-facing docs | Should-have | 💭 | Surfaced by ARCH-003 §6.3. Live sessions only today. |

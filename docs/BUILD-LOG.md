@@ -21,6 +21,13 @@
 
 ## 2026-06-19
 
+### Sprint 2.1a — Tenant provisioning CLI (pending commit)
+- **Tracks:** PLAT-011, ARCH-004 (both partial)
+- **Capability:** Platform
+- **Tier:** Must-have C#2
+- **Status change:** 📋 → ✅ Partial
+- **Notes:** `scripts/onboard-tenant.ts` — Node CLI that replaces the manual SQL block in the onboarding runbook §3. Reads a JSON config (Zod-validated), provisions tenant row, UPSERTS 10 tenant_feature flags, creates auth admin user via service-role API (`auth.admin.createUser`), UPSERTS user_profile. Idempotent on tenant slug — safe to re-run after fixing a typo. Includes `scripts/onboard-tenant-config.example.json` template + `scripts/README.md` operational doc. `.gitignore` belt-and-braces: `scripts/*-config.*.json` excluded with negation for the example template so real configs (which contain admin passwords) can't be accidentally committed. **Deferred:** subdomain middleware (UX nicety, not blocking — JWT already carries tenant_id), tenant admin UI in `/admin` (Blueprint PLAT-022). Both deferrals documented in PLAT-011 row.
+
 ### Customer onboarding runbook · draft 1 (1f22b3b)
 - **Tracks:** ARCH-003 (primary) · added PLAT-022, PLAT-023, PLAT-024, PLAT-025, PLAT-026, PLAT-027, FLD-029, FIN-018, ARCH-006, ARCH-007 (11 gaps surfaced)
 - **Capability:** Cross-cutting (operational doc)

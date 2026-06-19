@@ -46,3 +46,9 @@ supabase/.temp/
 
 # scratch
 /tmp/
+
+# real tenant configs may contain admin passwords — never commit
+# (the *.example.json template stays tracked). Belt-and-braces:
+# README recommends putting real configs outside the repo (e.g. /tmp/).
+scripts/*-config.*.json
+!scripts/*-config.example.json
