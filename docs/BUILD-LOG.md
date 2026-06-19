@@ -23,7 +23,7 @@
 
 ## 2026-06-20
 
-### FO-6 — Visit Hub (pending commit)
+### FO-6 — Visit Hub (82a06fc)
 - **Tracks:** FLD-014 (✅ Partial)
 - **Capability:** Field Operations
 - **Tier:** Must-have post-C#2
