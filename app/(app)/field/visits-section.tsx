@@ -113,7 +113,11 @@ export async function VisitsSection({
               </Badge>
             </div>
             <div className="flex gap-2">
-              <CompleteVisitButton visitId={live.visit_id} initialContactId={live.contact_id} />
+              <CompleteVisitButton
+                visitId={live.visit_id}
+                initialContactId={live.contact_id}
+                tenantId={tenantId}
+              />
               <CancelVisitButton visitId={live.visit_id} />
             </div>
           </CardContent>

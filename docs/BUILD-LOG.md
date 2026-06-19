@@ -23,6 +23,13 @@
 
 ## 2026-06-20
 
+### FO-3 — Visit completion: photos + documents + signature (pending commit)
+- **Tracks:** PLAT-013 (consumer wiring)
+- **Capability:** Field Operations
+- **Tier:** part of Field Operations vertical (Sprint 2.2)
+- **Status change:** PLAT-013 consumer "first wire" satisfied
+- **Notes:** `app/(app)/field/complete-visit-button.tsx` wires the FO-2 primitives — adds a "Proof" section with 3 capture surfaces: photo (mobile camera default), document (PDF/image picker), signature (canvas dialog with `signerName` pre-filled from the contact). Uploads happen eagerly so a heavy photo doesn't block submit. `visits-section.tsx` threads `tenantId` through to the button (already had it at the page level). Attachments persist whether the dialog is submitted or just closed (rep can capture proof, walk to vehicle, come back, submit). What's deliberately NOT in this commit: rendering attachments on the manager's `/field/team/[userId]` cards — that needs a single-query rollup to avoid N+1; it lands with FLD-014 (Visit Hub / Visit Detail page). Cancelled visits leave orphan attachments today (visible to nobody; cleanup job uses the `attachment_tenant_kind_idx` index when built).
+
 ### FO-2 — Attachment framework (d114708)
 - **Tracks:** PLAT-013
 - **Capability:** Platform (substrate for every capability)

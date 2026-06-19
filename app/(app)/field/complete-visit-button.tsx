@@ -21,19 +21,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { CheckCircle2, ThumbsUp, ThumbsDown, Sparkles } from 'lucide-react'
+import { CheckCircle2, ThumbsUp, ThumbsDown, Sparkles, Camera } from 'lucide-react'
 import { completeVisit, listVisitMasters } from '@/lib/actions/field-visits'
 import { extractVoiceVisitNote } from '@/lib/actions/voice-visit-note'
 import { VoiceCapture } from './voice-capture'
+import { AttachmentUploadButton } from '@/components/attachment/upload-button'
+import { AttachmentList } from '@/components/attachment/list'
+import { SignaturePad } from '@/components/attachment/signature-pad'
 
 const NONE_VALUE = '__none__'
 
 export function CompleteVisitButton({
   visitId,
   initialContactId,
+  tenantId,
 }: {
   visitId: string
   initialContactId: string | null
+  tenantId: string
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -46,6 +51,10 @@ export function CompleteVisitButton({
   const [aiPrefilled, setAiPrefilled] = useState(false)
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
+  // Bumped after every attachment upload / delete so the in-dialog
+  // list refetches. Cheap because list pulls only this visit's rows.
+  const [attachmentKey, setAttachmentKey] = useState(0)
+  const bumpAttachments = () => setAttachmentKey((k) => k + 1)
 
   async function handleVoiceTranscript(transcript: string) {
     const r = await extractVoiceVisitNote(transcript)
@@ -143,9 +152,56 @@ export function CompleteVisitButton({
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Topic, next steps, anything the team should know…"
             />
-            <p className="text-[10px] text-muted-foreground italic">
-              Voice notes + AI structured-fill arrive in Step 5.
-            </p>
+          </div>
+
+          {/* ── Proof: photos + document + signature ──────────────
+              Uploads attach to the visit row eagerly (so a heavy
+              photo doesn't stall the submit). Even if the rep
+              cancels the dialog without submitting, the visit row
+              still exists in state='in_progress' until they either
+              complete or cancel the visit itself. */}
+          <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Camera className="size-3.5" /> Proof
+                <span className="text-muted-foreground font-normal">— optional but recommended</span>
+              </Label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <AttachmentUploadButton
+                tenantId={tenantId}
+                entityType="field_visit"
+                entityId={visitId}
+                kind="photo"
+                label="Add photo"
+                size="sm"
+                onUploaded={bumpAttachments}
+              />
+              <AttachmentUploadButton
+                tenantId={tenantId}
+                entityType="field_visit"
+                entityId={visitId}
+                kind="document"
+                label="Attach file"
+                size="sm"
+                onUploaded={bumpAttachments}
+              />
+              <SignaturePad
+                tenantId={tenantId}
+                entityType="field_visit"
+                entityId={visitId}
+                signerName={contactName || undefined}
+                triggerLabel="Signature"
+                size="sm"
+                onSaved={bumpAttachments}
+              />
+            </div>
+            <AttachmentList
+              entityType="field_visit"
+              entityId={visitId}
+              refreshKey={attachmentKey}
+              emptyLabel={null}
+            />
           </div>
 
           {/* Interested chips */}

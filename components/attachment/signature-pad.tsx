@@ -36,6 +36,7 @@ export function SignaturePad({
   // Render this label on the trigger button.
   triggerLabel = 'Capture signature',
   variant = 'outline',
+  size = 'default',
   onSaved,
 }: {
   tenantId: string
@@ -44,6 +45,7 @@ export function SignaturePad({
   signerName?: string
   triggerLabel?: string
   variant?: React.ComponentProps<typeof Button>['variant']
+  size?: React.ComponentProps<typeof Button>['size']
   onSaved?: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -181,7 +183,7 @@ export function SignaturePad({
 
   return (
     <>
-      <Button type="button" variant={variant} onClick={() => setOpen(true)}>
+      <Button type="button" variant={variant} size={size} onClick={() => setOpen(true)}>
         <PenLine className="size-4 mr-1.5" />
         {triggerLabel}
       </Button>
