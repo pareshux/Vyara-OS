@@ -23,7 +23,7 @@
 
 ## 2026-06-20
 
-### FO-2 — Attachment framework (pending commit)
+### FO-2 — Attachment framework (d114708)
 - **Tracks:** PLAT-013
 - **Capability:** Platform (substrate for every capability)
 - **Tier:** Must-have post-C#2 (lifted into Sprint 2.2 because FO-3 needs it)
