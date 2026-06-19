@@ -21,7 +21,7 @@
 
 ## 2026-06-19
 
-### Sprint 1.4 — Sensitive-column mask helper (pending commit)
+### Sprint 1.4 — Sensitive-column mask helper (b155898)
 - **Tracks:** PLAT-007
 - **Capability:** Platform
 - **Tier:** Must-have C#2
