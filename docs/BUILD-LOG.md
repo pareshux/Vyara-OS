@@ -23,6 +23,13 @@
 
 ## 2026-06-20
 
+### FO-7 — Field-Activity Day read-model (pending commit)
+- **Tracks:** FLD-015
+- **Capability:** Field Operations
+- **Tier:** Must-have post-C#2
+- **Status change:** 📋 → ✅
+- **Notes:** Third cross-capability read-model — `lib/read-models/field-day.ts` after `project-progress.ts` and `visit-detail.ts`. Assembles one rep + one date: attendance row, visit counts (completed + planned-open), distance, on-duty duration (computed from check-in/out), vehicle claim amount, expense rollup (total + pending count), and the expense line items themselves. `<FieldDayKpiStrip>` is the one shared component that renders the four KPI cards on both `/field` (the rep's own page) and `/field/team/[userId]` (the manager drill-down). Team-detail page also gains the expense list below the visit list — expense rows with `subject_type='field_visit'` deep-link into the Visit Hub. Rep `/field` shows the strip when checked-in OR checked-out (not on State 1/2/3 since there's no day yet). Why a read-model and not direct queries on each page: per Principle #0, the day's "story" needs to read the same regardless of which surface asks; one assembler keeps the shape stable as new pieces (FO-8 prep-brief stats? FLD-019 fraud signals?) get added — they slot in by extending the read-model. Visit counts use `count: 'exact', head: true` to avoid pulling rows; expense pull is bounded by `(user_id, expense_date)` so it stays cheap.
+
 ### FO-6 — Visit Hub (82a06fc)
 - **Tracks:** FLD-014 (✅ Partial)
 - **Capability:** Field Operations

@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { getRepDayDetail } from '@/lib/actions/field-team'
 import { ApproveClaimButton, RejectClaimButton } from '../claim-actions'
+import { FieldDayKpiStrip } from '../../field-day-kpis'
+import { getFieldDay } from '@/lib/read-models/field-day'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,6 +107,9 @@ export default async function RepDayPage({
     ? CLAIM_TINT[attendance.claim_status]
     : ''
 
+  // FO-7 / FLD-015 — same KPI strip the rep sees on their own /field.
+  const fieldDay = await getFieldDay(userId, date)
+
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-3xl">
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -138,6 +143,9 @@ export default async function RepDayPage({
           </button>
         </form>
       </div>
+
+      {/* Day KPI strip — visits, distance, on-duty, expenses. */}
+      {fieldDay && <FieldDayKpiStrip kpis={fieldDay.kpis} />}
 
       {/* ── Attendance summary ───────────────────────────────── */}
       {!attendance ? (
@@ -399,6 +407,42 @@ export default async function RepDayPage({
           )}
         </CardContent>
       </Card>
+
+      {/* ── Expenses logged today ────────────────────────────── */}
+      {fieldDay && fieldDay.expenses.length > 0 && (
+        <Card>
+          <CardContent className="py-4 flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold">Expenses logged</p>
+              <p className="text-xs font-medium tabular-nums">
+                ₹{fieldDay.kpis.expense_total.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <ul className="flex flex-col divide-y">
+              {fieldDay.expenses.map((e) => (
+                <li key={e.id} className="flex items-start gap-2 py-2">
+                  <FileText className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{e.category_label}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
+                      {e.status}
+                      {e.subject_type === 'field_visit' && e.subject_id && (
+                        <> · <Link href={`/field/visits/${e.subject_id}`} className="text-primary hover:underline">on visit</Link></>
+                      )}
+                    </p>
+                    {e.notes && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{e.notes}</p>
+                    )}
+                  </div>
+                  <p className="text-sm font-semibold tabular-nums shrink-0">
+                    ₹{e.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <p className="text-[10px] text-muted-foreground italic">
         Map view (route plotted from check-in + visit pins + check-out) deferred — needs a map provider integration.

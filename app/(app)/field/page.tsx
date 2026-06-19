@@ -10,6 +10,8 @@ import { DayStatusPicker } from './day-status-picker'
 import { ClaimSummary } from './claim-summary'
 import { VisitsSection } from './visits-section'
 import { EndDayButton } from './end-day-button'
+import { FieldDayKpiStrip } from './field-day-kpis'
+import { getFieldDay } from '@/lib/read-models/field-day'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,6 +87,9 @@ export default async function FieldPage() {
   const checkedIn = !!attendance?.check_in_at
   const checkedOut = !!attendance?.check_out_at
   const dayStatusLabel = attendance ? STATUS_LABELS[attendance.status_for_day] : null
+
+  // FO-7 / FLD-015 — day rollup KPIs. Cheap: 3 counts + a sum.
+  const fieldDay = await getFieldDay(user.id, date)
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-2xl">
@@ -165,6 +170,9 @@ export default async function FieldPage() {
             )}
           </div>
 
+          {/* Day KPI strip — visits, distance, on duty, expenses. */}
+          {fieldDay && <FieldDayKpiStrip kpis={fieldDay.kpis} />}
+
           {/* Plan + visits — the hero now. */}
           <VisitsSection checkInOdometerKm={attendance.check_in_odometer_km} tenantId={tenantId} />
 
@@ -186,6 +194,7 @@ export default async function FieldPage() {
       {/* ── State 5: checked out — day done ──────────────────── */}
       {attendance && checkedOut && (
         <>
+          {fieldDay && <FieldDayKpiStrip kpis={fieldDay.kpis} />}
           <ClaimSummary attendance={attendance} autoApproveThresholdRupees={autoApproveThresholdRupees} />
           <VisitsSection checkInOdometerKm={attendance.check_in_odometer_km} tenantId={tenantId} readOnly />
         </>
