@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-19 (PLAT-011 partial · ARCH-004 partial — tenant provisioning script shipped; subdomain middleware deferred)
+> **Last updated:** 2026-06-19 (REL-006 shipped — relationship_type_master in place; firm.type CHECK dropped)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -688,7 +688,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | REL-003 | Dealer + dealer-portal + dealer-orders | Foundation | ✅ | Slice 3 |
 | REL-004 | Vendor master | Foundation | ✅ | Slice 3.5 |
 | REL-005 | Business-card OCR | Foundation | ✅ | `d28302b`, `e68187e` |
-| REL-006 | firm.type → relationship_type_master (broader vocabulary) | Must-have C#2 | 📋 | — |
+| REL-006 | firm.type → relationship_type_master (broader vocabulary) | Must-have C#2 | ✅ | Sprint 2.1b · Migration 0031 — new master with 12 system rows (7 existing + customer/consultant/distributor/partner/vendor). firm.relationship_type_id FK backfilled from text match. CHECK dropped. Sync trigger keeps firm.type TEXT and FK in lockstep so existing call sites keep working. Tenants add custom types via INSERT — no migration needed. |
 | REL-007 | Lead state model (lead → prospect → customer → inactive) | Must-have post-C#2 | 📋 | — |
 | REL-008 | Duplicate detection on phone / GSTIN | Must-have post-C#2 | 📋 | — |
 | REL-009 | Customer 360 read-model | Should-have | 📋 | — |

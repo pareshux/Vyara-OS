@@ -21,6 +21,13 @@
 
 ## 2026-06-19
 
+### Sprint 2.1b — relationship_type_master (pending commit)
+- **Tracks:** REL-006
+- **Capability:** Relationship
+- **Tier:** Must-have C#2
+- **Status change:** 📋 → ✅
+- **Notes:** Migration 0031 promotes `firm.type` from CHECK enum to data-driven master, mirroring the task_type_master / activity_type_master pattern from 0029. Seeds 12 system rows in 5 categories (specifier / buyer / channel / supplier / other). `customer`, `consultant`, `distributor`, `partner`, `vendor` are new — extend the relationship spine for cross-industry tenants without further migrations. firm.type TEXT remains for backwards-compat; sync trigger keeps both columns in lockstep. Existing call sites that write `{ type: 'architect', ... }` work unchanged; unknown types now RAISE with a clearer message than the dropped CHECK ever did.
+
 ### Sprint 2.1a — Tenant provisioning CLI (ae50ac1)
 - **Tracks:** PLAT-011, ARCH-004 (both partial)
 - **Capability:** Platform
