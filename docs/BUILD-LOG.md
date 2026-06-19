@@ -21,7 +21,7 @@
 
 ## 2026-06-19
 
-### Sprint 1.7 — Code-prefix configuration consumers · hybrid path · first consumer: quotation (pending commit)
+### Sprint 1.7 — Code-prefix configuration consumers · hybrid path · first consumer: quotation (8af733a)
 - **Tracks:** PLAT-010
 - **Capability:** Platform
 - **Tier:** Must-have C#2
