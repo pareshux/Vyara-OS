@@ -21,7 +21,7 @@
 
 ## 2026-06-19
 
-### Sprint 2.1a — Tenant provisioning CLI (pending commit)
+### Sprint 2.1a — Tenant provisioning CLI (ae50ac1)
 - **Tracks:** PLAT-011, ARCH-004 (both partial)
 - **Capability:** Platform
 - **Tier:** Must-have C#2
