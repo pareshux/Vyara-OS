@@ -21,7 +21,7 @@
 
 ## 2026-06-19
 
-### Sprint 2.1b — relationship_type_master (pending commit)
+### Sprint 2.1b — relationship_type_master (856785a)
 - **Tracks:** REL-006
 - **Capability:** Relationship
 - **Tier:** Must-have C#2
