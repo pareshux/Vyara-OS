@@ -30,7 +30,7 @@
 - **3 new cross-capability read-models** (after Slice 2's project-progress): visit-detail, field-day. The pattern holds.
 - **Working examples in `main` ready for Vyara demo.** Sprint 2.3 picks up by either (a) extending Field Ops further (FLD-019 fraud detection, mobile bottom-nav) OR (b) starting Customer Success / CS-001 complaints so the Visit Hub gets its "log complaint from visit" affordance.
 
-### FO-8 — AI visit prep brief (pending commit)
+### FO-8 — AI visit prep brief (93d9ccc)
 - **Tracks:** FLD-013 (✅), INT-008 (✅)
 - **Capability:** Field Operations + Intelligence
 - **Tier:** Should-have
