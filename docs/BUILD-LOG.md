@@ -21,6 +21,13 @@
 
 ## 2026-06-19
 
+### Sprint 1.7 — Code-prefix configuration consumers · hybrid path · first consumer: quotation (pending commit)
+- **Tracks:** PLAT-010
+- **Capability:** Platform
+- **Tier:** Must-have C#2
+- **Status change:** 🚧 → ✅
+- **Notes:** Migration 0030 adds `next_code_sequence(p_kind TEXT)` RPC (whitelist of 7 known kinds; SECURITY DEFINER; GRANT to authenticated). `lib/codes/next-code.ts` combines the RPC with the tenant template (PLAT-005) + renderer to produce the next code string. Existing per-table triggers stay as safety net — actions that don't migrate keep getting the Vyara default. First consumer: `createQuotation` — `quotation_number` now comes from `tenant.settings.codes.quotation` (default `VT-QT-{yyyy}-{nnnn}`; Customer #2 can override). Other 5 entities migrate opportunistically. `lib/types/database.ts` doesn't yet know about the new RPC — documented cast in `next-code.ts` removes itself on next types regen (PLAT-008 follow-up). Per-tenant sequence isolation deferred to Sprint 2 (today sequences are global — fine for one tenant; honestly noted).
+
 ### Sprint 1.6 — Observability capture chokepoint + AI wiring (6e41977)
 - **Tracks:** PLAT-009
 - **Capability:** Platform
