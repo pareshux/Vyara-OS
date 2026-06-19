@@ -23,6 +23,13 @@
 
 ## 2026-06-20
 
+### FO-2 — Attachment framework (pending commit)
+- **Tracks:** PLAT-013
+- **Capability:** Platform (substrate for every capability)
+- **Tier:** Must-have post-C#2 (lifted into Sprint 2.2 because FO-3 needs it)
+- **Status change:** 📋 → ✅
+- **Notes:** Migration 0033 + `lib/actions/attachments.ts` + 3 reusable UI primitives (`upload-button`, `list`, `signature-pad`). Polymorphic `attachment` table — `(entity_type TEXT, entity_id UUID, kind)` plus storage_path / mime_type / size_bytes / title / notes / metadata. 5 kinds (photo/document/voice_note/signature/receipt). Bucket reused: `ai-uploads` with path prefix `<tenant_id>/attachment/<entity_type>/yyyy/mm/<ts>_<safename>`. RLS = tenant isolation only; per-entity readability lives in app-layer `canAccessParent` (Option C — admin/manager always; `field_visit` ⇒ owner-or-admin; `sample_request` ⇒ any same-tenant user). Three indexes: `(entity_type, entity_id, created_at DESC)` hot path, `(created_by, created_at DESC)` for "my recent uploads", `(tenant_id, kind, created_at DESC)` for storage cleanup. `SignaturePad` is canvas-based PNG capture; `AttachmentUploadButton` handles camera/file picker per kind; `AttachmentList` renders images as a thumb grid and other kinds as a row list with signed-URL open. Old TEXT[] `photo_urls` columns stay one slice for backwards-compat — new consumers (FO-3 onwards) write to attachment. `entity_type` whitelist gates known consumers (`field_visit` / `expense` / `complaint` / `dispatch` / `sample_request`); adding a new type = add a row to the whitelist + define the readability rule.
+
 ### Sprint 2.2 (Field Operations deep-build) — START
 - **Strategy:** pick one capability and ship every realistic edge case before moving on. Field Operations chosen — most demo-able, forces the platform pieces (attachments, approval engine, expense module) into existence as their first consumer, becomes the customer-facing demo for C#2.
 - **8 items planned, ~6 weeks:** FO-1 sidebar grouping (cosmetic) → FO-2 attachment framework (PLAT-013) → FO-3 visit photos/docs/signature → FO-4 generic approval engine (PLAT-014) → FO-5 multi-category expense module (FIN-006) → FO-6 Visit Hub wiring (FLD-014) → FO-7 Field-Activity Day read-model (FLD-015) → FO-8 AI prep brief (FLD-013).
