@@ -21,6 +21,13 @@
 
 ## 2026-06-19
 
+### Sprint 1.5 — TS types from DB schema (browser client typed; server + npm script deferred)
+- **Tracks:** PLAT-008
+- **Capability:** Platform
+- **Tier:** Must-have C#2
+- **Status change:** 🚧 → ✅
+- **Notes:** `lib/types/database.ts` generated from `supabase gen types typescript --linked` — 5,874 LOC of typed schema. Browser client (`lib/supabase/client.ts`) wired with `createBrowserClient<Database>`. README documents regeneration command. **Deferred:** server.ts wiring (file has outstanding non-blueprint WIP — try/catch wrap around `cookieStore.set`); package.json `db:types` script (file has outstanding WIP). Both will land in a follow-up commit alongside that work. Schema drift will now surface as TS errors in the browser client; same once server client is wired.
+
 ### Sprint 1.4 — Sensitive-column mask helper (b155898)
 - **Tracks:** PLAT-007
 - **Capability:** Platform
