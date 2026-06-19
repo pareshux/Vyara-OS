@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { getFieldSettings } from '@/lib/tenants/settings'
 
 /** ─────────────────────────────────────────────────────────────
  *  Field Attendance — server actions
@@ -12,9 +13,11 @@ import { createClient } from '@/lib/supabase/server'
  *
  *  Date semantics: "today" is computed in Asia/Kolkata so a rep
  *  checking in at 11pm local time gets the right day's row.
+ *
+ *  Tenant settings (auto_approve_threshold_rupees, working_hours,
+ *  geofence_radius_m, …) come from the typed helper in
+ *  lib/tenants/settings.ts — schema enforced + cached per render.
  *  ───────────────────────────────────────────────────────────── */
-
-const DEFAULT_AUTO_APPROVE_THRESHOLD = 500
 
 function todayInIST(): string {
   // sv-SE locale formats as YYYY-MM-DD.
@@ -84,15 +87,9 @@ export async function getTodayContext(): Promise<TodayContext | { error: string 
 
   const date = todayInIST()
 
-  // Tenant settings — read auto-approve threshold (default 500).
-  const { data: tenantRow } = await ctx.supabase
-    .from('tenant')
-    .select('settings')
-    .eq('id', ctx.tenantId)
-    .single()
-  const settings = (tenantRow?.settings ?? {}) as Record<string, unknown>
-  const fieldSettings = (settings.field ?? {}) as Record<string, unknown>
-  const threshold = Number(fieldSettings.auto_approve_threshold_rupees ?? DEFAULT_AUTO_APPROVE_THRESHOLD)
+  // Tenant settings — schema-validated, cached per render.
+  const fieldSettings = await getFieldSettings()
+  const threshold = fieldSettings.auto_approve_threshold_rupees
 
   // Last known odometer — for pre-filling the check-in screen across days.
   // We look at the rep's most recent attendance row (today's if it exists,
@@ -375,15 +372,8 @@ export async function checkOut(params: {
     ? Math.round(rateApplied * totalKm * 100) / 100
     : null
 
-  // Auto-approve threshold (tenant setting).
-  const { data: tenantRow } = await ctx.supabase
-    .from('tenant')
-    .select('settings')
-    .eq('id', ctx.tenantId)
-    .single()
-  const settings = (tenantRow?.settings ?? {}) as Record<string, unknown>
-  const fieldSettings = (settings.field ?? {}) as Record<string, unknown>
-  const threshold = Number(fieldSettings.auto_approve_threshold_rupees ?? DEFAULT_AUTO_APPROVE_THRESHOLD)
+  // Auto-approve threshold from tenant settings (typed + cached).
+  const { auto_approve_threshold_rupees: threshold } = await getFieldSettings()
   const autoApprove = amount != null && amount <= threshold
 
   const { error } = await ctx.supabase
