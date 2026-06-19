@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
-  ChevronRight, MapPin, History, ThumbsUp, ThumbsDown, Phone, Car, LogIn, LogOut, FileText, Clock, XCircle, CheckCircle2,
+  ChevronRight, MapPin, History, ThumbsUp, ThumbsDown, Phone, LogIn, LogOut, FileText, Clock, XCircle, CalendarClock, ExternalLink,
 } from 'lucide-react'
 import { getRepDayDetail } from '@/lib/actions/field-team'
 import { ApproveClaimButton, RejectClaimButton } from '../claim-actions'
@@ -79,7 +79,7 @@ export default async function RepDayPage({
     )
   }
 
-  const { user: rep, attendance, visits } = result
+  const { user: rep, attendance, visits, planned_open } = result
 
   // Per-leg km — same algorithm as the personal view.
   type Checkpoint = { kind: 'checkin' | 'visit'; odometer: number }
@@ -173,9 +173,15 @@ export default async function RepDayPage({
                     : 'no odometer'}
                 </p>
                 {attendance.check_in_lat != null && attendance.check_in_lng != null && (
-                  <p className="text-[10px] text-muted-foreground tabular-nums">
+                  <a
+                    href={`https://www.google.com/maps?q=${attendance.check_in_lat},${attendance.check_in_lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-blue-700 tabular-nums hover:underline inline-flex items-center gap-0.5"
+                  >
                     {attendance.check_in_lat.toFixed(4)}°, {attendance.check_in_lng.toFixed(4)}°
-                  </p>
+                    <ExternalLink className="size-2.5" />
+                  </a>
                 )}
               </div>
               <div className="rounded-lg bg-muted/30 px-3 py-2.5 text-xs">
@@ -191,9 +197,15 @@ export default async function RepDayPage({
                     : 'no odometer'}
                 </p>
                 {attendance.check_out_lat != null && attendance.check_out_lng != null && (
-                  <p className="text-[10px] text-muted-foreground tabular-nums">
+                  <a
+                    href={`https://www.google.com/maps?q=${attendance.check_out_lat},${attendance.check_out_lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-blue-700 tabular-nums hover:underline inline-flex items-center gap-0.5"
+                  >
                     {attendance.check_out_lat.toFixed(4)}°, {attendance.check_out_lng.toFixed(4)}°
-                  </p>
+                    <ExternalLink className="size-2.5" />
+                  </a>
                 )}
               </div>
             </div>
@@ -243,6 +255,49 @@ export default async function RepDayPage({
                 <RejectClaimButton attendanceId={attendance.id} repName={rep.full_name} />
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Planned today (not yet started) ──────────────────── */}
+      {planned_open.length > 0 && (
+        <Card>
+          <CardContent className="py-4 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <CalendarClock className="size-4 text-muted-foreground" />
+              <p className="text-sm font-semibold">Planned, not started</p>
+              <Badge variant="outline" className="text-[10px] uppercase border-0 bg-amber-50 text-amber-700">
+                {planned_open.length}
+              </Badge>
+            </div>
+            <div className="flex flex-col gap-2">
+              {planned_open.map((p) => (
+                <div key={p.task_id} className="rounded-lg border border-border bg-amber-50/40 px-3 py-2.5">
+                  <div className="flex items-start gap-2">
+                    <CalendarClock className="size-3.5 text-amber-700 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium">{p.title}</p>
+                        {p.priority !== 'medium' && (
+                          <Badge variant="outline" className="text-[10px] uppercase border-0 bg-rose-50 text-rose-700">
+                            {p.priority}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
+                        {formatTime(p.due_at)} · <span className="font-medium">{p.subject_label}</span>
+                        {p.contact_name && <> · {p.contact_name}</>}
+                      </p>
+                    </div>
+                    {p.subject_type && (
+                      <Badge variant="outline" className={`text-[10px] uppercase border-0 ${SUBJECT_TINT[p.subject_type]}`}>
+                        {p.subject_type}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -297,7 +352,18 @@ export default async function RepDayPage({
                           {v.duration_minutes != null && <> · {v.duration_minutes} min</>}
                           {legKm != null && <> · <span className="text-foreground font-medium">{legKm} km</span></>}
                           {v.lat != null && v.lng != null && (
-                            <> · <span className="inline-flex items-center gap-0.5"><MapPin className="size-2.5" />{v.lat.toFixed(4)}°, {v.lng.toFixed(4)}°</span></>
+                            <> ·{' '}
+                              <a
+                                href={`https://www.google.com/maps?q=${v.lat},${v.lng}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-0.5 text-blue-700 hover:underline"
+                              >
+                                <MapPin className="size-2.5" />
+                                {v.lat.toFixed(4)}°, {v.lng.toFixed(4)}°
+                                <ExternalLink className="size-2.5" />
+                              </a>
+                            </>
                           )}
                         </p>
                         {contactDisplay && (

@@ -3,13 +3,13 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Sun, MapPin, Car, Users } from 'lucide-react'
+import { Sun, Users } from 'lucide-react'
 import { getTodayContext } from '@/lib/actions/field-attendance'
 import { CheckInCard } from './check-in-card'
-import { CheckOutCard } from './check-out-card'
 import { DayStatusPicker } from './day-status-picker'
 import { ClaimSummary } from './claim-summary'
 import { VisitsSection } from './visits-section'
+import { EndDayButton } from './end-day-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -148,39 +148,29 @@ export default async function FieldPage() {
       {/* ── State 4: checked in, on duty ──────────────────────── */}
       {attendance && checkedIn && !checkedOut && (
         <>
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-start gap-3">
-                <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 shrink-0">
-                  <MapPin className="size-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium">On duty</p>
-                    <Badge variant="outline" className="text-[10px] uppercase border-0 bg-emerald-50 text-emerald-700">
-                      Live
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
-                    Checked in at {formatTime(attendance.check_in_at)} ·{' '}
-                    {attendance.check_in_odometer_km != null
-                      ? `${attendance.check_in_odometer_km.toLocaleString('en-IN')} km`
-                      : 'no odometer'}
-                  </p>
-                  {attendance.vehicle_id && (
-                    <p className="text-xs text-muted-foreground mt-0.5 inline-flex items-center gap-1">
-                      <Car className="size-3" />
-                      {vehiclesForUi.find((v) => v.id === attendance.vehicle_id)?.vehicle_number ?? '—'}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Slim on-duty pill — was a full card before. Same info, less weight. */}
+          <div className="inline-flex items-center gap-2 self-start rounded-full bg-emerald-50 text-emerald-800 px-3 py-1.5 text-xs flex-wrap">
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+              <span className="relative inline-flex size-2 rounded-full bg-emerald-600" />
+            </span>
+            <span>On duty since <span className="tabular-nums font-medium">{formatTime(attendance.check_in_at)}</span></span>
+            {attendance.check_in_odometer_km != null && (
+              <span className="opacity-70 tabular-nums">· {attendance.check_in_odometer_km.toLocaleString('en-IN')} km</span>
+            )}
+            {attendance.vehicle_id && (
+              <span className="opacity-70 font-mono">
+                · {vehiclesForUi.find((v) => v.id === attendance.vehicle_id)?.vehicle_number ?? '—'}
+              </span>
+            )}
+          </div>
 
+          {/* Plan + visits — the hero now. */}
           <VisitsSection checkInOdometerKm={attendance.check_in_odometer_km} tenantId={tenantId} />
 
-          <CheckOutCard
+          {/* End-of-day tucked behind a button. The full check-out form
+              opens in a sheet — no longer competing with the plan all day. */}
+          <EndDayButton
             checkInOdometerKm={attendance.check_in_odometer_km}
             vehicleEffectiveRate={
               attendance.vehicle_id

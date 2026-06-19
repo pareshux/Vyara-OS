@@ -47,15 +47,28 @@ export type TeamRepRow = {
     check_in_at: string | null
     check_in_lat: number | null
     check_in_lng: number | null
+    check_in_odometer_km: number | null
     check_out_at: string | null
     vehicle_label: string | null
     total_km: number | null
+    /** Computed in-flight: latest visit odometer − check-in odometer
+     *  when no check-out yet. null otherwise. */
+    running_km: number | null
     reimbursement_amount: number | null
     claim_status: ClaimStatus
   } | null
   visits_today: number
   in_progress_count: number
+  /** Planned-visit tasks due today, assigned to this rep, not yet done. */
+  planned_count: number
   last_activity_at: string | null
+  /** Latest known coordinates — preferred source is the most recent
+   *  visit's lat/lng, falling back to check-in lat/lng. null if neither. */
+  latest_location: {
+    lat: number
+    lng: number
+    source: 'check_in' | 'visit'
+  } | null
 }
 
 export type TeamSnapshot = {
@@ -98,18 +111,23 @@ export async function getTeamSnapshot(date?: string): Promise<TeamSnapshot | { e
   const attendanceByUser = new Map<string, NonNullable<typeof attendance>[number]>()
   for (const a of attendance ?? []) attendanceByUser.set(a.user_id as string, a)
 
-  // 3. Visit counts (today, by user). Pulled as a single select to avoid N+1.
+  // 3. Visit counts + locations + arrival odometers (today, by user). Single
+  //    select to avoid N+1. We pull lat/lng + odometer too so we can compute
+  //    latest_location and running_km in-code.
   const { data: todayVisits } = await ctx.supabase
     .from('field_visit')
-    .select('user_id, state, updated_at')
+    .select('user_id, state, updated_at, started_at, lat, lng, odometer_km_at_arrival')
     .in('user_id', userIds)
     .gte('started_at', dayStartIso)
     .lte('started_at', dayEndIso)
     .is('deleted_at', null)
+    .order('started_at', { ascending: true })
 
   const totalByUser = new Map<string, number>()
   const inProgressByUser = new Map<string, number>()
   const lastActivityByUser = new Map<string, string>()
+  const latestVisitLocByUser = new Map<string, { lat: number; lng: number }>()
+  const maxVisitOdoByUser = new Map<string, number>()
   for (const v of todayVisits ?? []) {
     const u = v.user_id as string
     totalByUser.set(u, (totalByUser.get(u) ?? 0) + 1)
@@ -118,6 +136,44 @@ export async function getTeamSnapshot(date?: string): Promise<TeamSnapshot | { e
     if (!existing || (v.updated_at as string) > existing) {
       lastActivityByUser.set(u, v.updated_at as string)
     }
+    if (v.lat != null && v.lng != null) {
+      // Iteration is in started_at asc order, so the last assignment wins → latest visit.
+      latestVisitLocByUser.set(u, { lat: Number(v.lat), lng: Number(v.lng) })
+    }
+    if (v.odometer_km_at_arrival != null) {
+      const odo = Number(v.odometer_km_at_arrival)
+      const prev = maxVisitOdoByUser.get(u)
+      if (prev == null || odo > prev) maxVisitOdoByUser.set(u, odo)
+    }
+  }
+
+  // 4. Planned visits (today, by user). Same pattern.
+  const { data: plannedTasks } = await ctx.supabase
+    .from('task')
+    .select('assignee_id')
+    .eq('tenant_id', ctx.tenantId)
+    .eq('type', 'planned_visit')
+    .eq('is_done', false)
+    .in('assignee_id', userIds)
+    .gte('due_at', dayStartIso)
+    .lte('due_at', dayEndIso)
+    .is('deleted_at', null)
+  const plannedByUser = new Map<string, number>()
+  for (const t of plannedTasks ?? []) {
+    const u = t.assignee_id as string
+    plannedByUser.set(u, (plannedByUser.get(u) ?? 0) + 1)
+  }
+
+  // We also need check_in_odometer_km on attendance for running-km math.
+  const { data: attendanceOdo } = await ctx.supabase
+    .from('field_attendance')
+    .select('user_id, check_in_odometer_km')
+    .eq('attendance_date', queryDate)
+    .in('user_id', userIds)
+    .is('deleted_at', null)
+  const checkInOdoByUser = new Map<string, number>()
+  for (const a of attendanceOdo ?? []) {
+    if (a.check_in_odometer_km != null) checkInOdoByUser.set(a.user_id as string, Number(a.check_in_odometer_km))
   }
 
   const reps: TeamRepRow[] = users.map((u) => {
@@ -129,6 +185,25 @@ export async function getTeamSnapshot(date?: string): Promise<TeamSnapshot | { e
     const visitActivity = lastActivityByUser.get(u.id)
     const last = [attActivity, visitActivity].filter(Boolean).sort().reverse()[0] ?? null
 
+    // Running km — only meaningful between check-in and check-out, and only
+    // when at least one visit's arrival odometer is recorded.
+    const checkInOdo = checkInOdoByUser.get(u.id) ?? null
+    const maxVisitOdo = maxVisitOdoByUser.get(u.id) ?? null
+    const isOnDuty = !!att?.check_in_at && !att?.check_out_at
+    const runningKm =
+      isOnDuty && checkInOdo != null && maxVisitOdo != null
+        ? Math.max(0, maxVisitOdo - checkInOdo)
+        : null
+
+    // Latest location — prefer the most recent visit pin, fall back to check-in.
+    const visitLoc = latestVisitLocByUser.get(u.id)
+    let latestLocation: TeamRepRow['latest_location'] = null
+    if (visitLoc) {
+      latestLocation = { lat: visitLoc.lat, lng: visitLoc.lng, source: 'visit' }
+    } else if (att?.check_in_lat != null && att?.check_in_lng != null) {
+      latestLocation = { lat: Number(att.check_in_lat), lng: Number(att.check_in_lng), source: 'check_in' }
+    }
+
     return {
       user_id: u.id as string,
       full_name: u.full_name as string,
@@ -139,16 +214,20 @@ export async function getTeamSnapshot(date?: string): Promise<TeamSnapshot | { e
             check_in_at: (att.check_in_at as string | null) ?? null,
             check_in_lat: att.check_in_lat != null ? Number(att.check_in_lat) : null,
             check_in_lng: att.check_in_lng != null ? Number(att.check_in_lng) : null,
+            check_in_odometer_km: checkInOdo,
             check_out_at: (att.check_out_at as string | null) ?? null,
             vehicle_label: vehicleLabel,
             total_km: att.total_km != null ? Number(att.total_km) : null,
+            running_km: runningKm,
             reimbursement_amount: att.reimbursement_amount != null ? Number(att.reimbursement_amount) : null,
             claim_status: att.claim_status as ClaimStatus,
           }
         : null,
       visits_today: totalByUser.get(u.id) ?? 0,
       in_progress_count: inProgressByUser.get(u.id) ?? 0,
+      planned_count: plannedByUser.get(u.id) ?? 0,
       last_activity_at: last,
+      latest_location: latestLocation,
     }
   })
 
@@ -253,6 +332,18 @@ export type RepDayDetail = {
     outcome_label: string | null
     notes_text: string | null
   }>
+  /** Planned-visit tasks for the day that haven't been started yet
+   *  (no field_visit row tied to them via planned_task_id). Lets the
+   *  manager see "planned but skipped" without scrolling. */
+  planned_open: Array<{
+    task_id: string
+    title: string
+    due_at: string | null
+    priority: 'low' | 'medium' | 'high' | 'urgent'
+    subject_type: 'project' | 'lead' | 'firm' | 'dealer' | null
+    subject_label: string
+    contact_name: string | null
+  }>
 }
 
 export async function getRepDayDetail(
@@ -274,7 +365,7 @@ export async function getRepDayDetail(
   const dayStartIso = new Date(`${date}T00:00:00+05:30`).toISOString()
   const dayEndIso = new Date(`${date}T23:59:59+05:30`).toISOString()
 
-  const [{ data: att }, { data: visits }] = await Promise.all([
+  const [{ data: att }, { data: visits }, { data: plannedTasks }] = await Promise.all([
     ctx.supabase
       .from('field_attendance')
       .select(`
@@ -307,6 +398,22 @@ export async function getRepDayDetail(
       .lte('started_at', dayEndIso)
       .is('deleted_at', null)
       .order('started_at', { ascending: true }),
+    ctx.supabase
+      .from('task')
+      .select(`
+        id, title, due_at, priority, is_done,
+        project_id, source_entity_type, source_entity_id, contact_id,
+        project:project_id(name),
+        contact:contact_id(name)
+      `)
+      .eq('tenant_id', ctx.tenantId)
+      .eq('type', 'planned_visit')
+      .eq('assignee_id', userId)
+      .eq('is_done', false)
+      .gte('due_at', dayStartIso)
+      .lte('due_at', dayEndIso)
+      .is('deleted_at', null)
+      .order('due_at', { ascending: true }),
   ])
 
   const vehicle = Array.isArray(att?.vehicle) ? att?.vehicle[0] : att?.vehicle
@@ -356,6 +463,47 @@ export async function getRepDayDetail(
     }
   })
 
+  // Resolve subject labels for the planned tasks. Lead/firm/dealer come
+  // through source_entity_*; project is on the joined alias.
+  const tasks = plannedTasks ?? []
+  const leadIds = tasks.filter((t) => t.source_entity_type === 'lead').map((t) => t.source_entity_id as string).filter(Boolean)
+  const firmIds = tasks.filter((t) => t.source_entity_type === 'firm').map((t) => t.source_entity_id as string).filter(Boolean)
+  const dealerIds = tasks.filter((t) => t.source_entity_type === 'dealer').map((t) => t.source_entity_id as string).filter(Boolean)
+  const [{ data: leadRows }, { data: firmRows }, { data: dealerRows }] = await Promise.all([
+    leadIds.length ? ctx.supabase.from('lead').select('id, title').in('id', leadIds) : Promise.resolve({ data: [] as Array<{ id: string; title: string }> }),
+    firmIds.length ? ctx.supabase.from('firm').select('id, name').in('id', firmIds) : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+    dealerIds.length ? ctx.supabase.from('dealer').select('id, name').in('id', dealerIds) : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+  ])
+  const leadById = new Map((leadRows ?? []).map((r) => [r.id, r.title] as [string, string]))
+  const firmById = new Map((firmRows ?? []).map((r) => [r.id, r.name] as [string, string]))
+  const dealerById = new Map((dealerRows ?? []).map((r) => [r.id, r.name] as [string, string]))
+
+  const plannedOut: RepDayDetail['planned_open'] = tasks.map((t) => {
+    let subjectType: 'project' | 'lead' | 'firm' | 'dealer' | null = null
+    let subjectLabel = '—'
+    if (t.project_id) {
+      subjectType = 'project'
+      const proj = Array.isArray(t.project) ? t.project[0] : t.project
+      subjectLabel = (proj as { name?: string } | null)?.name ?? '—'
+    } else if (t.source_entity_type === 'lead' && t.source_entity_id) {
+      subjectType = 'lead'; subjectLabel = leadById.get(t.source_entity_id as string) ?? '—'
+    } else if (t.source_entity_type === 'firm' && t.source_entity_id) {
+      subjectType = 'firm'; subjectLabel = firmById.get(t.source_entity_id as string) ?? '—'
+    } else if (t.source_entity_type === 'dealer' && t.source_entity_id) {
+      subjectType = 'dealer'; subjectLabel = dealerById.get(t.source_entity_id as string) ?? '—'
+    }
+    const contact = Array.isArray(t.contact) ? t.contact[0] : t.contact
+    return {
+      task_id: t.id as string,
+      title: t.title as string,
+      due_at: (t.due_at as string | null) ?? null,
+      priority: t.priority as 'low' | 'medium' | 'high' | 'urgent',
+      subject_type: subjectType,
+      subject_label: subjectLabel,
+      contact_name: (contact as { name?: string } | null)?.name ?? null,
+    }
+  })
+
   return {
     user: { id: profile.id as string, full_name: profile.full_name as string, role: profile.role as string },
     date,
@@ -383,5 +531,6 @@ export async function getRepDayDetail(
         }
       : null,
     visits: visitsOut,
+    planned_open: plannedOut,
   }
 }

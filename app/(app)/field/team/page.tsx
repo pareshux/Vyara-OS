@@ -4,15 +4,27 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
-  Users, ChevronRight, MapPin, Inbox, Coffee, CalendarOff, Sun, AlertCircle, Home,
+  Users, ChevronRight, MapPin, Inbox, Coffee, CalendarOff, Sun, AlertCircle, Home, ExternalLink, Clock,
 } from 'lucide-react'
-import { getTeamSnapshot, listPendingClaims } from '@/lib/actions/field-team'
+import { getTeamSnapshot, listPendingClaims, type TeamRepRow } from '@/lib/actions/field-team'
+import { getTodayContext } from '@/lib/actions/field-attendance'
 import { ApproveClaimButton, RejectClaimButton } from './claim-actions'
+import { MyDayChip } from './my-day-chip'
 
 export const dynamic = 'force-dynamic'
 
+const STALE_AFTER_MINUTES = 120 // 2h
+const WORK_HOUR_START_IST = 10
+const WORK_HOUR_END_IST = 18
+
 function todayInIST(): string {
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Kolkata' })
+}
+
+function hourInIST(d: Date): number {
+  return Number(new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+  }).format(d))
 }
 
 function formatTime(iso: string | null): string {
@@ -48,6 +60,16 @@ function initials(name: string): string {
   return name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
 }
 
+function isStale(rep: TeamRepRow, isToday: boolean): boolean {
+  if (!isToday) return false
+  if (!rep.attendance?.check_in_at || rep.attendance.check_out_at) return false
+  const hourNow = hourInIST(new Date())
+  if (hourNow < WORK_HOUR_START_IST || hourNow >= WORK_HOUR_END_IST) return false
+  if (!rep.last_activity_at) return true
+  const ageMin = (Date.now() - new Date(rep.last_activity_at).getTime()) / 60_000
+  return ageMin > STALE_AFTER_MINUTES
+}
+
 export default async function TeamPage({
   searchParams,
 }: {
@@ -58,19 +80,21 @@ export default async function TeamPage({
   if (!user) redirect('/login')
   const { data: profile } = await supabase
     .from('user_profile')
-    .select('role')
+    .select('role, tenant_id')
     .eq('id', user.id)
     .single()
   if (!profile) redirect('/login')
   if (profile.role !== 'admin' && profile.role !== 'manager') redirect('/field')
+  const tenantId = profile.tenant_id as string
 
   const sp = await searchParams
   const date = sp.date ?? todayInIST()
   const isToday = date === todayInIST()
 
-  const [snapshotResult, claimsResult] = await Promise.all([
+  const [snapshotResult, claimsResult, myContext] = await Promise.all([
     getTeamSnapshot(date),
     listPendingClaims(),
+    getTodayContext(),
   ])
 
   if ('error' in snapshotResult) {
@@ -83,6 +107,39 @@ export default async function TeamPage({
 
   const { reps } = snapshotResult
   const pending = 'error' in claimsResult ? [] : claimsResult.claims
+
+  // My own day status for the chip
+  const myAttendance = 'error' in myContext ? null : myContext.attendance
+  const vehiclesForUi =
+    'error' in myContext
+      ? []
+      : myContext.vehicles.map((v) => ({
+          ...v,
+          effective_rate_per_km: v.custom_rate_per_km ?? v.matrix_rate_per_km,
+          rate_source: (v.custom_rate_per_km != null
+            ? 'custom'
+            : v.matrix_rate_per_km != null
+              ? 'matrix'
+              : 'none') as 'custom' | 'matrix' | 'none',
+        }))
+  const myLastKnownOdometer = 'error' in myContext ? null : myContext.lastKnownOdometer
+
+  let myStatus:
+    | { kind: 'not_started' }
+    | { kind: 'on_duty'; check_in_at: string }
+    | { kind: 'checked_out' }
+    | { kind: 'wfh' | 'leave' | 'holiday' }
+  if (!myAttendance) {
+    myStatus = { kind: 'not_started' }
+  } else if (myAttendance.check_out_at) {
+    myStatus = { kind: 'checked_out' }
+  } else if (myAttendance.check_in_at) {
+    myStatus = { kind: 'on_duty', check_in_at: myAttendance.check_in_at }
+  } else if (myAttendance.status_for_day !== 'on_duty') {
+    myStatus = { kind: myAttendance.status_for_day }
+  } else {
+    myStatus = { kind: 'not_started' }
+  }
 
   // Roll-up metrics
   const onDuty = reps.filter((r) => r.attendance?.check_in_at && !r.attendance.check_out_at).length
@@ -102,7 +159,7 @@ export default async function TeamPage({
         <span className="text-foreground font-medium">Team</span>
       </div>
 
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <Users className="size-5 text-primary" />
@@ -112,18 +169,28 @@ export default async function TeamPage({
             {isToday ? `Today, ${formatLongDate(date)}` : formatLongDate(date)}
           </p>
         </div>
-        <form className="flex items-center gap-2">
-          <input
-            type="date"
-            name="date"
-            defaultValue={date}
-            max={todayInIST()}
-            className="h-8 px-2 text-xs rounded-md border border-border bg-card"
-          />
-          <button type="submit" className="h-8 px-3 text-xs rounded-md border border-border bg-card hover:bg-muted/30">
-            Go
-          </button>
-        </form>
+        <div className="flex items-center gap-2">
+          {isToday && (
+            <MyDayChip
+              myStatus={myStatus}
+              vehicles={vehiclesForUi}
+              lastKnownOdometer={myLastKnownOdometer}
+              tenantId={tenantId}
+            />
+          )}
+          <form className="flex items-center gap-2">
+            <input
+              type="date"
+              name="date"
+              defaultValue={date}
+              max={todayInIST()}
+              className="h-8 px-2 text-xs rounded-md border border-border bg-card"
+            />
+            <button type="submit" className="h-8 px-3 text-xs rounded-md border border-border bg-card hover:bg-muted/30">
+              Go
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* ── Roll-up counters ──────────────────────────────────── */}
@@ -178,41 +245,75 @@ export default async function TeamPage({
         <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No active reps in the tenant.</CardContent></Card>
       ) : (
         <div className="flex flex-col gap-2">
-          {reps.map((r) => (
-            <Link
-              key={r.user_id}
-              href={`/field/team/${r.user_id}?date=${date}`}
-              className="rounded-lg border border-border bg-card px-3 py-3 flex items-center gap-3 hover:bg-muted/30 transition-colors"
-            >
-              <div className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground shrink-0">
-                {initials(r.full_name)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-medium">{r.full_name}</p>
-                  <Badge variant="outline" className="text-[10px] uppercase border-0 bg-muted text-muted-foreground">
-                    {r.role.replace('_', ' ')}
-                  </Badge>
-                  <StatusPill rep={r} isToday={isToday} />
+          {reps.map((r) => {
+            const stale = isStale(r, isToday)
+            return (
+              <div
+                key={r.user_id}
+                className="rounded-lg border border-border bg-card px-3 py-3"
+              >
+                <div className="flex items-start gap-3">
+                  <Link
+                    href={`/field/team/${r.user_id}?date=${date}`}
+                    className="flex items-start gap-3 flex-1 min-w-0 hover:opacity-80 transition-opacity"
+                  >
+                    <div className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground shrink-0">
+                      {initials(r.full_name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium">{r.full_name}</p>
+                        <Badge variant="outline" className="text-[10px] uppercase border-0 bg-muted text-muted-foreground">
+                          {r.role.replace('_', ' ')}
+                        </Badge>
+                        <StatusPill rep={r} isToday={isToday} />
+                        {stale && (
+                          <Badge variant="outline" className="text-[10px] uppercase border-0 bg-amber-50 text-amber-700">
+                            <Clock className="size-2.5 mr-0.5" /> Quiet 2h+
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
+                        {repSummary(r)}
+                      </p>
+                    </div>
+                  </Link>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    {r.latest_location && (
+                      <a
+                        href={`https://www.google.com/maps?q=${r.latest_location.lat},${r.latest_location.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[10px] tabular-nums hover:bg-blue-100 transition-colors"
+                        title={`${r.latest_location.source === 'visit' ? 'Latest visit pin' : 'Check-in spot'} · open Google Maps`}
+                      >
+                        <MapPin className="size-2.5" />
+                        {r.latest_location.lat.toFixed(2)}°, {r.latest_location.lng.toFixed(2)}°
+                        <ExternalLink className="size-2.5" />
+                      </a>
+                    )}
+                    <Link
+                      href={`/field/team/${r.user_id}?date=${date}`}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <ChevronRight className="size-4" />
+                    </Link>
+                  </div>
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
-                  {repSummary(r)}
-                </p>
               </div>
-              <ChevronRight className="size-4 text-muted-foreground shrink-0" />
-            </Link>
-          ))}
+            )
+          })}
         </div>
       )}
 
       <p className="text-[10px] text-muted-foreground italic">
-        Live map view + daily digest are deferred — needs a map provider and the digest infra.
+        Tap a location chip to open Google Maps. A native map view + route plotting are deferred until the map provider lands.
       </p>
     </div>
   )
 
   // ─── helpers
-  function repSummary(r: typeof reps[number]): string {
+  function repSummary(r: TeamRepRow): string {
     const att = r.attendance
     if (!att) {
       return isToday ? 'Not checked in yet' : 'No record for this day'
@@ -220,9 +321,17 @@ export default async function TeamPage({
     const parts: string[] = []
     if (att.check_in_at) parts.push(`In ${formatTime(att.check_in_at)}`)
     if (att.check_out_at) parts.push(`Out ${formatTime(att.check_out_at)}`)
-    parts.push(`${r.visits_today} visit${r.visits_today === 1 ? '' : 's'}`)
+    // Visits: "3 of 5 planned" if there's a plan, else "X visits".
+    const visitedAndOpen = r.visits_today + r.planned_count
+    if (r.planned_count > 0) {
+      parts.push(`${r.visits_today} of ${visitedAndOpen} planned`)
+    } else if (r.visits_today > 0) {
+      parts.push(`${r.visits_today} visit${r.visits_today === 1 ? '' : 's'}`)
+    }
     if (r.in_progress_count > 0) parts.push(`${r.in_progress_count} live`)
+    // Distance: prefer total_km (settled at checkout); else running_km mid-day.
     if (att.total_km != null) parts.push(`${att.total_km.toLocaleString('en-IN')} km`)
+    else if (att.running_km != null) parts.push(`${att.running_km.toLocaleString('en-IN')} km so far`)
     if (att.reimbursement_amount != null) parts.push(rs(att.reimbursement_amount))
     if (r.last_activity_at && att.check_in_at && !att.check_out_at) {
       parts.push(`active ${formatRelative(r.last_activity_at)}`)
@@ -256,7 +365,7 @@ function RollupChip({
   )
 }
 
-function StatusPill({ rep, isToday }: { rep: { attendance: { check_in_at: string | null; check_out_at: string | null; status_for_day: 'on_duty' | 'wfh' | 'leave' | 'holiday' } | null }; isToday: boolean }) {
+function StatusPill({ rep, isToday }: { rep: TeamRepRow; isToday: boolean }) {
   const att = rep.attendance
   if (!att) {
     if (isToday) {

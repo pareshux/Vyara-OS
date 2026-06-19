@@ -58,11 +58,16 @@ export function Sidebar({ userRole }: SidebarProps) {
 
       <nav className="flex flex-1 flex-col gap-0.5 p-3">
         {NAV_ITEMS.map(({ label, href, icon: Icon }) => {
-          const isActive = pathname === href || pathname.startsWith(href + '/')
+          // Field link is role-aware: admin / manager land on the team
+          // dashboard by default (they're not running the personal
+          // check-in flow most days). Both pages stay reachable via the
+          // existing cross-links.
+          const resolvedHref = href === '/field' && isAdminish ? '/field/team' : href
+          const isActive = pathname === resolvedHref || pathname.startsWith(resolvedHref + '/')
           return (
             <Link
               key={href}
-              href={href}
+              href={resolvedHref}
               className={cn(
                 'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
                 isActive
