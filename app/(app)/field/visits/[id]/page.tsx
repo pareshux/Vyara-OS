@@ -39,6 +39,7 @@ import { AttachmentList } from '@/components/attachment/list'
 import { AttachmentUploadButton } from '@/components/attachment/upload-button'
 import { SignaturePad } from '@/components/attachment/signature-pad'
 import { LogExpenseSheet } from '@/components/expense/log-expense-sheet'
+import { VisitPrepBrief } from '../../visit-prep-brief'
 
 export const dynamic = 'force-dynamic'
 
@@ -206,6 +207,9 @@ export default async function VisitDetailPage(
               )}
             </div>
           )}
+
+          {/* AI prep brief — visible on completed visits too (cached). */}
+          {visit.subject && <VisitPrepBrief visitId={visit.id} />}
 
           {/* Outcome */}
           {visit.outcome && (

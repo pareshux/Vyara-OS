@@ -8,6 +8,7 @@ import { StartPlannedVisitButton } from './start-planned-visit-button'
 import { CompleteVisitButton } from './complete-visit-button'
 import { CancelVisitButton } from './cancel-visit-button'
 import { LogExpenseSheet } from '@/components/expense/log-expense-sheet'
+import { VisitPrepBrief } from './visit-prep-brief'
 
 function formatTime(iso: string | null): string {
   if (!iso) return ''
@@ -114,6 +115,10 @@ export async function VisitsSection({
                 {live.subject_type}
               </Badge>
             </div>
+
+            {/* AI prep brief — fires once per live visit, cached after. */}
+            <VisitPrepBrief visitId={live.visit_id} />
+
             <div className="flex gap-2 flex-wrap">
               <CompleteVisitButton
                 visitId={live.visit_id}

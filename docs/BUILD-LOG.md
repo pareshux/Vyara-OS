@@ -23,6 +23,20 @@
 
 ## 2026-06-20
 
+### Sprint 2.2 (Field Operations deep-build) — CLOSE
+- **8/8 items shipped.** FO-1 (sidebar grouping), FO-2 (PLAT-013 attachments), FO-3 (visit proof), FO-4 (PLAT-014 approvals), FO-5 (FIN-006 expenses + FIN-007 partial + FLD-016), FO-6 (FLD-014 Visit Hub partial), FO-7 (FLD-015 day read-model), FO-8 (FLD-013 + INT-008 prep brief).
+- **6 Blueprint capabilities touched:** Platform (PLAT-013, PLAT-014), Field Operations (FLD-013, FLD-014, FLD-015, FLD-016), Finance (FIN-006, FIN-007), Intelligence (INT-008), Relationship (touched via visit subject reads), Revenue (touched via project + quote reads).
+- **10 Status Tracker rows flipped to ✅** (some Partial — FLD-014 needs book-order/log-complaint when their owners ship; FIN-007 needs a policy CRUD UI).
+- **3 new cross-capability read-models** (after Slice 2's project-progress): visit-detail, field-day. The pattern holds.
+- **Working examples in `main` ready for Vyara demo.** Sprint 2.3 picks up by either (a) extending Field Ops further (FLD-019 fraud detection, mobile bottom-nav) OR (b) starting Customer Success / CS-001 complaints so the Visit Hub gets its "log complaint from visit" affordance.
+
+### FO-8 — AI visit prep brief (pending commit)
+- **Tracks:** FLD-013 (✅), INT-008 (✅)
+- **Capability:** Field Operations + Intelligence
+- **Tier:** Should-have
+- **Status change:** 📋 → ✅
+- **Notes:** Migration 0036 adds `visit_prep_brief` to the `ai_extraction.entity_kind` CHECK. `lib/ai/prompts/visit-prep-brief.ts` defines a Zod schema (headline ≤14 words / up to 4 bullets / optional caution) + a system prompt that demands matter-of-fact specifics ("Quote ₹4.2L sent 9 days ago, no response" beats "follow-up pending"). `lib/actions/visit-prep-brief.ts` assembles per-subject context — subject summary, last 8 activities, open tasks, last 5 quotes (for projects), last 3 prior visits — serialises to JSON, calls `extractFromText` with the schema, and tags the row with `source_storage_path='inline_text:visit_prep_brief:<visit_id>'` so subsequent calls hit the cache by that key (no second AI call per visit). `<VisitPrepBrief>` renders inline on the in-progress card AND on the Visit Hub. Per Principle #6 read-only — never writes data. This is the first general-purpose Vyara "copilot" surface; the next ones (call recap, outcome quality check) reuse the same plumbing. **First Intelligence consumer of the AI extraction framework that isn't a data-extraction job** — it generates structured advice rather than parsing user-supplied input.
+
 ### FO-7 — Field-Activity Day read-model (84c0446)
 - **Tracks:** FLD-015
 - **Capability:** Field Operations
