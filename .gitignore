@@ -40,3 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# supabase cli cache (auto-managed)
+supabase/.temp/
+
+# scratch
+/tmp/
