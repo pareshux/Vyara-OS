@@ -310,10 +310,21 @@ function GeoButton({
 }
 
 // Default the datetime-local input to "now + 1 hour", rounded to the next 15 min.
+// Edge case: if it's already after 7pm local, default to 10am tomorrow instead —
+// planning a meeting "in 1 hour" at 11pm isn't realistic, and the resulting
+// 1am due-time confuses the Today's-plan window the next morning.
 function defaultDueAtLocal(): string {
-  const d = new Date(Date.now() + 60 * 60 * 1000)
-  const m = d.getMinutes()
-  d.setMinutes(Math.ceil(m / 15) * 15, 0, 0)
+  const now = new Date()
+  let d: Date
+  if (now.getHours() >= 19) {
+    d = new Date(now)
+    d.setDate(d.getDate() + 1)
+    d.setHours(10, 0, 0, 0)
+  } else {
+    d = new Date(Date.now() + 60 * 60 * 1000)
+    const m = d.getMinutes()
+    d.setMinutes(Math.ceil(m / 15) * 15, 0, 0)
+  }
   // Format for datetime-local input (local timezone, no Z)
   const pad = (n: number) => n.toString().padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`

@@ -88,18 +88,32 @@ export async function VisitsSection({
   return (
     <div className="flex flex-col gap-4">
       {/* ── Currently visiting (live) ─────────────────────────── */}
-      {!readOnly && hasLive && live && (
-        <Card className="border-emerald-200 bg-emerald-50/30">
+      {!readOnly && hasLive && live && (() => {
+        // A visit that's been "in progress" for >6h almost certainly
+        // means the rep left without wrapping it up. Flag it visually
+        // so they can complete or cancel instead of being stuck.
+        const ageMinutes = live.started_at
+          ? (Date.now() - new Date(live.started_at).getTime()) / 60000
+          : 0
+        const isStale = ageMinutes > 6 * 60
+        return (
+        <Card className={isStale
+          ? 'border-amber-300 bg-amber-50/40'
+          : 'border-emerald-200 bg-emerald-50/30'}>
           <CardContent className="py-4 flex flex-col gap-3">
             <div className="flex items-start gap-3">
-              <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 shrink-0">
+              <div className={`flex size-9 items-center justify-center rounded-xl shrink-0 ${
+                isStale ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'
+              }`}>
                 <MapPin className="size-4" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold">Currently visiting</p>
-                  <Badge variant="outline" className="text-[10px] uppercase border-0 bg-emerald-100 text-emerald-800">
-                    Live
+                  <p className="text-sm font-semibold">{isStale ? 'Stuck visit' : 'Currently visiting'}</p>
+                  <Badge variant="outline" className={`text-[10px] uppercase border-0 ${
+                    isStale ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {isStale ? 'Needs wrap-up' : 'Live'}
                   </Badge>
                 </div>
                 <p className="text-sm mt-1">{live.subject_label}</p>
@@ -110,6 +124,12 @@ export async function VisitsSection({
                     <> · <span className="text-emerald-700 font-medium">{inProgressLegFromCheckpoint} km</span> from previous checkpoint</>
                   )}
                 </p>
+                {isStale && (
+                  <p className="text-[11px] text-amber-800 mt-1.5">
+                    This visit has been open for {Math.floor(ageMinutes / 60)}h{' '}
+                    — wrap it up or cancel so you can start the next one.
+                  </p>
+                )}
               </div>
               <Badge variant="outline" className={`text-[10px] uppercase border-0 ${SUBJECT_TINT[live.subject_type]}`}>
                 {live.subject_type}
@@ -142,7 +162,8 @@ export async function VisitsSection({
             </div>
           </CardContent>
         </Card>
-      )}
+        )
+      })()}
 
       {/* ── Today's plan ──────────────────────────────────────── */}
       {!readOnly && (

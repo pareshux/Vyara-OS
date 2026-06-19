@@ -439,15 +439,40 @@ export async function startVisit(params: {
   if (!(params.odometer_km_at_arrival >= 0)) return { error: 'Odometer must be ≥ 0' }
 
   // Block starting a new visit if one is already in_progress for this rep.
+  // Exception: if the open visit was started > 12h ago it's almost
+  // certainly a stale "rep closed the tab mid-visit" row, not a real
+  // ongoing visit. Auto-soft-cancel it and let the new arrival proceed.
+  // We log the reason so the audit trail explains the cleanup.
+  const STALE_VISIT_THRESHOLD_MS = 12 * 60 * 60 * 1000
   const { data: live } = await ctx.supabase
     .from('field_visit')
-    .select('id')
+    .select('id, started_at')
     .eq('user_id', ctx.userId)
     .eq('state', 'in_progress')
     .is('deleted_at', null)
+    .order('started_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  if (live) return { error: 'You already have a visit in progress — complete or cancel it first' }
+  if (live) {
+    const ageMs = live.started_at
+      ? Date.now() - new Date(live.started_at).getTime()
+      : 0
+    if (ageMs > STALE_VISIT_THRESHOLD_MS) {
+      const nowIso = new Date().toISOString()
+      await ctx.supabase
+        .from('field_visit')
+        .update({
+          deleted_at: nowIso,
+          notes_text:
+            '[auto-recovered: visit was left open for >12h; soft-cancelled when rep started a new one]',
+          updated_at: nowIso,
+          updated_by: ctx.userId,
+        })
+        .eq('id', live.id)
+    } else {
+      return { error: 'You already have a visit in progress — complete or cancel it first' }
+    }
+  }
 
   let subjectType = params.subject_type
   let subjectId = params.subject_id
