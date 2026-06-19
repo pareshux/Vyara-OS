@@ -21,6 +21,20 @@
 
 ## 2026-06-19
 
+## 2026-06-20
+
+### Sprint 2.2 (Field Operations deep-build) — START
+- **Strategy:** pick one capability and ship every realistic edge case before moving on. Field Operations chosen — most demo-able, forces the platform pieces (attachments, approval engine, expense module) into existence as their first consumer, becomes the customer-facing demo for C#2.
+- **8 items planned, ~6 weeks:** FO-1 sidebar grouping (cosmetic) → FO-2 attachment framework (PLAT-013) → FO-3 visit photos/docs/signature → FO-4 generic approval engine (PLAT-014) → FO-5 multi-category expense module (FIN-006) → FO-6 Visit Hub wiring (FLD-014) → FO-7 Field-Activity Day read-model (FLD-015) → FO-8 AI prep brief (FLD-013).
+- **Deferred (correctly out of scope):** offline (FLD-022 ❌), live GPS (FLD-023 ❌), native map (FLD-024 ❌), route optimization (FLD-025 ❌), live AI coaching (FLD-026 ❌), native mobile (FLD-027 ❌).
+
+### FO-1 — Sidebar capability grouping (pending commit)
+- **Tracks:** FLD-009 cosmetic follow-up (Blueprint §1.4 "sidebar grouping refactor")
+- **Capability:** Cross-cutting (visible UX)
+- **Tier:** part of Field Operations vertical
+- **Status change:** 📋 → ✅
+- **Notes:** components/app/sidebar.tsx now groups nav under capability headers: Dashboard + Field (home, no header) → Relationship (Leads/Contacts/Dealers) → Revenue (Projects/Orders) → Delivery (Inventory/Warehouses/Dispatches) → Finance (Invoices/Collections/Finance) → Tasks (utility, no header) → Admin (existing). Dealer moved from "channel-y last position" to Relationship per Blueprint reframing (dealer is a relationship type, not its own module). URLs unchanged; pure visual structure. Cosmetic-only — Blueprint §1.4 flagged as "~1 day".
+
 ### Sprint 2.1c — visit_purpose system rows + broader vocabulary (1b44972)
 - **Tracks:** FLD-009
 - **Capability:** Field Operations
