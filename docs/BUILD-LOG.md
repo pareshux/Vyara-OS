@@ -21,6 +21,13 @@
 
 ## 2026-06-19
 
+### Sprint 1.6 — Observability capture chokepoint + AI wiring (pending commit)
+- **Tracks:** PLAT-009
+- **Capability:** Platform
+- **Tier:** Must-have C#2
+- **Status change:** 🚧 → ✅
+- **Notes:** `lib/observability/` ships the long-term capture API. `captureError` + `captureMessage` route through `scrub.ts` for PII redaction (phone / email / GSTIN / Aadhaar / PAN) and write structured JSON to stderr. `withCapture(actionName, fn, contextResolver?)` wraps server actions opt-in. AI extract (`extractFromImage` + `extractFromText`) wired as the first consumer — `parse_failed` is `captureMessage` (signal); unexpected throws are `captureError` (excluding mapped timeout/rate_limit). When the `@sentry/nextjs` SDK lands, swap path is a single-file edit to `capture.ts` per `lib/observability/README.md` — no caller changes. Deferred: SDK install (touches package.json WIP), `sentry.*.config.ts` files, Inngest `onFailure` wiring.
+
 ### Sprint 1.5 — TS types from DB schema · browser client typed; server + npm script deferred (fd44182)
 - **Tracks:** PLAT-008
 - **Capability:** Platform

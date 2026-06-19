@@ -16,6 +16,7 @@ import { createClient as createServiceClient, type SupabaseClient } from '@supab
 import { z } from 'zod'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { getAIClient, getModel, mapAnthropicError, type AIErrorDetail } from './client'
+import { captureError, captureMessage } from '@/lib/observability/capture'
 
 const AI_UPLOADS_BUCKET = 'ai-uploads'
 const SIGNED_URL_TTL_SECONDS = 600 // 10 minutes — enough for Claude to fetch
@@ -186,6 +187,21 @@ export async function extractFromImage<TSchema extends z.ZodTypeAny>(
     }
   } catch (err) {
     errorDetail = mapAnthropicError(err)
+    // Capture unexpected (non-mapped) AI call failures so we see them
+    // in observability — not just buried in the ai_extraction row.
+    if (errorDetail.reason !== 'rate_limited' && errorDetail.reason !== 'timeout') {
+      captureError(err, {
+        tenant_id: params.tenantId,
+        user_id: params.userId,
+        action_name: 'ai.extractFromImage',
+        entity_type: 'ai_extraction',
+        extra: {
+          entity_kind: params.entityKind,
+          prompt_version: params.promptVersion,
+          reason: errorDetail.reason,
+        },
+      })
+    }
   }
 
   const latency_ms = Date.now() - startedAt
@@ -200,6 +216,23 @@ export async function extractFromImage<TSchema extends z.ZodTypeAny>(
       ? 'parse_failed'
       : 'api_error'
     : 'extracted'
+
+  // Parse failures are common enough to deserve their own signal
+  // separate from the catch block above (which only fires on
+  // unhandled throws). Signal-level, not error-level.
+  if (status === 'parse_failed') {
+    captureMessage('AI extraction parse_failed', {
+      tenant_id: params.tenantId,
+      user_id: params.userId,
+      action_name: 'ai.extractFromImage',
+      entity_type: 'ai_extraction',
+      extra: {
+        entity_kind: params.entityKind,
+        prompt_version: params.promptVersion,
+        latency_ms,
+      },
+    })
+  }
 
   const { data: logRow, error: logErr } = await supabase
     .from('ai_extraction')
@@ -351,6 +384,19 @@ export async function extractFromText<TSchema extends z.ZodTypeAny>(
     }
   } catch (err) {
     errorDetail = mapAnthropicError(err)
+    if (errorDetail.reason !== 'rate_limited' && errorDetail.reason !== 'timeout') {
+      captureError(err, {
+        tenant_id: params.tenantId,
+        user_id: params.userId,
+        action_name: 'ai.extractFromText',
+        entity_type: 'ai_extraction',
+        extra: {
+          entity_kind: params.entityKind,
+          prompt_version: params.promptVersion,
+          reason: errorDetail.reason,
+        },
+      })
+    }
   }
 
   const latency_ms = Date.now() - startedAt
@@ -361,6 +407,20 @@ export async function extractFromText<TSchema extends z.ZodTypeAny>(
     : errorDetail.reason === 'parse_error' ? 'parse_failed'
     : 'api_error'
     : 'extracted'
+
+  if (status === 'parse_failed') {
+    captureMessage('AI extraction parse_failed', {
+      tenant_id: params.tenantId,
+      user_id: params.userId,
+      action_name: 'ai.extractFromText',
+      entity_type: 'ai_extraction',
+      extra: {
+        entity_kind: params.entityKind,
+        prompt_version: params.promptVersion,
+        latency_ms,
+      },
+    })
+  }
 
   const { data: logRow, error: logErr } = await supabase
     .from('ai_extraction')

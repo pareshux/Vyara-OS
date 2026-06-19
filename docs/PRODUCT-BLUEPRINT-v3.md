@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-19 (PLAT-008 shipped — browser client typed; server client + npm script deferred to follow-up)
+> **Last updated:** 2026-06-19 (PLAT-009 shipped — observability capture chokepoint + AI wiring; Sentry SDK install + sentry.*.config.ts deferred)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -659,7 +659,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | PLAT-006 | task_type_master + activity_type_master (de-CHECK) | Must-have C#2 | ✅ | `d2c9115` (Sprint 1.3) |
 | PLAT-007 | Sensitive-column mask helper | Must-have C#2 | ✅ | `b155898` (Sprint 1.4) · helper shipped; no current consumer required migration (sensitive columns happen to already be omitted from existing SELECTs) — future consumers wrap returns via `maskRow` / `maskRows`. |
 | PLAT-008 | TS types generated from DB schema | Must-have C#2 | ✅ | `fd44182` (Sprint 1.5) · `database.ts` generated + browser client typed. Server client + `db:types` npm script deferred (server.ts and package.json have outstanding WIP; will land in a follow-up commit alongside that work). |
-| PLAT-009 | Sentry + Inngest observability baseline | Must-have C#2 | 📋 | Sprint 1.6 |
+| PLAT-009 | Sentry + Inngest observability baseline | Must-have C#2 | ✅ | Sprint 1.6 · `lib/observability/` chokepoint shipped (`captureError`, `captureMessage`, `withCapture`, PII `scrub`). AI extract wired (both image + text paths). Today's transport = structured stderr; Sentry SDK swap is a single-file edit documented in `lib/observability/README.md`. SDK install + `sentry.*.config.ts` + Inngest onFailure wiring deferred (waits for `package.json` WIP). |
 | PLAT-010 | Code-prefix configuration — wire consumers (replace triggers) | Must-have C#2 | 📋 | Sprint 1.7 |
 | PLAT-011 | Tenant lifecycle (create + seed) + subdomain routing | Must-have C#2 | 📋 | Sprint 2 |
 | PLAT-012 | Notification transport (in-app + WhatsApp + email) | Must-have post-C#2 | 📋 | — |
