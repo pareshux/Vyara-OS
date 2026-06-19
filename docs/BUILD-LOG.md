@@ -23,7 +23,7 @@
 
 ## 2026-06-20
 
-### FO-5 — Multi-category expense module (pending commit)
+### FO-5 — Multi-category expense module (82dcba4)
 - **Tracks:** FIN-006 (✅), FIN-007 (✅ Partial), FLD-016 (✅)
 - **Capability:** Finance + Field Operations
 - **Tier:** Must-have post-C#2 (FIN-006), Should-have (FLD-016)
