@@ -78,8 +78,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         `id, name, segment, city, estimated_value, created_at,
          current_stage:current_stage_id(id, label, color, is_paving_stage),
          owner:owner_id(full_name),
-         buyer_firm:buyer_firm_id(name),
-         architect_firm:architect_firm_id(name)`
+         buyer_firm:buyer_firm_id(id, name),
+         architect_firm:architect_firm_id(id, name)`
       )
       .eq('id', id)
       .is('deleted_at', null)
@@ -172,8 +172,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     : (allStages ?? []).filter((s) => s.segment === 'generic')
 
   const owner = (project.owner as unknown) as { full_name: string } | null
-  const buyerFirm = (project.buyer_firm as unknown) as { name: string } | null
-  const architectFirm = (project.architect_firm as unknown) as { name: string } | null
+  const buyerFirm = (project.buyer_firm as unknown) as { id: string; name: string } | null
+  const architectFirm = (project.architect_firm as unknown) as { id: string; name: string } | null
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-6 max-w-5xl">
@@ -353,13 +353,33 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                     <span className="text-muted-foreground flex items-center gap-1 shrink-0">
                       <Building2 className="size-3.5" /> Buyer
                     </span>
-                    <span className="font-medium text-right">{buyerFirm?.name ?? '—'}</span>
+                    {buyerFirm ? (
+                      <Link
+                        href={`/customers/${buyerFirm.id}`}
+                        className="font-medium text-right hover:text-primary inline-flex items-center gap-1"
+                      >
+                        {buyerFirm.name}
+                        <ChevronRight className="size-3 text-muted-foreground/60" />
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-right">—</span>
+                    )}
                   </div>
                   <div className="flex items-start justify-between gap-4">
                     <span className="text-muted-foreground flex items-center gap-1 shrink-0">
                       <Building2 className="size-3.5" /> Architect
                     </span>
-                    <span className="font-medium text-right">{architectFirm?.name ?? '—'}</span>
+                    {architectFirm ? (
+                      <Link
+                        href={`/customers/${architectFirm.id}`}
+                        className="font-medium text-right hover:text-primary inline-flex items-center gap-1"
+                      >
+                        {architectFirm.name}
+                        <ChevronRight className="size-3 text-muted-foreground/60" />
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-right">—</span>
+                    )}
                   </div>
                 </div>
               </CardContent>

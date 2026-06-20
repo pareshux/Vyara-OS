@@ -23,6 +23,13 @@
 
 ## 2026-06-20
 
+### Customer 360 — Slice 1 (pending commit)
+- **Tracks:** REL-009 (✅ Partial)
+- **Capability:** Relationship
+- **Tier:** Should-have
+- **Status change:** 📋 → ✅ Partial
+- **Notes:** Fourth cross-capability read-model after project-progress (Slice 2), visit-detail (FO-6), field-day (FO-7). `lib/read-models/customer-360.ts` is the assembler; `app/(app)/customers/[firmId]/page.tsx` is the dumb consumer. Header card surfaces firm name + relationship type (resolved via `relationship_type_master` from REL-006, falls back to title-cased `firm.type` for pre-REL-006 rows) + phone/email/website + city/state + GSTIN + primary contact (first contact by `created_at`) + total contact count with "View all N" link. Projects section is a single `.or(buyer_firm_id.eq.X,architect_firm_id.eq.X)` query so dedup + the "Showing 10 of N" count are exact; `firm_role` resolved per row by checking which FK matches. Entry point: project-detail Overview tab — buyer + architect firm names become `<Link>` to `/customers/<firmId>` with a chevron affordance. **Deliberately deferred to slice 2+:** Orders / Quotes / Invoices / Collections sections, Visits / Activities timeline, a `/customers` list page. Per the phased-builds feedback — walk slice 1 end-to-end before bundling slice 2. **Architecturally:** the read-model boundary is set the first time. New sections in slice 2 (Orders, Quotes, Invoices, Collections) extend the assembler with one query each; the page stays a dumb consumer. Slice 2 will not have to re-architect the header.
+
 ### Sprint 2.2 (Field Operations deep-build) — CLOSE
 - **8/8 items shipped.** FO-1 (sidebar grouping), FO-2 (PLAT-013 attachments), FO-3 (visit proof), FO-4 (PLAT-014 approvals), FO-5 (FIN-006 expenses + FIN-007 partial + FLD-016), FO-6 (FLD-014 Visit Hub partial), FO-7 (FLD-015 day read-model), FO-8 (FLD-013 + INT-008 prep brief).
 - **6 Blueprint capabilities touched:** Platform (PLAT-013, PLAT-014), Field Operations (FLD-013, FLD-014, FLD-015, FLD-016), Finance (FIN-006, FIN-007), Intelligence (INT-008), Relationship (touched via visit subject reads), Revenue (touched via project + quote reads).
