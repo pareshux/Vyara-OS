@@ -23,7 +23,14 @@
 
 ## 2026-06-20
 
-### Customer 360 — Slice 1 (pending commit)
+### Customer 360 — Slice 1.5 · /firms discovery surface (pending commit)
+- **Tracks:** REL-009 (still ✅ Partial — extends the surface, doesn't change tier)
+- **Capability:** Relationship
+- **Tier:** Should-have
+- **Status change:** ✅ Partial (Slice 1) → ✅ Partial (Slice 1.5 extends it)
+- **Notes:** Single discovery page for every firm in the tenant — replaces the "you can only reach a firm via a project" constraint that Slice 1 closed with. `app/(app)/firms/page.tsx` (server) fetches all non-deleted firms + the `relationship_type_master` rows in parallel; `firms-client.tsx` is a single client component holding filter + search state. Filter dropdown is single-select, options are pulled from the master and tagged with per-tenant counts so the user sees which types have content without opening the menu. Search is client-side substring across name / city / phone / GSTIN (Vyara is well under 500 firms — server-side trgm becomes worthwhile around 5k+; deferred until then). Every row deep-links to `/customers/[firmId]` (Slice 1). Sidebar entry "Firms" sits between Leads and Contacts under Relationship (Firms = the org spine; Contacts = people in those orgs; ordering reflects the data hierarchy). Dealers continue to live at `/dealers` because they carry extra fields (tier, credit limit, code); a dealer is still findable here by filtering type=dealer, and clicks land on the same Customer 360 (not the dedicated dealer detail page — that asymmetry is intentional and can be revisited if it confuses anyone). Why no /firms list page existed before: there was never a daily-use case for "scan everyone" — discovery happened through Leads, Projects, or Contacts. Slice 1 (Customer 360) created the need: now that firms have a destination worth reaching, they need a discovery surface.
+
+### Customer 360 — Slice 1 (9fc3b7e)
 - **Tracks:** REL-009 (✅ Partial)
 - **Capability:** Relationship
 - **Tier:** Should-have

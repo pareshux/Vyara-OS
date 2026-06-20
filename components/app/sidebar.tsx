@@ -9,6 +9,7 @@ import {
   UserPlus,
   CheckSquare,
   BuildingIcon,
+  Building2,
   Package,
   Truck,
   FileText,
@@ -71,6 +72,7 @@ const NAV_ITEMS: NavItem[] = [
   // Relationship — people + organisations (Blueprint capability §2.1).
   // Dealer is a relationship type, not a separate module — lives here.
   { label: 'Leads',       href: '/leads',       icon: UserPlus,        group: 'relationship' },
+  { label: 'Firms',       href: '/firms',       icon: Building2,       group: 'relationship' },
   { label: 'Contacts',    href: '/contacts',    icon: Users,           group: 'relationship' },
   { label: 'Dealers',     href: '/dealers',     icon: Store,           group: 'relationship',  feature: 'enable_dealer_portal' },
 
