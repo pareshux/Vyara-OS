@@ -59,15 +59,29 @@ export type Customer360Project = {
   firm_role: 'buyer' | 'architect'
 }
 
+export type Customer360Kpis = {
+  // Computed across all projects this firm participates in (capped at the
+  // total we fetched — for Vyara today total is small enough that the page
+  // load returns everything; if a tenant ever crosses thousands the assembler
+  // gets a dedicated aggregate query).
+  total_estimated_value: number
+  active_project_count: number
+  last_touched_at: string | null
+}
+
 export type Customer360 = {
   firm: Customer360Firm
+  // Primary contact = first contact of the firm by created_at. Kept for the
+  // header card alongside `contacts` so the page doesn't have to pick.
   primary_contact: Customer360Contact | null
+  contacts: Customer360Contact[]
   contact_count: number
   projects: {
     items: Customer360Project[]
     total: number
     showing: number
   }
+  kpis: Customer360Kpis
 }
 
 // How many projects to show on the page before the "Showing X of Y" line.
@@ -85,7 +99,11 @@ function titleCase(snake: string): string {
 export async function getCustomer360(firmId: string): Promise<Customer360 | null> {
   const supabase = await createClient()
 
-  const [{ data: firmRow }, { count: contactCount }, { data: primaryContact }] = await Promise.all([
+  // Capped at 100 because a firm with 100+ live contacts is the kind of edge
+  // case that needs its own paged surface — not a slice-1 concern.
+  const CONTACTS_CAP = 100
+
+  const [{ data: firmRow }, { data: contactRows, count: contactCount }] = await Promise.all([
     supabase
       .from('firm')
       .select(
@@ -97,20 +115,23 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
       .maybeSingle(),
     supabase
       .from('contact')
-      .select('id', { count: 'exact', head: true })
-      .eq('firm_id', firmId)
-      .is('deleted_at', null),
-    supabase
-      .from('contact')
-      .select('id, full_name, role_title, phone, email')
+      .select('id, full_name, role_title, phone, email', { count: 'exact' })
       .eq('firm_id', firmId)
       .is('deleted_at', null)
       .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle(),
+      .limit(CONTACTS_CAP),
   ])
 
   if (!firmRow) return null
+
+  const contacts: Customer360Contact[] = (contactRows ?? []).map((c) => ({
+    id: c.id as string,
+    full_name: c.full_name as string,
+    role_title: (c.role_title as string | null) ?? null,
+    phone: (c.phone as string | null) ?? null,
+    email: (c.email as string | null) ?? null,
+  }))
+  const primary_contact = contacts[0] ?? null
 
   const relationshipTypeJoin = (firmRow.relationship_type as unknown) as
     | { label: string }
@@ -125,19 +146,50 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
   // is exact (no double-counting for firms playing both roles on a project).
   // buyer_firm_id and architect_firm_id are kept on the row so we can resolve
   // firm_role per row.
-  const { data: projectRows, count: projectTotal } = await supabase
-    .from('project')
-    .select(
-      `id, name, segment, city, estimated_value, updated_at,
-       buyer_firm_id, architect_firm_id,
-       current_stage:current_stage_id(id, label, color),
-       owner:owner_id(full_name)`,
-      { count: 'exact' }
-    )
-    .or(`buyer_firm_id.eq.${firmId},architect_firm_id.eq.${firmId}`)
-    .is('deleted_at', null)
-    .order('updated_at', { ascending: false })
-    .limit(PROJECTS_PAGE_SIZE)
+  //
+  // Two queries: one limited list for the Projects tab, one lightweight
+  // aggregate (no joins, no limit) for KPIs across ALL projects. The aggregate
+  // query also pulls `current_stage_id->is_terminal` so we can count active
+  // projects without over-fetching.
+  const [{ data: projectRows, count: projectTotal }, { data: projectAggRows }] = await Promise.all([
+    supabase
+      .from('project')
+      .select(
+        `id, name, segment, city, estimated_value, updated_at,
+         buyer_firm_id, architect_firm_id,
+         current_stage:current_stage_id(id, label, color),
+         owner:owner_id(full_name)`,
+        { count: 'exact' }
+      )
+      .or(`buyer_firm_id.eq.${firmId},architect_firm_id.eq.${firmId}`)
+      .is('deleted_at', null)
+      .order('updated_at', { ascending: false })
+      .limit(PROJECTS_PAGE_SIZE),
+    supabase
+      .from('project')
+      .select(
+        `estimated_value, updated_at,
+         current_stage:current_stage_id(is_terminal)`
+      )
+      .or(`buyer_firm_id.eq.${firmId},architect_firm_id.eq.${firmId}`)
+      .is('deleted_at', null),
+  ])
+
+  // KPI rollup across all projects.
+  type AggRow = {
+    estimated_value: number | null
+    updated_at: string
+    current_stage: { is_terminal: boolean } | { is_terminal: boolean }[] | null
+  }
+  let total_estimated_value = 0
+  let active_project_count = 0
+  let last_touched_at: string | null = null
+  for (const row of ((projectAggRows ?? []) as unknown as AggRow[])) {
+    total_estimated_value += row.estimated_value ?? 0
+    const stage = Array.isArray(row.current_stage) ? row.current_stage[0] ?? null : row.current_stage
+    if (stage && !stage.is_terminal) active_project_count++
+    if (!last_touched_at || row.updated_at > last_touched_at) last_touched_at = row.updated_at
+  }
 
   type ProjectRow = {
     id: string
@@ -181,20 +233,18 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
       notes: (firmRow.notes as string | null) ?? null,
       created_at: firmRow.created_at as string,
     },
-    primary_contact: primaryContact
-      ? {
-          id: primaryContact.id as string,
-          full_name: primaryContact.full_name as string,
-          role_title: (primaryContact.role_title as string | null) ?? null,
-          phone: (primaryContact.phone as string | null) ?? null,
-          email: (primaryContact.email as string | null) ?? null,
-        }
-      : null,
-    contact_count: contactCount ?? 0,
+    primary_contact,
+    contacts,
+    contact_count: contactCount ?? contacts.length,
     projects: {
       items: mergedItems,
       total,
       showing: mergedItems.length,
+    },
+    kpis: {
+      total_estimated_value,
+      active_project_count,
+      last_touched_at,
     },
   }
 }

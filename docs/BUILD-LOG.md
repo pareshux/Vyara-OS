@@ -23,7 +23,14 @@
 
 ## 2026-06-20
 
-### Customer 360 — Slice 1.5 · /firms discovery surface (pending commit)
+### Customer 360 — Slice 1.6 · Tab restructure + Contacts tab (pending commit)
+- **Tracks:** REL-009 (still ✅ Partial — structural pivot, not a new tier)
+- **Capability:** Relationship
+- **Tier:** Should-have
+- **Status change:** ✅ Partial (Slice 1.5) → ✅ Partial (Slice 1.6 restructures)
+- **Notes:** User feedback after walking Slice 1: "if a firm has 3 contacts, why does clicking 'View all' send me away to /contacts? show them here. And put tabs below the header so Slice 2 has somewhere to land." Right call. The page now has `<Tabs>` below the header: **Overview** (default) | **Projects** | **Contacts**. Header card narrows to identity (name, type, contact details, primary contact) — no more "View all N" link (the Contacts tab badge does that job). Overview tab carries a 4-card KPI strip (`projects.total`, `contact_count`, `kpis.total_estimated_value`, `kpis.last_touched_at`) + an AI insights placeholder (REL-011 destination — copy explains what's coming) + Notes section (renders only when firm.notes is set). Projects tab is verbatim what was below the card in Slice 1.5. Contacts tab is a new table showing every contact (capped at 100; "Primary" badge on row 0; tel:/mailto: links). **Read-model extension:** `contacts: Customer360Contact[]` (capped 100) added alongside `primary_contact` (which is now derived from `contacts[0]`); new `kpis` object with `total_estimated_value` + `active_project_count` (uses `pipeline_stage.is_terminal` to exclude won/lost) + `last_touched_at`. Two project queries now: one limited for the Projects list, one lightweight aggregate (no joins, no limit) for KPIs — keeps the page bounded as project count grows. **Architecturally the boundary held:** the page is still a dumb consumer of one assembled object. Slice 2 tabs (Quotes / Orders / Invoices / Collections) drop in by adding one query to the assembler + one `<TabsContent>` each.
+
+### Customer 360 — Slice 1.5 · /firms discovery surface (810025d)
 - **Tracks:** REL-009 (still ✅ Partial — extends the surface, doesn't change tier)
 - **Capability:** Relationship
 - **Tier:** Should-have
