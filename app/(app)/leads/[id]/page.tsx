@@ -4,9 +4,11 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronRight, Mail, Phone, MapPin, Calendar, IndianRupee, User, Sparkles } from 'lucide-react'
 import { LeadActions } from './lead-actions'
 import { LeadTimeline } from './lead-timeline'
+import { QuotesTab } from '@/app/(app)/projects/[id]/quotes-tab'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +31,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     { data: activities },
     { data: stageHistory },
     { data: tasks },
+    { data: quotes },
+    { data: products },
+    { data: profile },
+    { data: contacts },
   ] = await Promise.all([
     supabase
       .from('lead')
@@ -60,7 +66,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       .order('full_name'),
     supabase
       .from('activity')
-      .select('id, type, content, created_at, actor:actor_id(full_name)')
+      .select('id, type, content, created_at, actor_id')
       .eq('entity_type', 'lead')
       .eq('entity_id', id)
       .order('created_at', { ascending: false })
@@ -79,9 +85,39 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       .is('deleted_at', null)
       .order('is_done')
       .order('due_at'),
+    supabase
+      .from('quotation')
+      .select('id, quotation_number, status, total, valid_until, notes, sent_at, created_at, lines:quotation_line(id, quantity, unit_price, line_total, notes, product:product_id(name, sku_code))')
+      .eq('lead_id', id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('product')
+      .select('id, sku_code, name, unit, base_price')
+      .is('deleted_at', null)
+      .order('name'),
+    supabase.from('user_profile').select('role').eq('id', user.id).single(),
+    supabase
+      .from('contact')
+      .select('id, full_name, role_title, firm:firm_id(name)')
+      .is('deleted_at', null)
+      .order('full_name')
+      .limit(100),
   ])
 
   if (!lead) notFound()
+
+  // Resolve actor names from user_profile (actor_id → auth.users → not in PostgREST
+  // public schema; user_profile.id is the same UUID and IS in public schema).
+  const actorIds = [...new Set((activities ?? []).map((a) => (a as { actor_id: string | null }).actor_id).filter(Boolean))] as string[]
+  const { data: actorProfiles } = actorIds.length > 0
+    ? await supabase.from('user_profile').select('id, full_name').in('id', actorIds)
+    : { data: [] as Array<{ id: string; full_name: string }> }
+  const actorNameById = new Map((actorProfiles ?? []).map((p) => [p.id, p.full_name]))
+  const enrichedActivities = (activities ?? []).map((a) => {
+    const aid = (a as { actor_id: string | null }).actor_id
+    return { ...a, actor: aid ? { full_name: actorNameById.get(aid) ?? null } : null }
+  })
 
   type SafeJoin<T> = T | T[] | null
   function one<T>(x: SafeJoin<T>): T | null {
@@ -257,41 +293,60 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         </Card>
       </div>
 
-      {/* Notes */}
-      {lead.notes && (
-        <Card size="sm">
-          <CardContent className="pt-3 flex flex-col gap-1">
-            <p className="text-xs uppercase tracking-wide font-medium text-muted-foreground">Notes</p>
-            <p className="text-sm whitespace-pre-wrap">{lead.notes as string}</p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Tabbed body: Quotes · Timeline · Tasks */}
+      <Tabs defaultValue="quotes">
+        <TabsList variant="line" className="w-full justify-start border-b border-border rounded-none h-auto pb-0 gap-0">
+          <TabsTrigger value="quotes" className="rounded-none pb-3 px-4">
+            Quotes {(quotes ?? []).length > 0 && <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">({(quotes ?? []).length})</span>}
+          </TabsTrigger>
+          <TabsTrigger value="timeline" className="rounded-none pb-3 px-4">Timeline</TabsTrigger>
+          {(tasks ?? []).length > 0 && (
+            <TabsTrigger value="tasks" className="rounded-none pb-3 px-4">
+              Tasks <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">({(tasks ?? []).length})</span>
+            </TabsTrigger>
+          )}
+        </TabsList>
 
-      {/* Tasks (if any) */}
-      {(tasks ?? []).length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold mb-2">Tasks</h2>
-          <Card size="sm"><CardContent className="pt-2 pb-2 flex flex-col divide-y divide-border">
-            {(tasks ?? []).map((t) => (
-              <div key={t.id} className="py-2 flex items-center justify-between gap-2">
-                <span className={t.is_done ? 'line-through text-muted-foreground text-sm' : 'text-sm text-foreground'}>{t.title}</span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {t.due_at ? new Date(t.due_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
-                </span>
-              </div>
-            ))}
-          </CardContent></Card>
-        </div>
-      )}
+        <TabsContent value="quotes" className="mt-4">
+          <QuotesTab
+            leadId={lead.id as string}
+            quotes={(quotes ?? []) as unknown as Parameters<typeof QuotesTab>[0]['quotes']}
+            products={(products ?? []) as unknown as Parameters<typeof QuotesTab>[0]['products']}
+            contacts={(contacts ?? []) as unknown as Parameters<typeof QuotesTab>[0]['contacts']}
+            userRole={(profile as { role: string } | null)?.role}
+          />
+        </TabsContent>
 
-      {/* Timeline */}
-      <div>
-        <h2 className="text-sm font-semibold mb-2">Timeline</h2>
-        <LeadTimeline
-          activities={((activities ?? []) as unknown as { id: string; type: string; content: unknown; created_at: string; actor: { full_name: string } | { full_name: string }[] | null }[])}
-          stageHistory={((stageHistory ?? []) as unknown as { id: string; remark: string | null; created_at: string; from_stage: { label: string; color: string } | { label: string; color: string }[] | null; to_stage: { label: string; color: string } | { label: string; color: string }[] | null }[])}
-        />
-      </div>
+        <TabsContent value="timeline" className="mt-4">
+          {lead.notes && (
+            <Card size="sm" className="mb-4">
+              <CardContent className="pt-3 flex flex-col gap-1">
+                <p className="text-xs uppercase tracking-wide font-medium text-muted-foreground">Notes</p>
+                <p className="text-sm whitespace-pre-wrap">{lead.notes as string}</p>
+              </CardContent>
+            </Card>
+          )}
+          <LeadTimeline
+            activities={(enrichedActivities as unknown as { id: string; type: string; content: unknown; created_at: string; actor: { full_name: string } | { full_name: string }[] | null }[])}
+            stageHistory={((stageHistory ?? []) as unknown as { id: string; remark: string | null; created_at: string; from_stage: { label: string; color: string } | { label: string; color: string }[] | null; to_stage: { label: string; color: string } | { label: string; color: string }[] | null }[])}
+          />
+        </TabsContent>
+
+        {(tasks ?? []).length > 0 && (
+          <TabsContent value="tasks" className="mt-4">
+            <Card size="sm"><CardContent className="pt-2 pb-2 flex flex-col divide-y divide-border">
+              {(tasks ?? []).map((t) => (
+                <div key={t.id} className="py-2 flex items-center justify-between gap-2">
+                  <span className={t.is_done ? 'line-through text-muted-foreground text-sm' : 'text-sm text-foreground'}>{t.title}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {t.due_at ? new Date(t.due_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                  </span>
+                </div>
+              ))}
+            </CardContent></Card>
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   )
 }

@@ -216,6 +216,23 @@ export async function advanceStage(
     })
   }
 
+  // Emit project.stage_changed so downstream modules (notifications, SLA checks) can react
+  try {
+    const { inngest } = await import('@/lib/inngest/client')
+    await inngest.send({
+      name: 'project.stage_changed',
+      data: {
+        project_id: projectId,
+        from_stage: fromStageId ?? '',
+        to_stage: toStageId,
+        actor_id: userId,
+        is_back_flow: false,
+      },
+    })
+  } catch (e) {
+    console.warn('inngest.send(project.stage_changed) failed (non-fatal):', e)
+  }
+
   revalidatePath(`/projects/${projectId}`)
   revalidatePath('/projects')
   revalidatePath('/dashboard')

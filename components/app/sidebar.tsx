@@ -78,6 +78,7 @@ const NAV_ITEMS: NavItem[] = [
 
   // Revenue — generate business (Blueprint §2.2).
   { label: 'Projects',    href: '/projects',    icon: FolderKanban,    group: 'revenue' },
+  { label: 'Quotes',      href: '/quotes',      icon: FileText,        group: 'revenue' },
   { label: 'Orders',      href: '/orders',      icon: Package,         group: 'revenue' },
 
   // Delivery — fulfil commitments (Blueprint §2.3).

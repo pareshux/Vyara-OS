@@ -268,7 +268,7 @@ export async function logLeadActivity(params: {
 
   if (!params.note.trim()) return { error: 'A note is required.' }
 
-  await supabase.from('activity').insert({
+  const { error: actErr } = await supabase.from('activity').insert({
     tenant_id: tenantId,
     entity_type: 'lead',
     entity_id: params.lead_id,
@@ -277,6 +277,7 @@ export async function logLeadActivity(params: {
     actor_id: userId,
     content: { note: params.note.trim() },
   })
+  if (actErr) return { error: actErr.message }
 
   await supabase
     .from('lead')
@@ -366,6 +367,13 @@ export async function markLeadWon(
           actor_id: userId,
           content: { note: `Project created from won lead ${lead.lead_number}` },
         })
+
+        // Migrate any quotes created at the lead stage → now belong to the project
+        await supabase
+          .from('quotation')
+          .update({ project_id: projectId, updated_at: new Date().toISOString() })
+          .eq('lead_id', leadId)
+          .is('project_id', null)
       }
     }
   }

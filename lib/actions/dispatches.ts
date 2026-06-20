@@ -59,6 +59,60 @@ export async function scheduleDispatch(params: {
     .single()
   if (!order) return { error: 'Order not found' }
 
+  // ─── Over-dispatch guard ────────────────────────────────────────────────
+  // Across tranches, sum(dispatched_qty) must not exceed sales_order_line.quantity.
+  // We exclude cancelled and deleted dispatches from the prior-shipped tally.
+  const linesWithSrc = params.lines.filter((l) => l.sales_order_line_id)
+  if (linesWithSrc.length > 0) {
+    const cancelledStageId = await stageIdByKey(supabase, 'cancelled')
+    let validDispatches = supabase
+      .from('dispatch')
+      .select('id')
+      .eq('sales_order_id', params.sales_order_id)
+      .is('deleted_at', null)
+    if (cancelledStageId) {
+      validDispatches = validDispatches.neq('current_stage_id', cancelledStageId)
+    }
+    const { data: priorDispatches } = await validDispatches
+    const priorDispatchIds = (priorDispatches ?? []).map((d) => d.id as string)
+
+    const sourceLineIds = linesWithSrc.map((l) => l.sales_order_line_id!) as string[]
+    const { data: priorLineRows } = priorDispatchIds.length > 0
+      ? await supabase
+          .from('dispatch_line')
+          .select('sales_order_line_id, quantity')
+          .in('dispatch_id', priorDispatchIds)
+          .in('sales_order_line_id', sourceLineIds)
+      : { data: [] as Array<{ sales_order_line_id: string | null; quantity: number }> }
+
+    const priorShipped: Record<string, number> = {}
+    for (const r of priorLineRows ?? []) {
+      if (!r.sales_order_line_id) continue
+      priorShipped[r.sales_order_line_id] = (priorShipped[r.sales_order_line_id] ?? 0) + Number(r.quantity)
+    }
+
+    const { data: orderLines } = await supabase
+      .from('sales_order_line')
+      .select('id, quantity, sku_code, unit')
+      .in('id', sourceLineIds)
+    const orderedByLine = Object.fromEntries(
+      (orderLines ?? []).map((l) => [l.id as string, { ordered: Number(l.quantity), sku: l.sku_code as string, unit: l.unit as string }])
+    )
+
+    for (const reqLine of linesWithSrc) {
+      const lineId = reqLine.sales_order_line_id!
+      const meta = orderedByLine[lineId]
+      if (!meta) continue
+      const already = priorShipped[lineId] ?? 0
+      const cumulative = already + Number(reqLine.quantity)
+      if (cumulative > meta.ordered + 0.0001) {
+        return {
+          error: `${meta.sku}: cannot dispatch ${reqLine.quantity} ${meta.unit} — ${already} already shipped, only ${(meta.ordered - already).toFixed(2)} remaining of ${meta.ordered} ordered.`,
+        }
+      }
+    }
+  }
+
   const { data: dispatch, error } = await supabase
     .from('dispatch')
     .insert({
@@ -201,23 +255,27 @@ export async function recordPOD(params: {
 
   const { data: dispatch } = await supabase
     .from('dispatch')
-    .select('current_stage_id, project_id')
+    .select('current_stage_id, project_id, delivered_at')
     .eq('id', params.dispatch_id)
     .single()
   if (!dispatch) return { error: 'Dispatch not found' }
 
+  const nowIso = new Date().toISOString()
+  const patch: Record<string, unknown> = {
+    pod_url: params.pod_url,
+    pod_signature_name: params.signature_name ?? null,
+    pod_uploaded_at: nowIso,
+    pod_uploaded_by: userId,
+    current_stage_id: podStageId,
+    updated_at: nowIso,
+    updated_by: userId,
+  }
+  // Only stamp delivered_at if Mark Delivered hadn't already recorded the true time.
+  if (!dispatch.delivered_at) patch.delivered_at = nowIso
+
   const { error: uErr } = await supabase
     .from('dispatch')
-    .update({
-      pod_url: params.pod_url,
-      pod_signature_name: params.signature_name ?? null,
-      pod_uploaded_at: new Date().toISOString(),
-      pod_uploaded_by: userId,
-      current_stage_id: podStageId,
-      delivered_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      updated_by: userId,
-    })
+    .update(patch)
     .eq('id', params.dispatch_id)
   if (uErr) return { error: uErr.message }
 
@@ -249,6 +307,55 @@ export async function recordPOD(params: {
   revalidatePath(`/dispatches/${params.dispatch_id}`)
   revalidatePath('/dispatches')
   revalidatePath('/warehouse')
+  return { success: true }
+}
+
+export async function updateDispatchNotes(
+  dispatchId: string,
+  notes: string
+): Promise<{ success: true } | { error: string }> {
+  const ctx = await getActorContext()
+  if (!ctx) return { error: 'Not authenticated' }
+  const { supabase, userId, tenantId } = ctx
+
+  const { data: existing } = await supabase
+    .from('dispatch')
+    .select('id, project_id, dispatch_number, notes')
+    .eq('id', dispatchId)
+    .single()
+  if (!existing) return { error: 'Dispatch not found' }
+
+  const cleaned = notes.trim()
+  const { error } = await supabase
+    .from('dispatch')
+    .update({
+      notes: cleaned.length > 0 ? cleaned : null,
+      updated_at: new Date().toISOString(),
+      updated_by: userId,
+    })
+    .eq('id', dispatchId)
+  if (error) return { error: error.message }
+
+  // Surface the change on the project's timeline so the manager sees that
+  // the dispatcher logged something on this tranche.
+  await supabase.from('activity').insert({
+    tenant_id: tenantId,
+    entity_type: 'dispatch',
+    entity_id: dispatchId,
+    project_id: existing.project_id,
+    type: 'note',
+    actor_id: userId,
+    content: {
+      note: cleaned
+        ? `Dispatch ${existing.dispatch_number} note updated: ${cleaned.slice(0, 280)}`
+        : `Dispatch ${existing.dispatch_number} note cleared`,
+    },
+  })
+
+  revalidatePath(`/dispatches/${dispatchId}`)
+  revalidatePath('/dispatches')
+  revalidatePath('/warehouse')
+  if (existing.project_id) revalidatePath(`/projects/${existing.project_id}`)
   return { success: true }
 }
 

@@ -1,14 +1,18 @@
 {
-  "name": "vyara-os",
+  "name": "crmos",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "NODE_OPTIONS='--max-http-header-size=65536' next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
     "@hookform/resolvers": "^5.4.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
@@ -18,7 +22,7 @@
     "clsx": "^2.1.1",
     "inngest": "^4.5.1",
     "lucide-react": "^1.18.0",
-    "next": "16.2.9",
+    "next": "^15.3.9",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.6.0",
     "react": "19.2.4",
@@ -35,10 +39,13 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.9",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "^15.3.9",
     "tailwindcss": "^4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.9"
   }
 }

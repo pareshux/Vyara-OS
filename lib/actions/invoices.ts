@@ -125,6 +125,28 @@ export async function createInvoiceManual(params: {
   const retention_pct = params.retention_pct ?? 0
   const money = computeMoney({ subtotal: params.subtotal, gst_pct, retention_pct })
 
+  // Validate running-bill state: if flagged, sequence is required; and the
+  // (order, seq) pair must be unique among non-deleted running bills so the
+  // RA-Bill numbering stays sane on Mehul's dashboard.
+  if (params.is_running_bill) {
+    if (typeof params.running_bill_seq !== 'number' || params.running_bill_seq <= 0) {
+      return { error: 'Running bill sequence (1, 2, 3 …) is required' }
+    }
+    if (params.sales_order_id) {
+      const { data: dup } = await supabase
+        .from('invoice')
+        .select('id, invoice_number')
+        .eq('sales_order_id', params.sales_order_id)
+        .eq('is_running_bill', true)
+        .eq('running_bill_seq', params.running_bill_seq)
+        .is('deleted_at', null)
+        .maybeSingle()
+      if (dup) {
+        return { error: `RA-Bill #${params.running_bill_seq} already exists for this order (${dup.invoice_number}).` }
+      }
+    }
+  }
+
   const { data: invoice, error } = await supabase
     .from('invoice')
     .insert({

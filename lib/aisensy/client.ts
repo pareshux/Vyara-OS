@@ -52,7 +52,7 @@ export async function sendWhatsApp(p: WhatsAppParams): Promise<WhatsAppResult> {
         campaignName: p.template,
         destination: p.to,
         templateParams: p.params ? Object.values(p.params).map(String) : [],
-        source: 'vyara-os',
+        source: 'crmos',
       }),
     })
     if (!res.ok) {

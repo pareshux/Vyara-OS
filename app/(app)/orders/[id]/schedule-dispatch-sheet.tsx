@@ -79,6 +79,8 @@ function ScheduleDispatchSheet({
   const [driverPhone, setDriverPhone] = useState('')
   const [notes, setNotes] = useState('')
   const [lineQty, setLineQty] = useState<Record<string, number>>({})
+  // Shipped-so-far across prior non-cancelled tranches, per sales_order_line.id
+  const [priorShipped, setPriorShipped] = useState<Record<string, number>>({})
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
   const [newTransporter, setNewTransporter] = useState<string>('')
@@ -95,9 +97,42 @@ function ScheduleDispatchSheet({
       .then(({ data }) => {
         setTransporters((data ?? []) as Transporter[])
       })
-    // Default each line qty to full
-    setLineQty(Object.fromEntries(lines.map((l) => [l.id, l.quantity])))
-  }, [open, lines])
+
+    // Compute prior-shipped qty per line so we can default to "remaining" and
+    // surface a hint. Excludes cancelled dispatches; dispatch_stage cancelled
+    // is a system seed (tenant_id IS NULL).
+    ;(async () => {
+      const [{ data: cancelled }, { data: validDispatches }] = await Promise.all([
+        supabase.from('dispatch_stage').select('id').is('tenant_id', null).eq('stage_key', 'cancelled').maybeSingle(),
+        supabase.from('dispatch').select('id, current_stage_id').eq('sales_order_id', orderId).is('deleted_at', null),
+      ])
+      const cancelledId = cancelled?.id as string | undefined
+      const dispatchIds = (validDispatches ?? [])
+        .filter((d) => !cancelledId || d.current_stage_id !== cancelledId)
+        .map((d) => d.id as string)
+
+      const shippedMap: Record<string, number> = {}
+      if (dispatchIds.length > 0) {
+        const { data: priorLines } = await supabase
+          .from('dispatch_line')
+          .select('sales_order_line_id, quantity')
+          .in('dispatch_id', dispatchIds)
+        for (const r of priorLines ?? []) {
+          const k = r.sales_order_line_id as string | null
+          if (!k) continue
+          shippedMap[k] = (shippedMap[k] ?? 0) + Number(r.quantity)
+        }
+      }
+      setPriorShipped(shippedMap)
+
+      // Default each line qty to remaining (ordered - shipped, floored at 0)
+      const defaults: Record<string, number> = {}
+      for (const l of lines) {
+        defaults[l.id] = Math.max(0, l.quantity - (shippedMap[l.id] ?? 0))
+      }
+      setLineQty(defaults)
+    })()
+  }, [open, lines, orderId])
 
   function handleQtyChange(lineId: string, v: string) {
     const n = Number(v)
@@ -226,23 +261,40 @@ function ScheduleDispatchSheet({
           <div className="flex flex-col gap-1.5">
             <Label>Items to dispatch</Label>
             <div className="rounded-lg border border-border bg-card divide-y divide-border max-h-64 overflow-auto">
-              {lines.map((l) => (
-                <div key={l.id} className="px-3 py-2 flex items-center gap-3 text-sm">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-foreground truncate">{l.product_name}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{l.sku_code} · order qty {l.quantity} {l.unit}</p>
+              {lines.map((l) => {
+                const shipped = priorShipped[l.id] ?? 0
+                const remaining = Math.max(0, l.quantity - shipped)
+                const fullyShipped = remaining === 0
+                const hint =
+                  shipped > 0
+                    ? fullyShipped
+                      ? `${shipped} ${l.unit} already shipped — fully delivered`
+                      : `${shipped} of ${l.quantity} ${l.unit} shipped · ${remaining} remaining`
+                    : `order qty ${l.quantity} ${l.unit}`
+                return (
+                  <div
+                    key={l.id}
+                    className={`px-3 py-2 flex items-center gap-3 text-sm ${fullyShipped ? 'opacity-60' : ''}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-foreground truncate">{l.product_name}</p>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {l.sku_code} · {hint}
+                      </p>
+                    </div>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={remaining}
+                      step="0.01"
+                      disabled={fullyShipped}
+                      className="w-20 tabular-nums"
+                      value={lineQty[l.id] ?? 0}
+                      onChange={(e) => handleQtyChange(l.id, e.target.value)}
+                    />
                   </div>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={l.quantity}
-                    step="0.01"
-                    className="w-20 tabular-nums"
-                    value={lineQty[l.id] ?? 0}
-                    onChange={(e) => handleQtyChange(l.id, e.target.value)}
-                  />
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

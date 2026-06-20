@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ChevronRight, Truck, FileImage } from 'lucide-react'
 import { DispatchActions } from './dispatch-actions'
+import { DispatchNotes } from './dispatch-notes'
 
 export const dynamic = 'force-dynamic'
 
@@ -169,6 +170,16 @@ export default async function DispatchDetail({ params }: { params: Promise<{ id:
           </CardContent>
         </Card>
       </div>
+
+      <Card size="sm">
+        <CardContent className="pt-3 flex flex-col gap-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notes</p>
+          <DispatchNotes
+            dispatchId={dispatch.id as string}
+            initialNotes={(dispatch.notes as string | null) ?? null}
+          />
+        </CardContent>
+      </Card>
 
       <div>
         <h2 className="text-sm font-semibold mb-2">Items shipped</h2>

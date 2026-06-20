@@ -25,8 +25,8 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { PlusCircle, Package } from 'lucide-react'
-import { createSpecification } from '@/lib/actions/specifications'
+import { PlusCircle, Package, CheckCircle2 } from 'lucide-react'
+import { createSpecification, toggleSpecificationConfirmed } from '@/lib/actions/specifications'
 
 const schema = z.object({
   product_id: z.string().min(1, 'Product is required'),
@@ -65,6 +65,18 @@ export function SpecificationsTab({ projectId, specs, products }: Specifications
   const router = useRouter()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+
+  function handleToggleConfirmed(specId: string, current: boolean) {
+    startTransition(async () => {
+      const result = await toggleSpecificationConfirmed(specId, projectId, !current)
+      if ('error' in result) {
+        toast.error(result.error)
+        return
+      }
+      toast.success(!current ? 'Specification confirmed' : 'Marked as pending')
+      router.refresh()
+    })
+  }
 
   const {
     register,
@@ -134,6 +146,7 @@ export function SpecificationsTab({ projectId, specs, products }: Specifications
                 <th className="px-4 py-2.5 text-right font-medium text-muted-foreground tabular-nums">Qty</th>
                 <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell">Unit</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
+                <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -170,6 +183,24 @@ export function SpecificationsTab({ projectId, specs, products }: Specifications
                     >
                       {s.is_confirmed ? 'Confirmed' : 'Pending'}
                     </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button
+                      variant={s.is_confirmed ? 'ghost' : 'outline'}
+                      size="sm"
+                      className="text-xs h-7"
+                      disabled={isPending}
+                      onClick={() => handleToggleConfirmed(s.id, s.is_confirmed)}
+                    >
+                      {s.is_confirmed ? (
+                        'Unconfirm'
+                      ) : (
+                        <>
+                          <CheckCircle2 className="size-3 mr-1" />
+                          Confirm
+                        </>
+                      )}
+                    </Button>
                   </td>
                 </tr>
               ))}

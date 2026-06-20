@@ -11,7 +11,10 @@ import {
   ArrowRight,
   Layers,
   CalendarClock,
+  UserPlus,
 } from 'lucide-react'
+import { getLatestDigest } from '@/lib/actions/daily-digest'
+import { DigestCard } from './digest-card'
 
 const PRIORITY_STYLES: Record<string, string> = {
   high: 'bg-red-50 text-red-700',
@@ -30,11 +33,15 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from('user_profile')
-    .select('full_name, tenant_id')
+    .select('full_name, tenant_id, role')
     .eq('id', user.id)
     .single()
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
+  const canManageDigest = profile?.role === 'admin' || profile?.role === 'manager'
+
+  // Fetch latest daily digest (null if not generated yet)
+  const latestDigest = await getLatestDigest()
 
   const todayEnd = new Date()
   todayEnd.setHours(23, 59, 59, 999)
@@ -46,6 +53,7 @@ export default async function DashboardPage() {
     { count: totalProjectCount },
     { data: stagesRaw },
     { data: todayTasksRaw },
+    { data: openLeadsRaw },
   ] = await Promise.all([
     supabase.from('task').select('*', { count: 'exact', head: true }).eq('is_done', false).is('deleted_at', null),
     supabase.from('pipeline_stage').select('id, label, color').eq('is_paving_stage', true),
@@ -71,6 +79,16 @@ export default async function DashboardPage() {
       .lte('due_at', todayEnd.toISOString())
       .order('due_at', { ascending: true })
       .limit(10),
+    supabase
+      .from('lead')
+      .select(
+        `id, lead_number, title, estimated_value, last_activity_at,
+         stage:current_stage_id(label, color, is_terminal),
+         owner:owner_id(full_name)`
+      )
+      .is('deleted_at', null)
+      .order('estimated_value', { ascending: false, nullsFirst: false })
+      .limit(50),
   ])
 
   // --- Paving-stage projects ---
@@ -103,6 +121,28 @@ export default async function DashboardPage() {
   }
   const todayTasks = (todayTasksRaw ?? []) as unknown as TodayTask[]
 
+  // --- Leads ---
+  type LeadRow = {
+    id: string
+    lead_number: string
+    title: string
+    estimated_value: number | null
+    last_activity_at: string
+    stage: { label: string; color: string; is_terminal: boolean } | { label: string; color: string; is_terminal: boolean }[] | null
+    owner: { full_name: string } | { full_name: string }[] | null
+  }
+  const allLeads = (openLeadsRaw ?? []) as unknown as LeadRow[]
+  const openLeads = allLeads.filter((l) => {
+    const s = Array.isArray(l.stage) ? l.stage[0] : l.stage
+    return s && !s.is_terminal
+  })
+  const pipelineValue = openLeads.reduce((s, l) => s + Number(l.estimated_value ?? 0), 0)
+  const stalledLeads = openLeads.filter((l) => {
+    const days = (Date.now() - new Date(l.last_activity_at).getTime()) / 86_400_000
+    return days >= 7
+  })
+  const hotLeads = openLeads.slice(0, 5)
+
   // --- Greeting ---
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -121,8 +161,32 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* KPI cards — 3 up */}
-      <div className="grid grid-cols-3 gap-3 md:gap-4">
+      {/* AI-generated daily digest (managers + admins) */}
+      <DigestCard
+        digest={latestDigest}
+        canGenerate={canManageDigest}
+      />
+
+      {/* KPI cards — 4 up */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <Link href="/leads" className="block">
+          <Card className="hover:bg-muted/30 transition-colors cursor-pointer">
+            <CardContent className="pt-4 flex flex-col gap-1">
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <UserPlus className="size-4" />
+                <span className="text-xs font-medium uppercase tracking-wide">Open Leads</span>
+              </div>
+              <p className="tabular-nums text-2xl font-semibold text-foreground">
+                {openLeads.length}
+              </p>
+              <p className="text-xs text-muted-foreground tabular-nums">
+                ₹{pipelineValue.toLocaleString('en-IN')} in pipeline
+                {stalledLeads.length > 0 && <span className="text-amber-700"> · {stalledLeads.length} stalled</span>}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
         <Card>
           <CardContent className="pt-4 flex flex-col gap-1">
             <div className="flex items-center gap-1.5 text-muted-foreground">

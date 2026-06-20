@@ -15,14 +15,35 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { createInvoiceManual, getInvoiceDefaults, type InvoiceDefaults } from '@/lib/actions/invoices'
+import { logInvoicePhotoDecision } from '@/lib/actions/invoice-photo'
 
 const NONE = '__none__'
+
+export type InvoiceAIPrefill = {
+  external_invoice_number: string | null
+  invoice_date: string | null
+  project_id: string | null
+  buyer_firm_id: string | null
+  sales_order_id: string | null
+  subtotal: number | null
+  gst_pct: number | null
+  retention_pct: number | null
+  is_running_bill: boolean
+  running_bill_seq: number | null
+  is_final_bill: boolean
+  notes: string | null
+  // Audit trail
+  extraction_id: string
+  avg_confidence: number | null
+  original_values: Record<string, unknown>
+}
 
 interface Props {
   projects: { id: string; name: string }[]
   firms: { id: string; name: string }[]
   orders: { id: string; order_number: string; value: number; project_id: string; buyer_firm_id: string | null }[]
   initialDefaults: InvoiceDefaults
+  aiPrefill?: InvoiceAIPrefill | null
 }
 
 function addDays(iso: string, days: number) {
@@ -31,7 +52,7 @@ function addDays(iso: string, days: number) {
   return d.toISOString().slice(0, 10)
 }
 
-export function NewInvoiceForm({ projects, firms, orders, initialDefaults }: Props) {
+export function NewInvoiceForm({ projects, firms, orders, initialDefaults, aiPrefill }: Props) {
   const router = useRouter()
   const today = new Date().toISOString().slice(0, 10)
 
@@ -42,26 +63,31 @@ export function NewInvoiceForm({ projects, firms, orders, initialDefaults }: Pro
 
   const initialGst = initialDefaults.tax?.rate_pct ?? 18
   const initialDays = initialDefaults.paymentTerm?.days ?? 30
+  const initialInvoiceDate = aiPrefill?.invoice_date ?? today
 
-  const [orderId, setOrderId] = useState<string>(NONE)
-  const [projectId, setProjectId] = useState<string>(NONE)
-  const [buyerId, setBuyerId] = useState<string>(NONE)
-  const [externalNum, setExternalNum] = useState('')
-  const [invoiceDate, setInvoiceDate] = useState(today)
-  const [dueDate, setDueDate] = useState(addDays(today, initialDays))
+  const [orderId, setOrderId] = useState<string>(aiPrefill?.sales_order_id ?? NONE)
+  const [projectId, setProjectId] = useState<string>(aiPrefill?.project_id ?? NONE)
+  const [buyerId, setBuyerId] = useState<string>(aiPrefill?.buyer_firm_id ?? NONE)
+  const [externalNum, setExternalNum] = useState(aiPrefill?.external_invoice_number ?? '')
+  const [invoiceDate, setInvoiceDate] = useState(initialInvoiceDate)
+  const [dueDate, setDueDate] = useState(addDays(initialInvoiceDate, initialDays))
   const [paymentTerms, setPaymentTerms] = useState(initialDays)
-  const [subtotal, setSubtotal] = useState(0)
-  const [gstPct, setGstPct] = useState(initialGst)
-  const [retentionPct, setRetentionPct] = useState(0)
-  const [isRunningBill, setIsRunningBill] = useState(false)
-  const [billSeq, setBillSeq] = useState<number | ''>('')
-  const [isFinalBill, setIsFinalBill] = useState(false)
-  const [notes, setNotes] = useState('')
+  const [subtotal, setSubtotal] = useState(aiPrefill?.subtotal ?? 0)
+  const [gstPct, setGstPct] = useState(aiPrefill?.gst_pct ?? initialGst)
+  const [retentionPct, setRetentionPct] = useState(aiPrefill?.retention_pct ?? 0)
+  const [isRunningBill, setIsRunningBill] = useState(aiPrefill?.is_running_bill ?? false)
+  const [billSeq, setBillSeq] = useState<number | ''>(aiPrefill?.running_bill_seq ?? '')
+  const [isFinalBill, setIsFinalBill] = useState(aiPrefill?.is_final_bill ?? false)
+  const [notes, setNotes] = useState(aiPrefill?.notes ?? '')
 
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
-  // When an order is picked, prefill project/buyer/value
+  // When an order is picked, prefill project/buyer/value.
+  // sales_order.value is the pre-tax subtotal (snapshot of quotation.total
+  // = sum of quantity × unit_price; no GST added). Use it as-is. For
+  // running-account bills the user will typically lower this to the
+  // partial-billing amount for the period.
   useEffect(() => {
     if (orderId === NONE) return
     const o = orders.find((x) => x.id === orderId)
@@ -69,11 +95,9 @@ export function NewInvoiceForm({ projects, firms, orders, initialDefaults }: Pro
     setProjectId(o.project_id)
     setBuyerId(o.buyer_firm_id ?? NONE)
     if (subtotal === 0) {
-      // Order value is total inc gst; reverse-derive subtotal at current gst_pct
-      const base = Math.round((o.value / (1 + gstPct / 100)) * 100) / 100
-      setSubtotal(base)
+      setSubtotal(Math.round(Number(o.value) * 100) / 100)
     }
-  }, [orderId, orders, gstPct, subtotal])
+  }, [orderId, orders, subtotal])
 
   // When buyer firm changes, re-resolve payment-term (firm may have its own).
   // Only overrides the form if the current value still matches the previous source,
@@ -116,6 +140,10 @@ export function NewInvoiceForm({ projects, firms, orders, initialDefaults }: Pro
     setErr(null)
     if (subtotal <= 0) { setErr('Subtotal must be greater than zero'); return }
     if (!invoiceDate || !dueDate) { setErr('Invoice date and due date are required'); return }
+    if (isRunningBill && (typeof billSeq !== 'number' || billSeq <= 0)) {
+      setErr('Running bill sequence is required (1, 2, 3 …)')
+      return
+    }
     startTransition(async () => {
       const res = await createInvoiceManual({
         project_id: projectId === NONE ? undefined : projectId,
@@ -139,6 +167,33 @@ export function NewInvoiceForm({ projects, firms, orders, initialDefaults }: Pro
         setErr(res.error)
         toast.error(res.error)
       } else {
+        // If this submission was AI-prefilled, log the decision (accepted/edited)
+        // before navigating away. Non-blocking — we don't surface failures.
+        if (aiPrefill) {
+          const final_values = {
+            external_invoice_number: externalNum,
+            invoice_date: invoiceDate,
+            project_id: projectId === NONE ? null : projectId,
+            buyer_firm_id: buyerId === NONE ? null : buyerId,
+            sales_order_id: orderId === NONE ? null : orderId,
+            subtotal,
+            gst_pct: gstPct,
+            retention_pct: retentionPct,
+            is_running_bill: isRunningBill,
+            running_bill_seq: typeof billSeq === 'number' ? billSeq : null,
+            is_final_bill: isFinalBill,
+            notes,
+          }
+          const edited = wasInvoiceEdited(aiPrefill, final_values)
+          void logInvoicePhotoDecision({
+            extraction_id: aiPrefill.extraction_id,
+            decision: edited ? 'edited' : 'accepted',
+            original_values: aiPrefill.original_values,
+            final_values,
+            avg_confidence: aiPrefill.avg_confidence,
+            target_invoice_id: res.id,
+          })
+        }
         toast.success(`Invoice ${res.invoice_number} created`)
         router.push(`/invoices/${res.id}`)
       }
@@ -290,4 +345,30 @@ export function NewInvoiceForm({ projects, firms, orders, initialDefaults }: Pro
       </div>
     </form>
   )
+}
+
+// True if the user changed any field that the AI also produced. Determines
+// whether the decision is logged as 'accepted' vs 'edited'.
+function wasInvoiceEdited(
+  ai: InvoiceAIPrefill,
+  final: Record<string, unknown>
+): boolean {
+  const compare: (keyof InvoiceAIPrefill)[] = [
+    'external_invoice_number',
+    'invoice_date',
+    'project_id',
+    'buyer_firm_id',
+    'sales_order_id',
+    'subtotal',
+    'gst_pct',
+    'retention_pct',
+    'is_running_bill',
+    'running_bill_seq',
+    'is_final_bill',
+  ]
+  for (const k of compare) {
+    if (ai[k] == null) continue
+    if (ai[k] !== final[k]) return true
+  }
+  return false
 }

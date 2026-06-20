@@ -30,7 +30,7 @@ export function DealerSidebar() {
           <BuildingIcon className="size-4" />
         </div>
         <div className="flex flex-col leading-tight">
-          <span className="font-semibold text-sidebar-foreground tracking-tight text-sm">Vyara OS</span>
+          <span className="font-semibold text-sidebar-foreground tracking-tight text-sm">CRMOS</span>
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Dealer portal</span>
         </div>
       </div>

@@ -69,8 +69,31 @@ export async function attemptReserveOrderLines(orderId: string): Promise<{
 } | { error: string }> {
   const ctx = await getActorContext()
   if (!ctx) return { error: 'Not authenticated' }
-  const { supabase, userId, tenantId } = ctx
+  return runReservationAttempt(ctx.supabase, orderId, ctx.tenantId, ctx.userId)
+}
 
+/**
+ * Service-role variant for Inngest handlers running outside an auth session.
+ * Caller passes their own supabase client (service-role) + the tenant_id read
+ * from the source event/row. userId is optional (no actor when system-driven).
+ */
+export async function attemptReserveOrderLinesService(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  orderId: string,
+  tenantId: string,
+  userId: string | null
+): Promise<{ results: LineReservationResult[] } | { error: string }> {
+  return runReservationAttempt(supabase, orderId, tenantId, userId)
+}
+
+async function runReservationAttempt(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  orderId: string,
+  tenantId: string,
+  userId: string | null
+): Promise<{ results: LineReservationResult[] } | { error: string }> {
   const warehouseId = await resolveDefaultWarehouseId(supabase, tenantId)
   if (!warehouseId) {
     return { error: 'No active own_plant warehouse configured for this tenant' }

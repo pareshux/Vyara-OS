@@ -12,9 +12,10 @@
  * pragmatic pattern.
  *
  * Why a helper, not "just remember to do it"? Convention has
- * already failed once (a /* @TODO mask */ comment in one action
- * for a year). A helper turns mask omissions into review-able
- * absence-of-call-site, not invisible-default-pass-through.
+ * already failed once (a stale "@TODO mask" comment in one
+ * action for a year). A helper turns mask omissions into
+ * review-able absence-of-call-site, not invisible default
+ * pass-through.
  *
  * SENSITIVE table → column mapping (kept in sync with the
  * Constitution; review whenever a column is added that

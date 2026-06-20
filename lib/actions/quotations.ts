@@ -20,7 +20,8 @@ async function getActorContext() {
 }
 
 export async function createQuotation(data: {
-  project_id: string
+  project_id?: string
+  lead_id?: string
   notes?: string
   valid_until?: string
   lines: Array<{ product_id: string; quantity: number; unit_price: number; description?: string; price_list_entry_id?: string | null }>
@@ -30,6 +31,9 @@ export async function createQuotation(data: {
 
   const { supabase, userId, tenantId } = ctx
 
+  if (!data.project_id && !data.lead_id) {
+    return { error: 'Either project_id or lead_id is required' }
+  }
   if (!data.lines || data.lines.length === 0) {
     return { error: 'At least one line item is required' }
   }
@@ -66,7 +70,8 @@ export async function createQuotation(data: {
     .from('quotation')
     .insert({
       tenant_id: tenantId,
-      project_id: data.project_id,
+      project_id: data.project_id ?? null,
+      lead_id: data.lead_id ?? null,
       status: 'draft',
       subtotal,
       discount_pct: 0,
@@ -116,14 +121,16 @@ export async function createQuotation(data: {
   // Activity timeline is auto-written by trg_quotation_activity trigger on INSERT —
   // we do NOT insert manually, to avoid duplicate rows.
 
-  revalidatePath(`/projects/${data.project_id}`)
+  if (data.project_id) revalidatePath(`/projects/${data.project_id}`)
+  if (data.lead_id) revalidatePath(`/leads/${data.lead_id}`)
+  revalidatePath('/quotes')
   return { id: quotation.id, quotation_number: quotation.quotation_number as string }
 }
 
 export async function updateQuotationStatus(
   quotationId: string,
   status: 'sent' | 'won' | 'lost',
-  notes?: string
+  opts?: { notes?: string; sent_to_contact_id?: string }
 ): Promise<{ success: true } | { error: string }> {
   const ctx = await getActorContext()
   if (!ctx) return { error: 'Not authenticated' }
@@ -132,7 +139,7 @@ export async function updateQuotationStatus(
 
   const { data: existing, error: fetchError } = await supabase
     .from('quotation')
-    .select('project_id, quotation_number, total, status')
+    .select('project_id, lead_id, quotation_number, total, status')
     .eq('id', quotationId)
     .single()
 
@@ -151,12 +158,13 @@ export async function updateQuotationStatus(
 
   if (dbStatus === 'sent') {
     updatePayload.sent_at = new Date().toISOString()
+    if (opts?.sent_to_contact_id) updatePayload.sent_to_contact_id = opts.sent_to_contact_id
   }
   if (dbStatus === 'accepted') {
     updatePayload.accepted_at = new Date().toISOString()
   }
-  if (notes) {
-    updatePayload.notes = notes
+  if (opts?.notes) {
+    updatePayload.notes = opts.notes
   }
 
   const { error } = await supabase
@@ -182,7 +190,7 @@ export async function updateQuotationStatus(
     }
   }
 
-  if (dbStatus === 'accepted') {
+  if (dbStatus === 'accepted' && existing.project_id) {
     await supabase
       .from('project')
       .update({ won_quote_id: quotationId })
@@ -196,17 +204,36 @@ export async function updateQuotationStatus(
         data: { quote_id: quotationId, order_value: Number(existing.total ?? 0) },
       })
     } catch (e) {
-      // Non-blocking; log only
       console.error('Failed to emit quote.won', e)
     }
   }
 
-  // No manual activity insert — trg_quotation_activity trigger writes 'quote_sent' on
-  // sent transition automatically. Won/lost/etc. do not have automatic timeline entries;
-  // if needed, add a generic 'updated' activity here. For Slice 1 parity, leaving silent.
-  // (Tenant context kept for future use)
   void tenantId
 
-  revalidatePath(`/projects/${existing.project_id}`)
+  if (existing.project_id) revalidatePath(`/projects/${existing.project_id}`)
+  if (existing.lead_id) revalidatePath(`/leads/${existing.lead_id}`)
+  revalidatePath('/quotes')
   return { success: true }
+}
+
+export async function getAllQuotes(): Promise<unknown[] | { error: string }> {
+  const ctx = await getActorContext()
+  if (!ctx) return { error: 'Not authenticated' }
+
+  const { supabase } = ctx
+
+  const { data, error } = await supabase
+    .from('quotation')
+    .select(`
+      id, quotation_number, status, total, created_at, valid_until, sent_at,
+      project_id, lead_id,
+      project:project_id(id, name),
+      lead:lead_id(id, title, lead_number)
+    `)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (error) return { error: error.message }
+  return data ?? []
 }

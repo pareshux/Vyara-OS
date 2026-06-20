@@ -100,7 +100,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       .order('created_at'),
     supabase
       .from('activity')
-      .select('id, type, content, created_at, actor:actor_id(full_name)')
+      .select('id, type, content, created_at, actor_id')
       .eq('project_id', id)
       .order('created_at', { ascending: false })
       .limit(20),
@@ -160,6 +160,17 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   ])
 
   if (!project) notFound()
+
+  // Enrich activities with actor names (actor_id → user_profile, which is in public schema)
+  const actorIds = [...new Set((activities ?? []).map((a) => (a as { actor_id: string | null }).actor_id).filter(Boolean))] as string[]
+  const { data: actorProfiles } = actorIds.length > 0
+    ? await supabase.from('user_profile').select('id, full_name').in('id', actorIds)
+    : { data: [] as Array<{ id: string; full_name: string }> }
+  const actorNameById = new Map((actorProfiles ?? []).map((p) => [p.id, p.full_name]))
+  const enrichedActivities = (activities ?? []).map((a) => {
+    const aid = (a as { actor_id: string | null }).actor_id
+    return { ...a, actor: aid ? { full_name: actorNameById.get(aid) ?? null } : null }
+  })
 
   // Read-model: one server-side assembler for the scannable header.
   // The component itself never touches Order/Dispatch/Invoice tables.
@@ -426,7 +437,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </TabsContent>
 
         <TabsContent value="timeline" className="mt-4">
-          {(activities ?? []).length === 0 ? (
+          {enrichedActivities.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-12 text-center">
               <Clock className="size-7 mb-3 text-muted-foreground/50" />
               <p className="text-sm font-medium text-foreground">No activity yet</p>
@@ -436,10 +447,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             </div>
           ) : (
             <div className="flex flex-col">
-              {(activities ?? []).map((a, index) => {
+              {enrichedActivities.map((a, index) => {
                 const actor = (a.actor as unknown) as { full_name: string } | null
                 const content = a.content as { note?: string; remark?: string } | null
-                const isLast = index === (activities?.length ?? 0) - 1
+                const isLast = index === enrichedActivities.length - 1
                 return (
                   <div key={a.id} className="flex gap-3">
                     <div className="flex flex-col items-center">
@@ -508,6 +519,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               unit: string
               base_price: number | null
             }[]}
+            contacts={(contacts ?? []) as unknown as {
+              id: string
+              full_name: string
+              role_title: string | null
+              firm: { name: string } | null
+            }[]}
           />
         </TabsContent>
 
@@ -559,6 +576,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               unit: string
               base_price: number | null
             }[]}
+            contacts={(contacts ?? []) as unknown as { id: string; full_name: string; role_title: string | null; firm: { name: string } | null }[]}
             userRole={profile?.role ?? undefined}
           />
         </TabsContent>

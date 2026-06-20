@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, MessageSquare } from 'lucide-react'
 import { InvoiceActions } from './invoice-actions'
 
 export const dynamic = 'force-dynamic'
@@ -23,7 +23,7 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: invoice }, { data: ageing }] = await Promise.all([
+  const [{ data: invoice }, { data: ageing }, { data: collectionRow }] = await Promise.all([
     supabase
       .from('invoice')
       .select(
@@ -41,7 +41,23 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
       .is('deleted_at', null)
       .maybeSingle(),
     supabase.from('invoice_ageing_v').select('*').eq('id', id).maybeSingle(),
+    supabase
+      .from('collection')
+      .select('id')
+      .eq('invoice_id', id)
+      .is('deleted_at', null)
+      .maybeSingle(),
   ])
+
+  // collection_activity is keyed by collection_id (not invoice_id) — fetch only when collection exists
+  const { data: dunningActivity } = collectionRow
+    ? await supabase
+        .from('collection_activity')
+        .select('id, channel, template_key, outcome, notes, payload, created_at')
+        .eq('collection_id', collectionRow.id)
+        .order('created_at', { ascending: false })
+        .limit(20)
+    : { data: null }
 
   if (!invoice) notFound()
 
@@ -134,6 +150,52 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
           )}
         </CardContent>
       </Card>
+
+      {(dunningActivity ?? []).length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold mb-2">Dunning timeline</h2>
+          <div className="flex flex-col">
+            {(dunningActivity ?? []).map((a, i) => {
+              type DunningRow = { id: string; channel: string; template_key: string | null; outcome: string; notes: string | null; payload: Record<string, unknown> | null; created_at: string }
+              const row = a as DunningRow
+              const isLast = i === (dunningActivity ?? []).length - 1
+              const outcomeColor =
+                row.outcome === 'delivered' || row.outcome === 'replied'
+                  ? 'text-emerald-700'
+                  : row.outcome === 'failed'
+                  ? 'text-destructive'
+                  : 'text-muted-foreground'
+              const verb = row.outcome === 'failed' ? 'failed' : row.outcome === 'logged' ? 'logged' : 'sent'
+              return (
+                <div key={row.id} className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div className="flex size-7 items-center justify-center rounded-full bg-muted border border-border shrink-0 mt-0.5">
+                      <MessageSquare className="size-3.5 text-muted-foreground" />
+                    </div>
+                    {!isLast && <div className="w-px flex-1 bg-border mt-1" />}
+                  </div>
+                  <div className="pb-4 min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <p className="text-sm text-foreground capitalize">
+                        {row.channel} dunning {verb}
+                      </p>
+                      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                        {new Date(row.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                    {row.outcome && (
+                      <p className={`text-xs mt-0.5 capitalize ${outcomeColor}`}>{row.outcome}</p>
+                    )}
+                    {row.notes && (
+                      <p className="text-xs text-muted-foreground mt-0.5 italic truncate max-w-md">{row.notes}</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {lines.length > 0 && (
         <div>

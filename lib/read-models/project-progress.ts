@@ -361,22 +361,28 @@ export async function getProjectProgress(projectId: string): Promise<ProjectProg
       }
     }
 
-    // Reservation mini-bar: lines reserved vs lines ordered
-    const [{ data: lineCountRaw }, { data: reservationsRaw }] = await Promise.all([
-      supabase
-        .from('sales_order_line')
-        .select('id, sales_order_id')
-        .in('sales_order_id', orderIds),
-      supabase
-        .from('stock_reservation')
-        .select('id, sales_order_line_id, status')
-        .in('sales_order_id', orderIds),
-    ])
+    // Reservation mini-bar: lines reserved vs lines ordered.
+    // stock_reservation is polymorphic (related_entity_type + related_entity_id),
+    // so we get the line IDs first, then look up reservations by line ID.
+    const { data: lineCountRaw } = await supabase
+      .from('sales_order_line')
+      .select('id, sales_order_id')
+      .in('sales_order_id', orderIds)
     totalLines = (lineCountRaw ?? []).length
+
+    const lineIds = (lineCountRaw ?? []).map((l) => l.id as string)
+    const { data: reservationsRaw } = lineIds.length > 0
+      ? await supabase
+          .from('stock_reservation')
+          .select('id, related_entity_id, status')
+          .eq('related_entity_type', 'sales_order_line')
+          .in('related_entity_id', lineIds)
+      : { data: [] as Array<{ id: string; related_entity_id: string; status: string }> }
+
     const reservedLineIds = new Set(
       (reservationsRaw ?? [])
         .filter((r) => r.status === 'active' || r.status === 'consumed')
-        .map((r) => r.sales_order_line_id)
+        .map((r) => r.related_entity_id)
     )
     reservedLinesCount = reservedLineIds.size
     if (totalLines > 0) {

@@ -19,6 +19,13 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -49,6 +56,7 @@ interface SamplesTabProps {
     contact: { full_name: string } | null
   }>
   products: Array<{ id: string; name: string; sku_code: string; unit: string }>
+  contacts: Array<{ id: string; full_name: string; role_title: string | null; firm: { name: string } | null }>
 }
 
 // Schema CHECK: pending|dispatched|delivered|outcome_positive|outcome_negative|cancelled
@@ -63,6 +71,7 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
 
 const requestSchema = z.object({
   product_id: z.string().min(1, 'Product is required'),
+  contact_id: z.string().optional(),
   quantity: z.string().min(1, 'Quantity is required').refine((v) => !isNaN(Number(v)) && Number(v) > 0, {
     message: 'Enter a valid quantity',
   }),
@@ -71,10 +80,18 @@ const requestSchema = z.object({
 
 type RequestFormValues = z.infer<typeof requestSchema>
 
-export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
+type OutcomePending = {
+  sampleId: string
+  status: 'outcome_positive' | 'outcome_negative'
+} | null
+
+export function SamplesTab({ projectId, samples, products, contacts }: SamplesTabProps) {
   const router = useRouter()
   const [sheetOpen, setSheetOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [outcomePending, setOutcomePending] = useState<OutcomePending>(null)
+  const [outcomeNotes, setOutcomeNotes] = useState('')
+  const [isOutcomeSubmitting, setIsOutcomeSubmitting] = useState(false)
 
   const {
     register,
@@ -89,6 +106,7 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
       const result = await createSampleRequest({
         project_id: projectId,
         product_id: values.product_id,
+        contact_id: values.contact_id || undefined,
         quantity: Number(values.quantity),
         notes: values.notes,
       })
@@ -106,6 +124,12 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
   }
 
   function handleStatusChange(sampleId: string, status: SampleStatusUpdate) {
+    if (status === 'outcome_positive' || status === 'outcome_negative') {
+      setOutcomeNotes('')
+      setOutcomePending({ sampleId, status })
+      return
+    }
+
     startTransition(async () => {
       const result = await updateSampleStatus(sampleId, status)
       if ('error' in result) {
@@ -126,6 +150,26 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
       }
       router.refresh()
     })
+  }
+
+  async function submitOutcome() {
+    if (!outcomePending) return
+    setIsOutcomeSubmitting(true)
+    const result = await updateSampleStatus(
+      outcomePending.sampleId,
+      outcomePending.status,
+      outcomeNotes || undefined
+    )
+    setIsOutcomeSubmitting(false)
+    if ('error' in result) {
+      toast.error(result.error)
+      return
+    }
+    const label = STATUS_STYLES[outcomePending.status]?.label ?? outcomePending.status
+    toast.success(`Sample marked as ${label}`)
+    setOutcomePending(null)
+    setOutcomeNotes('')
+    router.refresh()
   }
 
   return (
@@ -159,8 +203,9 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Product</th>
                 <th className="px-4 py-2.5 text-right font-medium text-muted-foreground tabular-nums">Qty</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
+                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell">Sent to</th>
                 <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell">Requested</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell">Notes</th>
+                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell">Notes / Outcome</th>
                 <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">Action</th>
               </tr>
             </thead>
@@ -189,13 +234,20 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
                         {statusStyle.label}
                       </Badge>
                     </td>
+                    <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
+                      {s.contact?.full_name ?? <span className="text-muted-foreground/40">—</span>}
+                    </td>
                     <td className="hidden px-4 py-3 text-muted-foreground tabular-nums md:table-cell">
                       {new Date(s.created_at).toLocaleDateString('en-IN', {
                         day: 'numeric', month: 'short', year: 'numeric',
                       })}
                     </td>
-                    <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
-                      {s.outcome_notes ?? s.notes ?? <span className="text-muted-foreground/40">—</span>}
+                    <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell max-w-xs">
+                      {s.outcome_notes
+                        ? <span className="italic">{s.outcome_notes}</span>
+                        : s.notes
+                        ? s.notes
+                        : <span className="text-muted-foreground/40">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {!isTerminal && (
@@ -276,6 +328,28 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
             </div>
 
             <div className="flex flex-col gap-1.5">
+              <Label>Send to</Label>
+              <Select onValueChange={(v) => setValue('contact_id', v === '__none__' ? undefined : v)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select contact…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">No contact</span>
+                  </SelectItem>
+                  {contacts.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.full_name}
+                      {c.firm && (
+                        <span className="text-muted-foreground ml-1 text-xs">· {c.firm.name}</span>
+                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="sample_qty">Quantity *</Label>
               <Input
                 id="sample_qty"
@@ -309,6 +383,59 @@ export function SamplesTab({ projectId, samples, products }: SamplesTabProps) {
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* Outcome Notes Dialog */}
+      <Dialog
+        open={outcomePending !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOutcomePending(null)
+            setOutcomeNotes('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {outcomePending?.status === 'outcome_positive'
+                ? 'Record positive outcome'
+                : 'Record negative outcome'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              {outcomePending?.status === 'outcome_positive'
+                ? 'What did the contact say? (e.g. approved finish, will specify in drawing)'
+                : 'What was the reason? (e.g. rejected colour, chose competitor)'}
+            </p>
+            <Textarea
+              value={outcomeNotes}
+              onChange={(e) => setOutcomeNotes(e.target.value)}
+              placeholder="Optional — add notes about what the contact said…"
+              rows={3}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOutcomePending(null)
+                setOutcomeNotes('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitOutcome}
+              disabled={isOutcomeSubmitting}
+              variant={outcomePending?.status === 'outcome_positive' ? 'default' : 'destructive'}
+            >
+              {isOutcomeSubmitting ? 'Saving…' : 'Save outcome'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

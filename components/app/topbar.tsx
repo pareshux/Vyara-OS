@@ -34,7 +34,7 @@ export function Topbar({ userName, userRole, notificationCount = 0 }: TopbarProp
 
   const title =
     Object.entries(PAGE_TITLES).find(([key]) => pathname === key || pathname.startsWith(key + '/'))?.[1] ??
-    'Vyara OS'
+    'CRMOS'
 
   const initials = userName
     .split(' ')
