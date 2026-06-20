@@ -45,6 +45,8 @@ import {
   Package,
   CalendarDays,
   Truck,
+  FileText,
+  AlertCircle,
 } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -58,6 +60,25 @@ const SEGMENT_LABEL: Record<string, string> = {
   corporate: 'Corporate',
   generic: 'Generic',
 }
+
+const INVOICE_STATUS_LABEL: Record<string, string> = {
+  draft: 'Draft',
+  sent: 'Sent',
+  paid: 'Paid',
+  partial_paid: 'Partial',
+  cancelled: 'Cancelled',
+  written_off: 'Written Off',
+}
+
+const INVOICE_STATUS_CLASS: Record<string, string> = {
+  draft: 'bg-muted text-muted-foreground',
+  sent: 'bg-blue-50 text-blue-700',
+  paid: 'bg-green-50 text-green-700',
+  partial_paid: 'bg-amber-50 text-amber-700',
+  cancelled: 'bg-muted/50 text-muted-foreground/70',
+  written_off: 'bg-red-50 text-red-700',
+}
+
 
 function timeAgo(iso: string): string {
   const date = new Date(iso)
@@ -90,7 +111,8 @@ export default async function Customer360Page(
   const data = await getCustomer360(firmId)
   if (!data) notFound()
 
-  const { firm, primary_contact, contacts, contact_count, projects, orders, kpis } = data
+  const { firm, primary_contact, contacts, contact_count, projects, orders, invoices, kpis } = data
+  const todayStr = new Date().toISOString().slice(0, 10)
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-6 max-w-5xl">
@@ -236,6 +258,14 @@ export default async function Customer360Page(
             {orders.total > 0 && (
               <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">
                 {orders.total}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="invoices" className="rounded-none pb-3 px-4">
+            Invoices
+            {invoices.total > 0 && (
+              <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">
+                {invoices.total}
               </span>
             )}
           </TabsTrigger>
@@ -507,6 +537,105 @@ export default async function Customer360Page(
                   </div>
                 </Link>
               ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Invoices tab ─────────────────────────────────────── */}
+        <TabsContent value="invoices" className="mt-4 flex flex-col gap-3">
+          {invoices.total > 0 && (
+            <div className="flex items-center gap-4 text-xs text-muted-foreground tabular-nums">
+              <span>
+                <span className="font-medium text-foreground">{invoices.total}</span> total
+              </span>
+              {invoices.overdue_count > 0 && (
+                <span className="text-red-600">
+                  <span className="font-medium">{invoices.overdue_count}</span> overdue
+                </span>
+              )}
+              {invoices.total_outstanding > 0 && (
+                <span>
+                  <span className="font-medium text-foreground">{formatINR(invoices.total_outstanding)}</span> outstanding
+                </span>
+              )}
+              {invoices.total > invoices.showing && (
+                <span className="ml-auto">
+                  Showing {invoices.showing} of {invoices.total} · newest first
+                </span>
+              )}
+            </div>
+          )}
+
+          {invoices.items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-10 text-center">
+              <FileText className="size-7 mb-3 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-foreground">No invoices yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Invoices raised for {firm.name} will appear here once synced from Tally or created manually.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {invoices.items.map((inv) => {
+                const isOverdue =
+                  inv.due_date < todayStr &&
+                  !['paid', 'cancelled', 'written_off'].includes(inv.status)
+                const outstanding = Math.max(0, inv.billed_amount - inv.paid_amount)
+                return (
+                  <Link
+                    key={inv.id}
+                    href={`/invoices/${inv.id}`}
+                    className="group rounded-lg border border-border bg-card hover:border-foreground/20 hover:bg-muted/50 transition-colors p-3 flex flex-col gap-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <FileText className="size-3.5 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-medium text-foreground font-mono tabular-nums">
+                            {inv.external_invoice_number ?? inv.invoice_number}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className={`border-0 text-[10px] ${INVOICE_STATUS_CLASS[inv.status] ?? 'bg-muted text-muted-foreground'}`}
+                          >
+                            {INVOICE_STATUS_LABEL[inv.status] ?? inv.status}
+                          </Badge>
+                          {inv.is_running_bill && inv.running_bill_seq != null && (
+                            <Badge variant="outline" className="border-0 text-[10px] bg-muted text-muted-foreground">
+                              RA #{inv.running_bill_seq}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1 tabular-nums">
+                            <CalendarDays className="size-3" />
+                            {new Date(inv.invoice_date + 'T12:00:00').toLocaleDateString('en-IN', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                            })}
+                          </span>
+                          <span className={`flex items-center gap-1 tabular-nums ${isOverdue ? 'text-red-600 font-medium' : ''}`}>
+                            {isOverdue && <AlertCircle className="size-3" />}
+                            Due {new Date(inv.due_date + 'T12:00:00').toLocaleDateString('en-IN', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-sm tabular-nums font-medium text-foreground">
+                          {formatINR(inv.total)}
+                        </span>
+                        {outstanding > 0 && (
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {formatINR(outstanding)} due
+                          </span>
+                        )}
+                        <ChevronRight className="size-4 text-muted-foreground/50 group-hover:text-muted-foreground" />
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
             </div>
           )}
         </TabsContent>

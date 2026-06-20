@@ -69,6 +69,45 @@ export type Customer360Order = {
   project: { id: string; name: string } | null
 }
 
+export type Customer360Invoice = {
+  id: string
+  invoice_number: string
+  external_invoice_number: string | null
+  invoice_date: string
+  due_date: string
+  total: number
+  billed_amount: number
+  paid_amount: number
+  status: string
+  is_running_bill: boolean
+  running_bill_seq: number | null
+}
+
+export type Customer360Quote = {
+  id: string
+  quotation_number: string
+  status: string
+  total: number
+  valid_until: string | null
+  sent_at: string | null
+  created_at: string
+  project: { id: string; name: string } | null
+}
+
+export type Customer360Collection = {
+  id: string
+  invoice_id: string
+  invoice_number: string
+  invoice_date: string
+  due_date: string
+  billed_amount: number
+  paid_amount: number
+  outstanding: number
+  current_stage: { id: string; label: string; color: string } | null
+  last_dunning_at: string | null
+  next_action_at: string | null
+}
+
 export type Customer360Kpis = {
   // Computed across all projects this firm participates in (capped at the
   // total we fetched — for Vyara today total is small enough that the page
@@ -98,12 +137,36 @@ export type Customer360 = {
     total_value: number
     active_count: number
   }
+  invoices: {
+    items: Customer360Invoice[]
+    total: number
+    showing: number
+    total_outstanding: number
+    overdue_count: number
+  }
+  quotes: {
+    items: Customer360Quote[]
+    total: number
+    showing: number
+    total_value: number
+    open_count: number
+  }
+  collections: {
+    items: Customer360Collection[]
+    total: number
+    showing: number
+    total_outstanding: number
+    overdue_count: number
+  }
   kpis: Customer360Kpis
 }
 
-// How many projects to show on the page before the "Showing X of Y" line.
+// How many items to show per tab before the "Showing X of Y" line.
 const PROJECTS_PAGE_SIZE = 10
 const ORDERS_PAGE_SIZE = 10
+const INVOICES_PAGE_SIZE = 10
+const QUOTES_PAGE_SIZE = 10
+const COLLECTIONS_PAGE_SIZE = 10
 
 function titleCase(snake: string): string {
   return snake
@@ -159,24 +222,25 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
     ? relationshipTypeJoin[0]?.label ?? titleCase(firmRow.type as string)
     : relationshipTypeJoin?.label ?? titleCase(firmRow.type as string)
 
-  // Projects this firm participates in — either as buyer or architect.
-  // One query with .or() so the dedup happens at the DB layer and the count
-  // is exact (no double-counting for firms playing both roles on a project).
-  // buyer_firm_id and architect_firm_id are kept on the row so we can resolve
-  // firm_role per row.
+  // Phase 1 — all reads that don't depend on IDs from other queries.
   //
-  // Two queries: one limited list for the Projects tab, one lightweight
-  // aggregate (no joins, no limit) for KPIs across ALL projects. The aggregate
-  // query also pulls `current_stage_id->is_terminal` so we can count active
-  // projects without over-fetching.
-  // Orders: filtered by sales_order.buyer_firm_id direct join. Same two-query
-  // pattern as projects — limited list for the Orders tab + lightweight
-  // aggregate (no joins, no limit) for total_value / active_count.
+  // Projects: one capped list (for the Projects tab) + one uncapped aggregate
+  // (for KPIs + to extract project IDs used by the Quotes query in Phase 2).
+  // The aggregate includes `id` so Phase 2 can build the IN list without an
+  // extra round-trip.
+  //
+  // Orders: same two-query pattern as projects.
+  //
+  // Invoices: same pattern. The aggregate includes `id`, `billed_amount`,
+  // `paid_amount`, `due_date`, `status` so we can compute outstanding/overdue
+  // KPIs and build the invoice ID list for the Collections query in Phase 2.
   const [
     { data: projectRows, count: projectTotal },
     { data: projectAggRows },
     { data: orderRows, count: orderTotal },
     { data: orderAggRows },
+    { data: invoiceRows, count: invoiceTotal },
+    { data: invoiceAggRows },
   ] = await Promise.all([
     supabase
       .from('project')
@@ -191,10 +255,11 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
       .is('deleted_at', null)
       .order('updated_at', { ascending: false })
       .limit(PROJECTS_PAGE_SIZE),
+    // Uncapped — provides KPIs + project IDs for Phase 2 quotes query.
     supabase
       .from('project')
       .select(
-        `estimated_value, updated_at,
+        `id, estimated_value, updated_at,
          current_stage:current_stage_id(is_terminal)`
       )
       .or(`buyer_firm_id.eq.${firmId},architect_firm_id.eq.${firmId}`)
@@ -216,10 +281,29 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
       .select(`value, current_stage:current_stage_id(is_terminal)`)
       .eq('buyer_firm_id', firmId)
       .is('deleted_at', null),
+    supabase
+      .from('invoice')
+      .select(
+        `id, invoice_number, external_invoice_number,
+         invoice_date, due_date, total, billed_amount, paid_amount,
+         status, is_running_bill, running_bill_seq`,
+        { count: 'exact' }
+      )
+      .eq('buyer_firm_id', firmId)
+      .is('deleted_at', null)
+      .order('invoice_date', { ascending: false })
+      .limit(INVOICES_PAGE_SIZE),
+    // Uncapped — provides outstanding/overdue KPIs + invoice IDs for Phase 2.
+    supabase
+      .from('invoice')
+      .select(`id, billed_amount, paid_amount, due_date, status`)
+      .eq('buyer_firm_id', firmId)
+      .is('deleted_at', null),
   ])
 
-  // KPI rollup across all projects.
-  type AggRow = {
+  // ── KPI rollup across all projects ──────────────────────────────────────────
+  type ProjectAggRow = {
+    id: string
     estimated_value: number | null
     updated_at: string
     current_stage: { is_terminal: boolean } | { is_terminal: boolean }[] | null
@@ -227,13 +311,16 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
   let total_estimated_value = 0
   let active_project_count = 0
   let last_touched_at: string | null = null
-  for (const row of ((projectAggRows ?? []) as unknown as AggRow[])) {
+  const projectIds: string[] = []
+  for (const row of ((projectAggRows ?? []) as unknown as ProjectAggRow[])) {
+    projectIds.push(row.id)
     total_estimated_value += row.estimated_value ?? 0
     const stage = Array.isArray(row.current_stage) ? row.current_stage[0] ?? null : row.current_stage
     if (stage && !stage.is_terminal) active_project_count++
     if (!last_touched_at || row.updated_at > last_touched_at) last_touched_at = row.updated_at
   }
 
+  // ── Projects shaping ─────────────────────────────────────────────────────────
   type ProjectRow = {
     id: string
     name: string
@@ -261,7 +348,7 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
   }))
   const total = projectTotal ?? mergedItems.length
 
-  // Orders shaping.
+  // ── Orders shaping ───────────────────────────────────────────────────────────
   type OrderRow = {
     id: string
     order_number: string
@@ -293,6 +380,170 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
     if (stage && !stage.is_terminal) active_order_count++
   }
 
+  // ── Invoices shaping ─────────────────────────────────────────────────────────
+  type InvoiceRow = {
+    id: string
+    invoice_number: string
+    external_invoice_number: string | null
+    invoice_date: string
+    due_date: string
+    total: number
+    billed_amount: number
+    paid_amount: number
+    status: string
+    is_running_bill: boolean
+    running_bill_seq: number | null
+  }
+  const invoiceItems = ((invoiceRows ?? []) as unknown as InvoiceRow[]).map<Customer360Invoice>((i) => ({
+    id: i.id,
+    invoice_number: i.invoice_number,
+    external_invoice_number: i.external_invoice_number,
+    invoice_date: i.invoice_date,
+    due_date: i.due_date,
+    total: i.total,
+    billed_amount: i.billed_amount,
+    paid_amount: i.paid_amount,
+    status: i.status,
+    is_running_bill: i.is_running_bill,
+    running_bill_seq: i.running_bill_seq,
+  }))
+
+  // Compute invoice KPIs and extract all invoice IDs from the uncapped agg.
+  type InvoiceAggRow = {
+    id: string
+    billed_amount: number
+    paid_amount: number
+    due_date: string
+    status: string
+  }
+  const CLOSED_STATUSES = new Set(['paid', 'cancelled', 'written_off'])
+  const today = new Date().toISOString().slice(0, 10)
+  let invoice_total_outstanding = 0
+  let invoice_overdue_count = 0
+  const invoiceIds: string[] = []
+  for (const row of ((invoiceAggRows ?? []) as unknown as InvoiceAggRow[])) {
+    invoiceIds.push(row.id)
+    if (!CLOSED_STATUSES.has(row.status)) {
+      const outstanding = (row.billed_amount ?? 0) - (row.paid_amount ?? 0)
+      if (outstanding > 0) invoice_total_outstanding += outstanding
+      if (row.due_date < today) invoice_overdue_count++
+    }
+  }
+
+  // ── Phase 2: Quotes + Collections (depend on IDs from Phase 1) ───────────────
+  // Run both in parallel; skip each if the ID list is empty (avoids a PostgREST
+  // error on `.in('col', [])` which sends `?col=in.()` and returns nothing but
+  // is safer to guard).
+
+  const [
+    { data: quoteRows, count: quoteTotal },
+    { data: quoteAggRows },
+    { data: collectionRows, count: collectionTotal },
+  ] = await Promise.all([
+    projectIds.length > 0
+      ? supabase
+          .from('quotation')
+          .select(
+            `id, quotation_number, status, total, valid_until, sent_at, created_at,
+             project:project_id(id, name)`,
+            { count: 'exact' }
+          )
+          .in('project_id', projectIds)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .limit(QUOTES_PAGE_SIZE)
+      : Promise.resolve({ data: [] as unknown[], count: 0, error: null }),
+    projectIds.length > 0
+      ? supabase
+          .from('quotation')
+          .select(`total, status`)
+          .in('project_id', projectIds)
+          .is('deleted_at', null)
+      : Promise.resolve({ data: [] as unknown[], error: null }),
+    invoiceIds.length > 0
+      ? supabase
+          .from('collection')
+          .select(
+            `id, invoice_id, last_dunning_at, next_action_at,
+             current_stage:current_stage_id(id, label, color),
+             invoice:invoice_id(id, invoice_number, invoice_date, due_date,
+                                billed_amount, paid_amount)`,
+            { count: 'exact' }
+          )
+          .in('invoice_id', invoiceIds)
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false })
+          .limit(COLLECTIONS_PAGE_SIZE)
+      : Promise.resolve({ data: [] as unknown[], count: 0, error: null }),
+  ])
+
+  // ── Quotes shaping ───────────────────────────────────────────────────────────
+  const OPEN_QUOTE_STATUSES = new Set(['draft', 'sent', 'revised'])
+  type QuoteRow = {
+    id: string
+    quotation_number: string
+    status: string
+    total: number
+    valid_until: string | null
+    sent_at: string | null
+    created_at: string
+    project: { id: string; name: string } | { id: string; name: string }[] | null
+  }
+  const quoteItems = ((quoteRows ?? []) as unknown as QuoteRow[]).map<Customer360Quote>((q) => ({
+    id: q.id,
+    quotation_number: q.quotation_number,
+    status: q.status,
+    total: q.total,
+    valid_until: q.valid_until,
+    sent_at: q.sent_at,
+    created_at: q.created_at,
+    project: Array.isArray(q.project) ? (q.project[0] ?? null) : q.project,
+  }))
+
+  type QuoteAggRow = { total: number | null; status: string }
+  let quote_total_value = 0
+  let quote_open_count = 0
+  for (const row of ((quoteAggRows ?? []) as unknown as QuoteAggRow[])) {
+    quote_total_value += row.total ?? 0
+    if (OPEN_QUOTE_STATUSES.has(row.status)) quote_open_count++
+  }
+
+  // ── Collections shaping ──────────────────────────────────────────────────────
+  type CollectionRow = {
+    id: string
+    invoice_id: string
+    last_dunning_at: string | null
+    next_action_at: string | null
+    current_stage: { id: string; label: string; color: string } | { id: string; label: string; color: string }[] | null
+    invoice:
+      | { id: string; invoice_number: string; invoice_date: string; due_date: string; billed_amount: number; paid_amount: number }
+      | { id: string; invoice_number: string; invoice_date: string; due_date: string; billed_amount: number; paid_amount: number }[]
+      | null
+  }
+  const collectionItems = ((collectionRows ?? []) as unknown as CollectionRow[]).map<Customer360Collection>((c) => {
+    const inv = Array.isArray(c.invoice) ? (c.invoice[0] ?? null) : c.invoice
+    const billed = inv?.billed_amount ?? 0
+    const paid = inv?.paid_amount ?? 0
+    return {
+      id: c.id,
+      invoice_id: c.invoice_id,
+      invoice_number: inv?.invoice_number ?? '',
+      invoice_date: inv?.invoice_date ?? '',
+      due_date: inv?.due_date ?? '',
+      billed_amount: billed,
+      paid_amount: paid,
+      outstanding: Math.max(0, billed - paid),
+      current_stage: Array.isArray(c.current_stage) ? (c.current_stage[0] ?? null) : c.current_stage,
+      last_dunning_at: c.last_dunning_at,
+      next_action_at: c.next_action_at,
+    }
+  })
+
+  // Collections aggregate: derived from invoiceAggRows (already have all the
+  // needed fields — avoids an extra query just for the totals).
+  let collection_total_outstanding = invoice_total_outstanding
+  let collection_overdue_count = invoice_overdue_count
+
   return {
     firm: {
       id: firmRow.id as string,
@@ -322,6 +573,27 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
       showing: orderItems.length,
       total_value: total_order_value,
       active_count: active_order_count,
+    },
+    invoices: {
+      items: invoiceItems,
+      total: invoiceTotal ?? invoiceItems.length,
+      showing: invoiceItems.length,
+      total_outstanding: invoice_total_outstanding,
+      overdue_count: invoice_overdue_count,
+    },
+    quotes: {
+      items: quoteItems,
+      total: quoteTotal ?? quoteItems.length,
+      showing: quoteItems.length,
+      total_value: quote_total_value,
+      open_count: quote_open_count,
+    },
+    collections: {
+      items: collectionItems,
+      total: collectionTotal ?? collectionItems.length,
+      showing: collectionItems.length,
+      total_outstanding: collection_total_outstanding,
+      overdue_count: collection_overdue_count,
     },
     kpis: {
       total_estimated_value,
