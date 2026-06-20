@@ -2,7 +2,7 @@
 
 > **This is the source of truth.** Architecture is frozen here. Future work routes through this document. Update the Status Tracker (§11) on every meaningful commit; append a one-line entry to [`BUILD-LOG.md`](./BUILD-LOG.md). Do not create new top-level capabilities. Do not reorganize the eight that exist.
 >
-> **Last updated:** 2026-06-20 (REL-011 shipped — firm health signals on /firms list + AI relationship brief on Customer 360 Overview tab. Migration 0043 adds firm_brief entity_kind. /firms gains city/state/attention filters + per-row color chips. Customer 360 Overview tab replaces placeholder with live AI brief cached 24h.)
+> **Last updated:** 2026-06-20 (INT-014 Slice 1 in progress — Owner Dashboard /owner, admin-only. Sections 1 (Business Health, 6 KPIs + prev-period deltas + period selector) + 2 (Attention Centre, ranked across collections / stalled deals / pending approvals / overdue tasks / paving / cold leads / stale quotes + gap markers for CS-001, DEL-007, REL-016) + AI Owner Brief (health + opportunities + risks + recommendations, cached 6h). Migration 0044 adds owner_brief entity_kind.)
 > **Supersedes:** `vyara-vision-blueprint-v3.archived.md`
 > **Constitution alignment:** [`CONSTITUTION.md`](./CONSTITUTION.md) v2 — Product Principles #0–#11 remain binding. This document refines the module partitioning referenced in Principle #0.
 
@@ -832,6 +832,7 @@ Authoritative item-by-item state. **Updated on every commit.**
 | INT-011 | Recommendation engine | Nice-have | 💭 | — |
 | INT-012 | AI accuracy dashboard | Nice-have | 💭 | — |
 | INT-013 | Predictive analytics | Future | 💭 | — |
+| INT-014 | Owner Dashboard (`/owner`) — admin-only executive surface | Should-have | 🚧 Slice 1 | Subsumes INT-004 (Attention Centre v1) + INT-005 (per-capability rollup) for an executive consumer. **Slice 1:** Section 1 Business Health (revenue / collections / orders / outstanding / open pipeline / DSO with prev-period deltas + today/week/month/quarter/year selector) + Section 2 Attention Centre (ranked feed: critical collections, high-value stalled deals, pending approvals, overdue tasks, paving stage, cold leads, stale quotes + gap markers for CS-001 / DEL-007 / REL-016) + AI Owner Brief (health + top_opportunities + top_risks + recommendations, cached 6h in ai_extraction). New read-model `lib/read-models/owner-overview.ts` (2-phase parallel queries, follows project-progress / customer-360 / field-day pattern). Migration 0044 adds `owner_brief` entity_kind. **Slices 2–5 planned:** Sections 3+4 Revenue+Operations · Sections 5+6 Finance+Relationships · Sections 7+8 Field+People · Drill-downs + filters + Quick Actions. **No schema additions** beyond the entity_kind CHECK — defer-with-empty-states for CS-001 (complaints), DEL-007 (dispatch SLA), REL-016 (credit exposure). No new role; admin-only via `user_profile.role === 'admin'` check at page + sidebar levels. |
 
 ### 11.9 Cross-cutting (ARCH)
 

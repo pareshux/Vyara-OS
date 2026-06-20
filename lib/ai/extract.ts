@@ -35,6 +35,7 @@ export type ExtractionEntityKind =
   | 'visit_prep_brief'
   | 'team_day_summary'
   | 'firm_brief'
+  | 'owner_brief'
 
 function getServiceClient(): SupabaseClient {
   return createServiceClient(

@@ -22,6 +22,7 @@ import {
   Settings,
   MapPin,
   ShieldCheck,
+  LineChart,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -41,10 +42,11 @@ type FeatureKey =
 // Section order follows the Blueprint capability sequence (Relationship,
 // Revenue, Delivery, Field Operations, Finance) so the nav mirrors
 // the operating-model document the team reads.
-type GroupKey = 'home' | 'relationship' | 'revenue' | 'delivery' | 'field_ops' | 'finance' | 'utility'
+type GroupKey = 'home' | 'executive' | 'relationship' | 'revenue' | 'delivery' | 'field_ops' | 'finance' | 'utility'
 
 const GROUP_LABEL: Record<GroupKey, string | null> = {
   home:         null,           // no header
+  executive:    'Executive',    // INT-014 — admin-only group
   relationship: 'Relationship',
   revenue:      'Revenue',
   delivery:     'Delivery',
@@ -54,7 +56,7 @@ const GROUP_LABEL: Record<GroupKey, string | null> = {
 }
 
 const GROUP_ORDER: GroupKey[] = [
-  'home', 'relationship', 'revenue', 'delivery', 'field_ops', 'finance', 'utility',
+  'home', 'executive', 'relationship', 'revenue', 'delivery', 'field_ops', 'finance', 'utility',
 ]
 
 type NavItem = {
@@ -63,11 +65,18 @@ type NavItem = {
   icon: typeof LayoutDashboard
   group: GroupKey
   feature?: FeatureKey
+  /** Role gate — when set, item only renders for the listed roles.
+   * Used for Executive group items (admin-only). */
+  roles?: ReadonlyArray<'admin' | 'manager' | 'sales_engineer'>
 }
 
 const NAV_ITEMS: NavItem[] = [
   // Home — daily-use surfaces, no group header.
   { label: 'Dashboard',   href: '/dashboard',   icon: LayoutDashboard, group: 'home' },
+
+  // Executive — Blueprint INT-014. Admin-only at the role layer; the page
+  // also redirects non-admins to /dashboard as a belt-and-braces guard.
+  { label: 'Owner',       href: '/owner',       icon: LineChart,       group: 'executive', roles: ['admin'] },
 
   // Relationship — people + organisations (Blueprint capability §2.1).
   // Dealer is a relationship type, not a separate module — lives here.
@@ -111,10 +120,13 @@ export function Sidebar({ userRole, features }: SidebarProps) {
   const isAdminish = userRole === 'admin' || userRole === 'manager'
 
   // Hide items whose feature flag is explicitly false. Absence of the
-  // flag from the prop = "show" (backwards-compat).
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.feature || features?.[item.feature] !== false,
-  )
+  // flag from the prop = "show" (backwards-compat). Items with a `roles`
+  // gate (e.g. Executive group) only render when the user's role matches.
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (item.feature && features?.[item.feature] === false) return false
+    if (item.roles && (!userRole || !(item.roles as readonly string[]).includes(userRole))) return false
+    return true
+  })
 
   // Bucket by group so headers can sit between sections.
   const itemsByGroup = GROUP_ORDER.reduce<Record<GroupKey, NavItem[]>>(
