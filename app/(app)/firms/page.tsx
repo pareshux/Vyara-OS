@@ -33,6 +33,8 @@ export default async function FirmsPage({
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
 
+  const freshSince = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+
   const [
     { data: allFirmRows },
     { data: typeRows },
@@ -40,6 +42,7 @@ export default async function FirmsPage({
     { data: staleQuoteRows },
     { data: stuckProjectRows },
     { data: staleLeadRows },
+    { data: cachedBriefRows },
   ] = await Promise.all([
     supabase
       .from('firm')
@@ -86,6 +89,14 @@ export default async function FirmsPage({
       .lt('updated_at', threeDaysAgo)
       .not('stage', 'in', '(won,lost)')
       .is('deleted_at', null),
+
+    // Cached AI briefs (<24h) — one query, no new AI calls
+    supabase
+      .from('ai_extraction')
+      .select('source_storage_path, raw_output')
+      .eq('entity_kind', 'firm_brief')
+      .gte('created_at', freshSince)
+      .order('created_at', { ascending: false }),
   ])
 
   // ── Build per-firm signal maps ──────────────────────────────────────────────
@@ -141,6 +152,29 @@ export default async function FirmsPage({
     }
   }
 
+  // Cached AI briefs keyed by firm ID (extracted from source_storage_path)
+  const briefByFirm = new Map<string, { health: 'healthy' | 'needs_attention' | 'critical'; headline: string }>()
+  for (const row of (cachedBriefRows ?? []) as Array<{ source_storage_path: string; raw_output: string | null }>) {
+    const match = row.source_storage_path?.match(/^inline_text:firm_brief:(.+)$/)
+    if (!match || !row.raw_output) continue
+    try {
+      const parsed = JSON.parse(row.raw_output)
+      if (parsed?.health && parsed?.headline) {
+        const firmId = match[1]
+        if (!briefByFirm.has(firmId)) {
+          briefByFirm.set(firmId, { health: parsed.health, headline: parsed.headline })
+        }
+      }
+    } catch { /* skip malformed */ }
+  }
+
+  // Derived health from signals (rule-based, mirrors Claude's classification logic)
+  function deriveHealth(signals: FirmRow['signals']): 'healthy' | 'needs_attention' | 'critical' {
+    if (signals.overdue && (signals.overdue.days > 45 || signals.overdue.outstanding > 500000)) return 'critical'
+    if (signals.overdue || signals.stale_quote || signals.stuck_project || signals.stale_lead) return 'needs_attention'
+    return 'healthy'
+  }
+
   // ── Shape firm rows ─────────────────────────────────────────────────────────
   type RawRow = {
     id: string
@@ -155,6 +189,12 @@ export default async function FirmsPage({
 
   const allFirms: FirmRow[] = ((allFirmRows ?? []) as unknown as RawRow[]).map((f) => {
     const rt = Array.isArray(f.relationship_type) ? f.relationship_type[0] ?? null : f.relationship_type
+    const signals: FirmRow['signals'] = {
+      overdue: overdueByFirm.get(f.id),
+      stale_quote: staleQuoteByFirm.get(f.id),
+      stuck_project: stuckProjectByFirm.get(f.id),
+      stale_lead: staleLeadByFirm.get(f.id),
+    }
     return {
       id: f.id,
       name: f.name,
@@ -164,12 +204,9 @@ export default async function FirmsPage({
       state: f.state,
       phone: f.phone,
       gstin: f.gstin,
-      signals: {
-        overdue: overdueByFirm.get(f.id),
-        stale_quote: staleQuoteByFirm.get(f.id),
-        stuck_project: stuckProjectByFirm.get(f.id),
-        stale_lead: staleLeadByFirm.get(f.id),
-      },
+      signals,
+      health: briefByFirm.get(f.id)?.health ?? deriveHealth(signals),
+      cachedBrief: briefByFirm.get(f.id),
     }
   })
 

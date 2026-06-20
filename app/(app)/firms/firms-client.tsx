@@ -1,9 +1,36 @@
 'use client'
 
 import Link from 'next/link'
-import { Building2, Phone, MapPin, Hash, ChevronRight, AlertCircle, Clock, FileText, Folders } from 'lucide-react'
+import { Building2, Phone, MapPin, Hash, ChevronRight, AlertCircle, Clock, FileText, Folders, CheckCircle2, AlertTriangle, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ListFilter } from '@/components/app/list-filter'
+
+type Health = 'healthy' | 'needs_attention' | 'critical'
+
+const HEALTH_DOT: Record<Health, { dot: string; icon: typeof CheckCircle2; label: string; iconClass: string }> = {
+  healthy:          { dot: 'bg-green-500',  icon: CheckCircle2,    label: 'Healthy',          iconClass: 'text-green-600' },
+  needs_attention:  { dot: 'bg-amber-500',  icon: AlertTriangle,   label: 'Needs attention',  iconClass: 'text-amber-600' },
+  critical:         { dot: 'bg-red-500',    icon: AlertCircle,     label: 'Critical',         iconClass: 'text-red-600'   },
+}
+
+function HealthCell({ health, cachedBrief }: { health: Health; cachedBrief?: { headline: string } }) {
+  const cfg = HEALTH_DOT[health]
+  const Icon = cfg.icon
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${cfg.iconClass}`}>
+        <span className={`size-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+        {cfg.label}
+      </span>
+      {cachedBrief && (
+        <span className="flex items-start gap-1 text-[11px] text-muted-foreground leading-snug">
+          <Sparkles className="size-2.5 shrink-0 mt-0.5 text-primary/60" />
+          {cachedBrief.headline}
+        </span>
+      )}
+    </div>
+  )
+}
 
 export type FirmSignals = {
   overdue?: { count: number; outstanding: number; days: number }
@@ -22,6 +49,8 @@ export type FirmRow = {
   phone: string | null
   gstin: string | null
   signals: FirmSignals
+  health: 'healthy' | 'needs_attention' | 'critical'
+  cachedBrief?: { health: 'healthy' | 'needs_attention' | 'critical'; headline: string }
 }
 
 export type RelationshipTypeOption = {
@@ -171,8 +200,8 @@ export function FirmsClient({
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
                 <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell">Type</th>
                 <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell">City</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell">Phone</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell">GSTIN</th>
+                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell">Phone</th>
+                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Health</th>
                 <th className="px-4 py-2.5 text-right w-10" />
               </tr>
             </thead>
@@ -192,7 +221,7 @@ export function FirmsClient({
                         <Building2 className="size-3.5 text-muted-foreground shrink-0" />
                         {f.name}
                       </Link>
-                      {hasSignal && <SignalChips signals={f.signals} />}
+                      {hasSignal && !f.cachedBrief && <SignalChips signals={f.signals} />}
                     </td>
                     <td className="hidden px-4 py-3 sm:table-cell">
                       <Badge variant="outline" className="text-xs">
@@ -209,7 +238,7 @@ export function FirmsClient({
                         <span className="text-muted-foreground/50">—</span>
                       )}
                     </td>
-                    <td className="hidden px-4 py-3 text-muted-foreground tabular-nums md:table-cell">
+                    <td className="hidden px-4 py-3 text-muted-foreground tabular-nums lg:table-cell">
                       {f.phone ? (
                         <span className="inline-flex items-center gap-1">
                           <Phone className="size-3" />
@@ -219,15 +248,9 @@ export function FirmsClient({
                         <span className="text-muted-foreground/50">—</span>
                       )}
                     </td>
-                    <td className="hidden px-4 py-3 text-muted-foreground font-mono text-xs tabular-nums lg:table-cell">
-                      {f.gstin ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Hash className="size-3" />
-                          {f.gstin}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground/50">—</span>
-                      )}
+                    <td className="px-4 py-3 max-w-xs">
+                      <HealthCell health={f.health} cachedBrief={f.cachedBrief} />
+                      {hasSignal && f.cachedBrief && <SignalChips signals={f.signals} />}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground inline-block" />
