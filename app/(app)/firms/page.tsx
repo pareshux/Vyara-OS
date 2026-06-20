@@ -2,9 +2,7 @@
  * /firms — list of every organisation in the tenant (Blueprint REL-009 Slice 1.5).
  *
  * Filtering: server-side URL params.
- * Signals: 4 parallel bulk queries (overdue invoices, stale sent quotes,
- *   stuck projects, stale leads) annotate each row with health chips.
- * New filters: city, state, needs_attention (any signal present).
+ * Signals: 7 parallel bulk queries annotate each row with commercial KPIs + health chips.
  */
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -30,17 +28,15 @@ export default async function FirmsPage({
 
   const today = new Date().toISOString().slice(0, 10)
   const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString()
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString()
-
   const freshSince = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
 
   const [
     { data: allFirmRows },
     { data: typeRows },
-    { data: overdueInvoiceRows },
-    { data: staleQuoteRows },
-    { data: stuckProjectRows },
+    { data: allInvoiceRows },
+    { data: allOpenQuoteRows },
+    { data: allProjectRows },
     { data: staleLeadRows },
     { data: cachedBriefRows },
   ] = await Promise.all([
@@ -58,31 +54,27 @@ export default async function FirmsPage({
       .eq('is_active', true)
       .order('sort_order'),
 
-    // Overdue invoices: due < today, not closed
+    // ALL invoices per firm (for lifetime_value, outstanding, overdue)
     supabase
       .from('invoice')
-      .select('buyer_firm_id, billed_amount, paid_amount, due_date')
+      .select('buyer_firm_id, billed_amount, paid_amount, due_date, status, created_at')
       .not('buyer_firm_id', 'is', null)
-      .not('status', 'in', '(paid,cancelled,written_off)')
-      .lt('due_date', today)
       .is('deleted_at', null),
 
-    // Sent quotes with no response > 7 days old (need project.buyer/architect firm)
+    // ALL non-closed quotes (for pipeline_value, pipeline_count, stale_quote signal)
     supabase
       .from('quotation')
-      .select('id, sent_at, total, project:project_id(buyer_firm_id, architect_firm_id)')
-      .eq('status', 'sent')
-      .lt('sent_at', sevenDaysAgo)
+      .select('id, status, total, sent_at, created_at, project:project_id(buyer_firm_id, architect_firm_id)')
+      .not('status', 'in', '(accepted,rejected,expired)')
       .is('deleted_at', null),
 
-    // Active projects not updated in 14 days
+    // ALL projects with owner (for active_project_count, stuck signal, rep_name)
     supabase
       .from('project')
-      .select('buyer_firm_id, architect_firm_id, updated_at, current_stage:current_stage_id(is_terminal)')
-      .lt('updated_at', fourteenDaysAgo)
+      .select('buyer_firm_id, architect_firm_id, updated_at, current_stage:current_stage_id(is_terminal), owner:owner_id(full_name)')
       .is('deleted_at', null),
 
-    // Open leads not updated in 3 days
+    // Open leads not updated in 3 days (stale lead signal only)
     supabase
       .from('lead')
       .select('buyer_firm_id, architect_firm_id, updated_at')
@@ -90,7 +82,7 @@ export default async function FirmsPage({
       .not('stage', 'in', '(won,lost)')
       .is('deleted_at', null),
 
-    // Cached AI briefs (<24h) — one query, no new AI calls
+    // Cached AI briefs (<24h)
     supabase
       .from('ai_extraction')
       .select('source_storage_path, raw_output')
@@ -99,50 +91,143 @@ export default async function FirmsPage({
       .order('created_at', { ascending: false }),
   ])
 
-  // ── Build per-firm signal maps ──────────────────────────────────────────────
-
-  // Overdue invoice totals per buyer firm
-  const overdueByFirm = new Map<string, { count: number; outstanding: number; days: number }>()
-  for (const inv of (overdueInvoiceRows ?? []) as Array<{ buyer_firm_id: string; billed_amount: number; paid_amount: number; due_date: string }>) {
+  // ── Invoice KPIs per buyer_firm_id ──────────────────────────────────────────
+  type InvoiceRaw = {
+    buyer_firm_id: string
+    billed_amount: number | null
+    paid_amount: number | null
+    due_date: string | null
+    status: string | null
+    created_at: string
+  }
+  const invoiceKpiByFirm = new Map<string, {
+    lifetime_value: number
+    outstanding: number
+    overdue_outstanding: number
+    overdue_days: number
+    last_invoice_at: string | null
+  }>()
+  const CLOSED_STATUSES = new Set(['paid', 'cancelled', 'written_off'])
+  for (const inv of (allInvoiceRows ?? []) as unknown as InvoiceRaw[]) {
     const fid = inv.buyer_firm_id
-    const outstanding = (inv.billed_amount ?? 0) - (inv.paid_amount ?? 0)
-    if (outstanding <= 0) continue
-    const days = Math.floor((Date.now() - new Date(inv.due_date).getTime()) / 86400000)
-    const cur = overdueByFirm.get(fid) ?? { count: 0, outstanding: 0, days: 0 }
-    overdueByFirm.set(fid, { count: cur.count + 1, outstanding: cur.outstanding + outstanding, days: Math.max(cur.days, days) })
+    const billed = inv.billed_amount ?? 0
+    const paid = inv.paid_amount ?? 0
+    const cur = invoiceKpiByFirm.get(fid) ?? {
+      lifetime_value: 0,
+      outstanding: 0,
+      overdue_outstanding: 0,
+      overdue_days: 0,
+      last_invoice_at: null,
+    }
+    cur.lifetime_value += billed
+    const rowOutstanding = billed - paid
+    if (!CLOSED_STATUSES.has(inv.status ?? '') && rowOutstanding > 0) {
+      cur.outstanding += rowOutstanding
+      if (inv.due_date && inv.due_date < today) {
+        cur.overdue_outstanding += rowOutstanding
+        const days = Math.floor((Date.now() - new Date(inv.due_date).getTime()) / 86400000)
+        cur.overdue_days = Math.max(cur.overdue_days, days)
+      }
+    }
+    if (!cur.last_invoice_at || inv.created_at > cur.last_invoice_at) {
+      cur.last_invoice_at = inv.created_at
+    }
+    invoiceKpiByFirm.set(fid, cur)
   }
 
-  // Stale sent quotes per firm (via project buyer/architect)
-  const staleQuoteByFirm = new Map<string, { count: number; days: number }>()
-  type QuoteRaw = { sent_at: string | null; project: { buyer_firm_id: string | null; architect_firm_id: string | null } | { buyer_firm_id: string | null; architect_firm_id: string | null }[] | null }
-  for (const q_ of (staleQuoteRows ?? []) as unknown as QuoteRaw[]) {
+  // ── Quote KPIs per firm (buyer and architect) ───────────────────────────────
+  type QuoteRaw = {
+    id: string
+    status: string | null
+    total: number | null
+    sent_at: string | null
+    created_at: string
+    project: { buyer_firm_id: string | null; architect_firm_id: string | null } | { buyer_firm_id: string | null; architect_firm_id: string | null }[] | null
+  }
+  const quoteKpiByFirm = new Map<string, {
+    pipeline_value: number
+    pipeline_count: number
+    last_quote_at: string | null
+    stale_quote_days: number
+  }>()
+  const PIPELINE_STATUSES = new Set(['draft', 'sent', 'revised'])
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  for (const q_ of (allOpenQuoteRows ?? []) as unknown as QuoteRaw[]) {
     const p = Array.isArray(q_.project) ? q_.project[0] : q_.project
     if (!p) continue
-    const days = q_.sent_at ? Math.floor((Date.now() - new Date(q_.sent_at).getTime()) / 86400000) : 0
-    for (const fid of [p.buyer_firm_id, p.architect_firm_id]) {
-      if (!fid) continue
-      const cur = staleQuoteByFirm.get(fid) ?? { count: 0, days: 0 }
-      staleQuoteByFirm.set(fid, { count: cur.count + 1, days: Math.max(cur.days, days) })
+    const touchAt = q_.sent_at ?? q_.created_at
+    const firmIds = [p.buyer_firm_id, p.architect_firm_id].filter(Boolean) as string[]
+    for (const fid of firmIds) {
+      const cur = quoteKpiByFirm.get(fid) ?? {
+        pipeline_value: 0,
+        pipeline_count: 0,
+        last_quote_at: null,
+        stale_quote_days: 0,
+      }
+      if (PIPELINE_STATUSES.has(q_.status ?? '')) {
+        cur.pipeline_value += q_.total ?? 0
+        cur.pipeline_count += 1
+      }
+      if (!cur.last_quote_at || touchAt > cur.last_quote_at) {
+        cur.last_quote_at = touchAt
+      }
+      if (q_.status === 'sent' && q_.sent_at && q_.sent_at < sevenDaysAgo) {
+        const days = Math.floor((Date.now() - new Date(q_.sent_at).getTime()) / 86400000)
+        cur.stale_quote_days = Math.max(cur.stale_quote_days, days)
+      }
+      quoteKpiByFirm.set(fid, cur)
     }
   }
 
-  // Stuck projects per firm
-  const stuckProjectByFirm = new Map<string, { count: number; days: number }>()
-  type ProjectRaw = { buyer_firm_id: string | null; architect_firm_id: string | null; updated_at: string; current_stage: { is_terminal: boolean } | { is_terminal: boolean }[] | null }
-  for (const p of (stuckProjectRows ?? []) as unknown as ProjectRaw[]) {
+  // ── Project KPIs per firm (buyer and architect) ─────────────────────────────
+  type ProjectRaw = {
+    buyer_firm_id: string | null
+    architect_firm_id: string | null
+    updated_at: string
+    current_stage: { is_terminal: boolean } | { is_terminal: boolean }[] | null
+    owner: { full_name: string } | { full_name: string }[] | null
+  }
+  const projectKpiByFirm = new Map<string, {
+    active_project_count: number
+    stuck_project_days: number
+    last_project_at: string | null
+    rep_name: string | null
+    rep_updated_at: string | null
+  }>()
+  for (const p of (allProjectRows ?? []) as unknown as ProjectRaw[]) {
     const stage = Array.isArray(p.current_stage) ? p.current_stage[0] : p.current_stage
-    if (stage?.is_terminal) continue
-    const days = Math.floor((Date.now() - new Date(p.updated_at).getTime()) / 86400000)
-    for (const fid of [p.buyer_firm_id, p.architect_firm_id]) {
-      if (!fid) continue
-      const cur = stuckProjectByFirm.get(fid) ?? { count: 0, days: 0 }
-      stuckProjectByFirm.set(fid, { count: cur.count + 1, days: Math.max(cur.days, days) })
+    const isActive = !stage?.is_terminal
+    const o = Array.isArray(p.owner) ? p.owner[0] : p.owner
+    const firmIds = [p.buyer_firm_id, p.architect_firm_id].filter(Boolean) as string[]
+    for (const fid of firmIds) {
+      const cur = projectKpiByFirm.get(fid) ?? {
+        active_project_count: 0,
+        stuck_project_days: 0,
+        last_project_at: null,
+        rep_name: null,
+        rep_updated_at: null,
+      }
+      if (isActive) {
+        cur.active_project_count += 1
+        const days = Math.floor((Date.now() - new Date(p.updated_at).getTime()) / 86400000)
+        if (p.updated_at < fourteenDaysAgo) {
+          cur.stuck_project_days = Math.max(cur.stuck_project_days, days)
+        }
+        if (!cur.last_project_at || p.updated_at > cur.last_project_at) {
+          cur.last_project_at = p.updated_at
+        }
+        if (o?.full_name && (!cur.rep_updated_at || p.updated_at > cur.rep_updated_at)) {
+          cur.rep_name = o.full_name
+          cur.rep_updated_at = p.updated_at
+        }
+      }
+      projectKpiByFirm.set(fid, cur)
     }
   }
 
-  // Stale leads per firm
-  const staleLeadByFirm = new Map<string, { count: number; days: number }>()
+  // ── Stale leads per firm ────────────────────────────────────────────────────
   type LeadRaw = { buyer_firm_id: string | null; architect_firm_id: string | null; updated_at: string }
+  const staleLeadByFirm = new Map<string, { count: number; days: number }>()
   for (const l of (staleLeadRows ?? []) as unknown as LeadRaw[]) {
     const days = Math.floor((Date.now() - new Date(l.updated_at).getTime()) / 86400000)
     for (const fid of [l.buyer_firm_id, l.architect_firm_id]) {
@@ -152,7 +237,7 @@ export default async function FirmsPage({
     }
   }
 
-  // Cached AI briefs keyed by firm ID (extracted from source_storage_path)
+  // ── Cached AI briefs ────────────────────────────────────────────────────────
   const briefByFirm = new Map<string, { health: 'healthy' | 'needs_attention' | 'critical'; headline: string }>()
   for (const row of (cachedBriefRows ?? []) as Array<{ source_storage_path: string; raw_output: string | null }>) {
     const match = row.source_storage_path?.match(/^inline_text:firm_brief:(.+)$/)
@@ -168,7 +253,7 @@ export default async function FirmsPage({
     } catch { /* skip malformed */ }
   }
 
-  // Derived health from signals (rule-based, mirrors Claude's classification logic)
+  // ── Health derivation ───────────────────────────────────────────────────────
   function deriveHealth(signals: FirmRow['signals']): 'healthy' | 'needs_attention' | 'critical' {
     if (signals.overdue && (signals.overdue.days > 45 || signals.overdue.outstanding > 500000)) return 'critical'
     if (signals.overdue || signals.stale_quote || signals.stuck_project || signals.stale_lead) return 'needs_attention'
@@ -189,12 +274,35 @@ export default async function FirmsPage({
 
   const allFirms: FirmRow[] = ((allFirmRows ?? []) as unknown as RawRow[]).map((f) => {
     const rt = Array.isArray(f.relationship_type) ? f.relationship_type[0] ?? null : f.relationship_type
+
+    const invKpi = invoiceKpiByFirm.get(f.id)
+    const quoteKpi = quoteKpiByFirm.get(f.id)
+    const projKpi = projectKpiByFirm.get(f.id)
+
+    const overdueSig = invKpi && invKpi.overdue_outstanding > 0
+      ? { count: 1, outstanding: invKpi.overdue_outstanding, days: invKpi.overdue_days }
+      : undefined
+
+    const staleQuoteSig = quoteKpi && quoteKpi.stale_quote_days > 0
+      ? { count: 1, days: quoteKpi.stale_quote_days }
+      : undefined
+
+    const stuckProjectSig = projKpi && projKpi.stuck_project_days > 0
+      ? { count: 1, days: projKpi.stuck_project_days }
+      : undefined
+
     const signals: FirmRow['signals'] = {
-      overdue: overdueByFirm.get(f.id),
-      stale_quote: staleQuoteByFirm.get(f.id),
-      stuck_project: stuckProjectByFirm.get(f.id),
+      overdue: overdueSig,
+      stale_quote: staleQuoteSig,
+      stuck_project: stuckProjectSig,
       stale_lead: staleLeadByFirm.get(f.id),
     }
+
+    // last_touched_at = max of last_invoice_at, last_quote_at, last_project_at
+    const dates = [invKpi?.last_invoice_at, quoteKpi?.last_quote_at, projKpi?.last_project_at]
+      .filter(Boolean) as string[]
+    const last_touched_at = dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : null
+
     return {
       id: f.id,
       name: f.name,
@@ -207,6 +315,15 @@ export default async function FirmsPage({
       signals,
       health: briefByFirm.get(f.id)?.health ?? deriveHealth(signals),
       cachedBrief: briefByFirm.get(f.id),
+      active_project_count: projKpi?.active_project_count ?? 0,
+      pipeline_value: quoteKpi?.pipeline_value ?? 0,
+      pipeline_count: quoteKpi?.pipeline_count ?? 0,
+      outstanding: invKpi?.outstanding ?? 0,
+      overdue_outstanding: invKpi?.overdue_outstanding ?? 0,
+      overdue_days: invKpi?.overdue_days ?? 0,
+      lifetime_value: invKpi?.lifetime_value ?? 0,
+      last_touched_at,
+      rep_name: projKpi?.rep_name ?? null,
     }
   })
 

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Building2, Phone, MapPin, Hash, ChevronRight, AlertCircle, Clock, FileText, Folders, CheckCircle2, AlertTriangle, Sparkles } from 'lucide-react'
+import { Building2, AlertCircle, Clock, FileText, Folders, CheckCircle2, AlertTriangle, Sparkles, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ListFilter } from '@/components/app/list-filter'
 
@@ -15,7 +15,6 @@ const HEALTH_DOT: Record<Health, { dot: string; icon: typeof CheckCircle2; label
 
 function HealthCell({ health, cachedBrief }: { health: Health; cachedBrief?: { headline: string } }) {
   const cfg = HEALTH_DOT[health]
-  const Icon = cfg.icon
   return (
     <div className="flex flex-col gap-0.5">
       <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${cfg.iconClass}`}>
@@ -51,6 +50,15 @@ export type FirmRow = {
   signals: FirmSignals
   health: 'healthy' | 'needs_attention' | 'critical'
   cachedBrief?: { health: 'healthy' | 'needs_attention' | 'critical'; headline: string }
+  active_project_count: number
+  pipeline_value: number
+  pipeline_count: number
+  outstanding: number
+  overdue_outstanding: number
+  overdue_days: number
+  lifetime_value: number
+  last_touched_at: string | null
+  rep_name: string | null
 }
 
 export type RelationshipTypeOption = {
@@ -68,8 +76,20 @@ interface Props {
 }
 
 function formatINR(v: number): string {
+  if (v >= 10000000) return `₹${(v / 10000000).toFixed(1).replace(/\.0$/, '')}cr`
   if (v >= 100000) return `₹${(v / 100000).toFixed(1).replace(/\.0$/, '')}L`
+  if (v >= 1000) return `₹${(v / 1000).toFixed(0)}k`
   return `₹${v.toLocaleString('en-IN')}`
+}
+
+function lastTouchedLabel(iso: string | null): { label: string; color: string } {
+  if (!iso) return { label: '—', color: 'text-muted-foreground/50' }
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (days < 1) return { label: 'Today', color: 'text-green-600' }
+  if (days < 7) return { label: `${days}d ago`, color: 'text-green-600' }
+  if (days < 30) return { label: `${days}d ago`, color: 'text-amber-600' }
+  if (days < 90) return { label: `${Math.round(days / 7)}w ago`, color: 'text-red-500' }
+  return { label: `${Math.round(days / 30)}mo ago`, color: 'text-red-500' }
 }
 
 function SignalChips({ signals }: { signals: FirmSignals }) {
@@ -198,21 +218,25 @@ export function FirmsClient({
             <thead>
               <tr className="border-b border-border bg-muted/50">
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Name</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground sm:table-cell">Type</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell">City</th>
-                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell">Phone</th>
+                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground md:table-cell">Last touched</th>
+                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell">Projects</th>
+                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Pipeline</th>
+                <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Outstanding</th>
                 <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">Health</th>
+                <th className="hidden px-4 py-2.5 text-left font-medium text-muted-foreground lg:table-cell">Rep</th>
                 <th className="px-4 py-2.5 text-right w-10" />
               </tr>
             </thead>
             <tbody>
               {firms.map((f) => {
                 const hasSignal = f.signals.overdue || f.signals.stale_quote || f.signals.stuck_project || f.signals.stale_lead
+                const lt = lastTouchedLabel(f.last_touched_at)
                 return (
                   <tr
                     key={f.id}
                     className="group border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                   >
+                    {/* Name */}
                     <td className="px-4 py-3">
                       <Link
                         href={`/customers/${f.id}`}
@@ -221,37 +245,63 @@ export function FirmsClient({
                         <Building2 className="size-3.5 text-muted-foreground shrink-0" />
                         {f.name}
                       </Link>
+                      <div className="sm:hidden mt-0.5">
+                        <Badge variant="outline" className="text-xs">{f.type_label}</Badge>
+                      </div>
                       {hasSignal && !f.cachedBrief && <SignalChips signals={f.signals} />}
                     </td>
-                    <td className="hidden px-4 py-3 sm:table-cell">
-                      <Badge variant="outline" className="text-xs">
-                        {f.type_label}
-                      </Badge>
+
+                    {/* Last touched — md+ */}
+                    <td className="hidden px-4 py-3 md:table-cell">
+                      <span className={`text-sm tabular-nums ${lt.color}`}>{lt.label}</span>
                     </td>
-                    <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                      {f.city ? (
-                        <span className="inline-flex items-center gap-1">
-                          <MapPin className="size-3" />
-                          {f.city}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground/50">—</span>
-                      )}
+
+                    {/* Projects — lg+ */}
+                    <td className="hidden px-4 py-3 lg:table-cell text-sm tabular-nums text-muted-foreground">
+                      {f.active_project_count > 0 ? `${f.active_project_count}` : <span className="text-muted-foreground/30">—</span>}
                     </td>
-                    <td className="hidden px-4 py-3 text-muted-foreground tabular-nums lg:table-cell">
-                      {f.phone ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Phone className="size-3" />
-                          {f.phone}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground/50">—</span>
-                      )}
+
+                    {/* Pipeline */}
+                    <td className="px-4 py-3">
+                      {f.pipeline_value > 0 ? (
+                        <div>
+                          <p className="text-sm font-medium tabular-nums">{formatINR(f.pipeline_value)}</p>
+                          <p className="text-[11px] text-muted-foreground tabular-nums">{f.pipeline_count} open</p>
+                        </div>
+                      ) : <span className="text-muted-foreground/30">—</span>}
                     </td>
+
+                    {/* Outstanding */}
+                    <td className="px-4 py-3">
+                      <div>
+                        {f.outstanding > 0 ? (
+                          <p className={`text-sm font-medium tabular-nums ${f.overdue_outstanding > 0 ? 'text-red-600' : 'text-foreground'}`}>
+                            {formatINR(f.outstanding)}
+                            {f.overdue_outstanding > 0 && <span className="text-xs ml-1 font-normal">({f.overdue_days}d)</span>}
+                          </p>
+                        ) : (
+                          <p className="text-muted-foreground/30">—</p>
+                        )}
+                        {f.lifetime_value > 0 && (
+                          <p className="text-[11px] text-muted-foreground tabular-nums">{formatINR(f.lifetime_value)} lifetime</p>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Health */}
                     <td className="px-4 py-3 max-w-xs">
                       <HealthCell health={f.health} cachedBrief={f.cachedBrief} />
                       {hasSignal && f.cachedBrief && <SignalChips signals={f.signals} />}
                     </td>
+
+                    {/* Rep — lg+ */}
+                    <td className="hidden px-4 py-3 lg:table-cell">
+                      {f.rep_name ? (
+                        <span className="text-xs text-muted-foreground">{f.rep_name.split(' ')[0]}</span>
+                      ) : <span className="text-muted-foreground/30">—</span>}
+                    </td>
+
+                    {/* Arrow */}
                     <td className="px-4 py-3 text-right">
                       <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground inline-block" />
                     </td>
