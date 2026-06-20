@@ -23,7 +23,28 @@
 
 ## 2026-06-20
 
-### Customer 360 — Slice 2.1 · Orders tab (pending commit)
+### Customer 360 — Slice 2.4 · Collections tab (3189691)
+- **Tracks:** REL-009 (still ✅ Partial)
+- **Capability:** Relationship (read-through to Finance)
+- **Tier:** Should-have
+- **Status change:** ✅ Partial → ✅ Partial (extends)
+- **Notes:** Collections tab shows payment-tracking state per invoice: stage badge (color from collection_stage master), overdue badge, outstanding vs billed, next_action_at. Links to /invoices/[id]. Collections agg reuses invoiceAggRows from Phase 1 — no extra query. Tab trigger shows overdue count in red. Slice 3 (Visits + AI insights) is next after morning walkthrough.
+
+### Customer 360 — Slice 2.3 · Quotes tab (8796971)
+- **Tracks:** REL-009 (still ✅ Partial)
+- **Capability:** Relationship (read-through to Revenue)
+- **Tier:** Should-have
+- **Status change:** ✅ Partial → ✅ Partial (extends)
+- **Notes:** Quotes tab: stats (total · open · value), card rows with quotation_number (mono), status badge (Won/Lost/Sent/Draft/Revised/Expired), project name link, created date, valid_until with amber warning for near-expiry. Links to /projects/[id] — no standalone /quotes/[id] page. No read-model change; Phase 2 quotes query already shipped in Slice 2.2 (b3f3231).
+
+### Customer 360 — Slice 2.2 · Invoices tab (b3f3231)
+- **Tracks:** REL-009 (still ✅ Partial)
+- **Capability:** Relationship (read-through to Finance)
+- **Tier:** Should-have
+- **Status change:** ✅ Partial → ✅ Partial (extends)
+- **Notes:** Read-model restructured to two-phase (Phase 1: 6 parallel queries; Phase 2: quotes + collections conditional on ID lists). Invoice tab: stats (total · overdue · outstanding), card rows with invoice_number/external_invoice_number (mono), status badge, invoice date, due date (red + alert icon when overdue), total + outstanding. Links to /invoices/[id]. Sensitive-column check: invoice.total is not masked; only quotation.discount_pct and project.order_value are masked per PLAT-007.
+
+### Customer 360 — Slice 2.1 · Orders tab (44e3806)
 - **Tracks:** REL-009 (still ✅ Partial)
 - **Capability:** Relationship (read-through to Revenue)
 - **Tier:** Should-have
