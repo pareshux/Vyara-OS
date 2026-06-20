@@ -13,9 +13,17 @@
 //   - Section 1: Business Health (6 KPIs + prev-period deltas)
 //   - Section 2: Attention Centre (ranked items + gap markers)
 //
-// Slices 2–5 (planned) extend:
+// Slice 2 scope (re-ordered per "money first" feedback — Finance depth
+// lands before Revenue+Ops):
+//   - Section 3: Receivables ageing (5 buckets, drill into /collections)
+//   - Section 4: Top debtors (10, link → Customer 360)
+//   - Section 5: Cash movement (receipts in 30d + payment-mode split;
+//                gap marker for AP/outflow since no payable module yet)
+//   - Section 6: PTP coverage (promised vs overdue, due-this-week,
+//                recent dishonoured)
+//
+// Slices 3–5 (planned) extend:
 //   - Revenue + Operations rollups
-//   - Finance + Relationships rollups
 //   - Field Operations + People
 //   - Drill-down read-paths + filter set
 //
@@ -152,6 +160,95 @@ export type AttentionItem = {
   blueprint_id?: string
 }
 
+// ─── Section 3: Receivables ageing ───────────────────────────
+
+/** The buckets emitted by invoice_ageing_v. Hardcoded in 0006_invoices.sql:
+ *  current ≤ due_date · 1-30 · 31-60 · 60+ · closed.
+ *  Customer-#2 readiness note: these boundaries are not yet tenant-configurable.
+ *  Tracked separately; not in scope to refactor the view in this slice. */
+export type AgeingBucketKey = 'current' | '1-30' | '31-60' | '60+'
+
+export type AgeingBucket = {
+  key: AgeingBucketKey
+  /** Number of open invoices in this bucket. */
+  count: number
+  /** Total outstanding ₹ across invoices in this bucket. */
+  value: number
+  /** Drill-through to /collections preset to this bucket. */
+  drill_href: string
+}
+
+export type Ageing = {
+  buckets: AgeingBucket[]
+  /** Sum across buckets — equals BusinessHealth.outstanding.value. */
+  total_outstanding: number
+  /** Worst single days_overdue in the live set. */
+  worst_days_overdue: number
+}
+
+// ─── Section 4: Top debtors ──────────────────────────────────
+
+export type TopDebtor = {
+  firm_id: string
+  firm_name: string
+  /** Sum of outstanding across this firm's open invoices. */
+  outstanding: number
+  /** Max days_overdue across the same set. */
+  worst_days: number
+  /** Number of open invoices for this firm. */
+  invoice_count: number
+  /** A short label for the worst-offending invoice (invoice number + ₹). */
+  oldest_invoice_label: string
+  /** Customer 360 link. */
+  drill_href: string
+}
+
+// ─── Section 5: Cash movement ────────────────────────────────
+
+export type PaymentModeBreakdown = {
+  mode: 'cheque' | 'neft' | 'rtgs' | 'upi' | 'cash' | 'card' | 'other'
+  amount: number
+  count: number
+}
+
+export type CashMovement = {
+  /** Receipts received in the trailing 30 days. */
+  receipts_in_30d: number
+  /** Receipts received in the prior 30 days, for trend. */
+  receipts_in_prev_30d: number
+  /** Delta of the two windows. */
+  delta_30d_vs_prev: KpiDelta
+  /** Number of receipt rows in the 30d window. */
+  receipt_count_30d: number
+  /** Daily average for the 30d window. */
+  daily_avg: number
+  /** Top single day's receipts in the 30d window. */
+  best_day: { date: string; amount: number } | null
+  /** Split by payment_mode, biggest first. */
+  by_mode: PaymentModeBreakdown[]
+  /** Honest gap: we don't track outflows yet. */
+  outflow_gap: { reason: string; blueprint_id?: string }
+}
+
+// ─── Section 6: PTP coverage ─────────────────────────────────
+
+export type PtpCoverage = {
+  /** Total ₹ promised across open (un-honoured) promise_to_pay rows. */
+  total_promised: number
+  /** Number of open promises. */
+  open_promise_count: number
+  /** Number of overdue invoices that have at least one open promise. */
+  overdue_with_ptp: number
+  /** Number of overdue invoices in total. */
+  overdue_total: number
+  /** Number of promises due in the next 7 days. */
+  due_this_week: number
+  /** Number of dishonoured promises in the last 30 days. */
+  dishonoured_30d: number
+  /** Honest small flag — coverage % can be misleading on small denominators. */
+  coverage_pct: number | null
+}
+
 // ─── Top-level read-model ────────────────────────────────────
 
 export type OwnerOverview = {
@@ -160,6 +257,10 @@ export type OwnerOverview = {
   generated_at: string
   health: BusinessHealth
   attention: AttentionItem[]
+  ageing: Ageing
+  top_debtors: TopDebtor[]
+  cash_movement: CashMovement
+  ptp_coverage: PtpCoverage
   /** Quick counts used by the AI brief context — not rendered on the page directly. */
   facts: {
     overdue_invoice_count: number
@@ -175,6 +276,14 @@ export type OwnerOverview = {
     stale_sent_quote_value: number
     open_pipeline_value: number
     outstanding_total: number
+    /** Slice 2 facts — brief uses these to cite concrete debtors / PTP signals. */
+    top_debtor_label: string | null
+    receipts_30d: number
+    receipts_prev_30d: number
+    ptp_total_promised: number
+    ptp_due_this_week: number
+    ptp_overdue_with_promise: number
+    ptp_overdue_without_promise: number
   }
 }
 
@@ -205,6 +314,15 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
   const coldCutoff = new Date(now.getTime() - COLD_LEAD_DAYS * 86400000).toISOString()
   const staleQuoteCutoff = new Date(now.getTime() - STALE_QUOTE_DAYS * 86400000).toISOString()
 
+  // Slice 2: 30d cash-movement window is FIXED (not period-coupled) so the
+  // section answer is stable across period selection — same reasoning as DSO.
+  const cash30Start = new Date(now.getTime() - 30 * 86400000)
+  const cashPrev30Start = new Date(now.getTime() - 60 * 86400000)
+  const cash30StartDate = cash30Start.toISOString().slice(0, 10)
+  const cashPrev30StartDate = cashPrev30Start.toISOString().slice(0, 10)
+  const ptpWeekCutoff = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10)
+  const ptpDishonouredSince = new Date(now.getTime() - 30 * 86400000).toISOString()
+
   // ─── Phase 1: parallel reads ────────────────────────────────
   const [
     { data: tenantRow },
@@ -224,6 +342,9 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     pavingStageRow,
     coldLeads,
     staleQuoteList,
+    receipts30d,
+    openPromises,
+    dishonouredPromises30d,
   ] = await Promise.all([
     supabase.from('tenant').select('name').eq('id', tenantId).single(),
 
@@ -376,6 +497,27 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
       .lt('sent_at', staleQuoteCutoff)
       .order('sent_at', { ascending: true })
       .limit(50),
+
+    // Section 5: receipts in last 30d (fixed window, not period-coupled).
+    // Pulls payment_mode + received_at for the by-mode split and best-day fact.
+    supabase.from('receipt')
+      .select('amount, payment_mode, received_at')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .gte('received_at', cashPrev30StartDate),
+
+    // Section 6: open promises (is_honoured IS NULL) — coverage + due-this-week.
+    supabase.from('promise_to_pay')
+      .select('id, invoice_id, amount, promise_date')
+      .eq('tenant_id', tenantId)
+      .is('is_honoured', null),
+
+    // Section 6: dishonoured promises in the trailing 30d for the small flag.
+    supabase.from('promise_to_pay')
+      .select('id, amount, honoured_at')
+      .eq('tenant_id', tenantId)
+      .eq('is_honoured', false)
+      .gte('honoured_at', ptpDishonouredSince),
   ])
 
   // ─── Section 1: Business Health rollups ─────────────────────
@@ -481,10 +623,67 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     buyer_firm_id: string | null
   }>
 
-  // Resolve buyer names in one fast query (no N+1)
-  const buyerIds = Array.from(
-    new Set(topOverdue.map((r) => r.buyer_firm_id).filter(Boolean) as string[])
-  )
+  // ─── Slice 2: Sections 3 + 4 — compute candidates BEFORE the buyer-name
+  // fetch, so we can resolve names for overdue + debtors in one query.
+  type AgeingViewRow = {
+    outstanding: number
+    days_overdue: number
+    ageing_bucket: string
+    invoice_number: string
+    external_invoice_number: string | null
+    due_date: string
+    buyer_firm_id: string | null
+    id: string
+  }
+  const liveAgRows = ag as unknown as AgeingViewRow[]
+
+  // Group live (non-closed, outstanding > 0) rows by buyer to compute top debtors.
+  type DebtorAccumulator = {
+    firm_id: string
+    outstanding: number
+    worst_days: number
+    invoice_count: number
+    worst_invoice_label: string
+    worst_invoice_outstanding: number
+  }
+  const debtorByFirm = new Map<string, DebtorAccumulator>()
+  for (const r of liveAgRows) {
+    if (!r.buyer_firm_id) continue
+    if (r.ageing_bucket === 'closed') continue
+    const out = Number(r.outstanding)
+    if (out <= 0) continue
+    const existing = debtorByFirm.get(r.buyer_firm_id)
+    const label = r.external_invoice_number ?? r.invoice_number
+    if (existing) {
+      existing.outstanding += out
+      existing.invoice_count += 1
+      if (Number(r.days_overdue) > existing.worst_days) {
+        existing.worst_days = Number(r.days_overdue)
+      }
+      if (out > existing.worst_invoice_outstanding) {
+        existing.worst_invoice_outstanding = out
+        existing.worst_invoice_label = `${label} · ₹${out.toLocaleString('en-IN')}`
+      }
+    } else {
+      debtorByFirm.set(r.buyer_firm_id, {
+        firm_id: r.buyer_firm_id,
+        outstanding: out,
+        worst_days: Number(r.days_overdue),
+        invoice_count: 1,
+        worst_invoice_label: `${label} · ₹${out.toLocaleString('en-IN')}`,
+        worst_invoice_outstanding: out,
+      })
+    }
+  }
+  const topDebtorAccs = Array.from(debtorByFirm.values())
+    .sort((a, b) => b.outstanding - a.outstanding)
+    .slice(0, 10)
+
+  // Resolve buyer names in one fast query — for both overdue + top debtors.
+  const buyerIds = Array.from(new Set([
+    ...(topOverdue.map((r) => r.buyer_firm_id).filter(Boolean) as string[]),
+    ...topDebtorAccs.map((d) => d.firm_id),
+  ]))
   const buyerNameById = new Map<string, string>()
   if (buyerIds.length > 0) {
     const { data: buyerRows } = await supabase
@@ -494,6 +693,121 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     for (const b of (buyerRows ?? []) as { id: string; name: string }[]) {
       buyerNameById.set(b.id, b.name)
     }
+  }
+
+  // ─── Section 3: Receivables ageing rollup ───────────────────
+  const bucketAcc: Record<AgeingBucketKey, { count: number; value: number }> = {
+    'current': { count: 0, value: 0 },
+    '1-30':    { count: 0, value: 0 },
+    '31-60':   { count: 0, value: 0 },
+    '60+':     { count: 0, value: 0 },
+  }
+  let worstDaysOverdue = 0
+  for (const r of liveAgRows) {
+    if (r.ageing_bucket === 'closed') continue
+    const out = Number(r.outstanding)
+    if (out <= 0) continue
+    const bk = r.ageing_bucket as AgeingBucketKey
+    if (!bucketAcc[bk]) continue
+    bucketAcc[bk].count += 1
+    bucketAcc[bk].value += out
+    if (Number(r.days_overdue) > worstDaysOverdue) worstDaysOverdue = Number(r.days_overdue)
+  }
+  const ageing: Ageing = {
+    buckets: (['current', '1-30', '31-60', '60+'] as const).map((k) => ({
+      key: k,
+      count: bucketAcc[k].count,
+      value: bucketAcc[k].value,
+      drill_href: `/collections?bucket=${encodeURIComponent(k)}`,
+    })),
+    total_outstanding: totalOutstanding,
+    worst_days_overdue: worstDaysOverdue,
+  }
+
+  // ─── Section 4: Top debtors ─────────────────────────────────
+  const top_debtors: TopDebtor[] = topDebtorAccs.map((d) => ({
+    firm_id: d.firm_id,
+    firm_name: buyerNameById.get(d.firm_id) ?? '—',
+    outstanding: d.outstanding,
+    worst_days: d.worst_days,
+    invoice_count: d.invoice_count,
+    oldest_invoice_label: d.worst_invoice_label,
+    drill_href: `/customers/${d.firm_id}`,
+  }))
+
+  // ─── Section 5: Cash movement ──────────────────────────────
+  type Receipt30 = { amount: number | null; payment_mode: string; received_at: string }
+  const r30all = (receipts30d.data ?? []) as Receipt30[]
+  const r30Current = r30all.filter((r) => r.received_at >= cash30StartDate)
+  const r30Prev    = r30all.filter((r) => r.received_at <  cash30StartDate)
+  const sum30Cur = r30Current.reduce((s, r) => s + Number(r.amount ?? 0), 0)
+  const sum30Prev = r30Prev.reduce((s, r) => s + Number(r.amount ?? 0), 0)
+
+  // Best day in the current 30d window
+  const byDay = new Map<string, number>()
+  for (const r of r30Current) {
+    byDay.set(r.received_at, (byDay.get(r.received_at) ?? 0) + Number(r.amount ?? 0))
+  }
+  let bestDay: { date: string; amount: number } | null = null
+  for (const [date, amount] of byDay.entries()) {
+    if (!bestDay || amount > bestDay.amount) bestDay = { date, amount }
+  }
+
+  // Payment-mode split (current 30d window only)
+  type ModeKey = PaymentModeBreakdown['mode']
+  const modeAcc = new Map<ModeKey, { amount: number; count: number }>()
+  for (const r of r30Current) {
+    const m = (r.payment_mode as ModeKey) ?? 'other'
+    const e = modeAcc.get(m) ?? { amount: 0, count: 0 }
+    e.amount += Number(r.amount ?? 0)
+    e.count += 1
+    modeAcc.set(m, e)
+  }
+  const by_mode: PaymentModeBreakdown[] = Array.from(modeAcc.entries())
+    .map(([mode, v]) => ({ mode, amount: v.amount, count: v.count }))
+    .sort((a, b) => b.amount - a.amount)
+
+  const cash_movement: CashMovement = {
+    receipts_in_30d: sum30Cur,
+    receipts_in_prev_30d: sum30Prev,
+    delta_30d_vs_prev: makeDelta(sum30Cur, sum30Prev),
+    receipt_count_30d: r30Current.length,
+    daily_avg: sum30Cur / 30,
+    best_day: bestDay,
+    by_mode,
+    outflow_gap: {
+      reason: 'Cash outflow not tracked yet — needs accounts-payable / expense-payment ledger',
+      blueprint_id: 'FIN-014', // pluggable accounting adapter / AP module — closest tracked item
+    },
+  }
+
+  // ─── Section 6: PTP coverage ────────────────────────────────
+  type Ptp = { id: string; invoice_id: string; amount: number | null; promise_date: string }
+  const openPtps = (openPromises.data ?? []) as Ptp[]
+  const dishonoured30 = (dishonouredPromises30d.data ?? []) as { id: string; amount: number | null }[]
+
+  const totalPromised = openPtps.reduce((s, p) => s + Number(p.amount ?? 0), 0)
+  const overdueInvoiceIds = new Set(
+    liveAgRows
+      .filter((r) => r.ageing_bucket !== 'closed' && r.ageing_bucket !== 'current' && Number(r.outstanding) > 0)
+      .map((r) => r.id),
+  )
+  const overdueWithPromise = new Set(
+    openPtps.filter((p) => overdueInvoiceIds.has(p.invoice_id)).map((p) => p.invoice_id),
+  ).size
+  const dueThisWeek = openPtps.filter((p) => p.promise_date <= ptpWeekCutoff).length
+  const coveragePct = overdueInvoiceIds.size > 0
+    ? (overdueWithPromise / overdueInvoiceIds.size) * 100
+    : null
+
+  const ptp_coverage: PtpCoverage = {
+    total_promised: totalPromised,
+    open_promise_count: openPtps.length,
+    overdue_with_ptp: overdueWithPromise,
+    overdue_total: overdueInvoiceIds.size,
+    due_this_week: dueThisWeek,
+    dishonoured_30d: dishonoured30.length,
+    coverage_pct: coveragePct,
   }
   const rankedOverdue = topOverdue
     .map((r) => ({ ...r, rank: Number(r.outstanding) * Math.max(1, Number(r.days_overdue)) }))
@@ -720,6 +1034,11 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
   })
 
   // ─── Facts for AI brief context ─────────────────────────────
+  const topDebtor = top_debtors[0]
+  const topDebtorLabel = topDebtor
+    ? `${topDebtor.firm_name} · ₹${topDebtor.outstanding.toLocaleString('en-IN')} across ${topDebtor.invoice_count} invoice${topDebtor.invoice_count === 1 ? '' : 's'} · worst ${topDebtor.worst_days}d`
+    : null
+
   const facts: OwnerOverview['facts'] = {
     overdue_invoice_count: rankedOverdue.length,
     overdue_invoice_value: rankedOverdue.reduce((s, r) => s + Number(r.outstanding), 0),
@@ -734,6 +1053,13 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     stale_sent_quote_value: stale.reduce((s, q) => s + Number(q.total ?? 0), 0),
     open_pipeline_value: openPipelineValue,
     outstanding_total: totalOutstanding,
+    top_debtor_label: topDebtorLabel,
+    receipts_30d: cash_movement.receipts_in_30d,
+    receipts_prev_30d: cash_movement.receipts_in_prev_30d,
+    ptp_total_promised: ptp_coverage.total_promised,
+    ptp_due_this_week: ptp_coverage.due_this_week,
+    ptp_overdue_with_promise: ptp_coverage.overdue_with_ptp,
+    ptp_overdue_without_promise: ptp_coverage.overdue_total - ptp_coverage.overdue_with_ptp,
   }
 
   return {
@@ -742,6 +1068,10 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     generated_at: nowIso,
     health,
     attention,
+    ageing,
+    top_debtors,
+    cash_movement,
+    ptp_coverage,
     facts,
   }
 }

@@ -20,6 +20,10 @@ import { OwnerKpiStrip } from './owner-kpi-strip'
 import { AttentionCentre } from './attention-centre'
 import { OwnerBriefCard, OwnerBriefSkeleton } from './owner-brief-card'
 import { PeriodSelector } from './period-selector'
+import { FinanceAgeing } from './finance-ageing'
+import { FinanceDebtors } from './finance-debtors'
+import { FinanceCashMovement } from './finance-cash-movement'
+import { FinancePtpCoverage } from './finance-ptp-coverage'
 import { Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -96,7 +100,60 @@ export default async function OwnerPage({
         <OwnerKpiStrip health={overview.health} />
       </section>
 
-      {/* Section 2: Attention Centre */}
+      {/* Section 3: Receivables ageing — Slice 2 (money first) */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Receivables ageing
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Click a bucket to drill into /collections
+          </p>
+        </div>
+        <FinanceAgeing ageing={overview.ageing} />
+      </section>
+
+      {/* Section 4: Top debtors */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Top debtors
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Open ₹ by firm · click for Customer 360
+          </p>
+        </div>
+        <FinanceDebtors debtors={overview.top_debtors} />
+      </section>
+
+      {/* Section 5: Cash movement */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Cash movement
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Last 30 days · in tracked · out not yet tracked
+          </p>
+        </div>
+        <FinanceCashMovement cash={overview.cash_movement} />
+      </section>
+
+      {/* Section 6: PTP coverage */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Promise-to-pay coverage
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            How much overdue ₹ has a promise sitting against it
+          </p>
+        </div>
+        <FinancePtpCoverage ptp={overview.ptp_coverage} />
+      </section>
+
+      {/* Section 2: Attention Centre — kept last so the owner ends on the
+          ranked action list (the "what should I do next?" view). */}
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -112,13 +169,14 @@ export default async function OwnerPage({
       {/* Footer — disclosure on what's not in this slice */}
       <Card className="bg-muted/30 border-dashed">
         <CardContent className="pt-4 text-sm text-muted-foreground flex flex-col gap-1">
-          <p className="font-medium text-foreground">Slice 1 of the Owner Dashboard.</p>
+          <p className="font-medium text-foreground">Slices 1 + 2 of the Owner Dashboard.</p>
           <p>
-            Next slices add Revenue + Operations rollups, Finance + Relationships,
-            Field + People, and drill-down filters. Three sections show
-            <span className="text-foreground"> &ldquo;not tracked yet&rdquo;</span> markers in the Attention Centre — the
-            underlying data (complaints, dispatch SLA, generic firm credit limit) is tracked in the Blueprint
-            (CS-001, DEL-007, REL-016) and slots in cleanly when those ship.
+            Slice 2 went finance-depth (ageing · top debtors · cash movement ·
+            PTP coverage) per the &ldquo;money first&rdquo; principle for executive views.
+            Next slices add Revenue + Operations rollups, Field + People, and
+            drill-down filters. Three sections show <span className="text-foreground">&ldquo;not tracked yet&rdquo;</span>
+            {' '}markers — the underlying data (complaints, dispatch SLA, generic firm credit limit, cash outflow)
+            is tracked in the Blueprint (CS-001, DEL-007, REL-016, FIN-014) and slots in cleanly when those ship.
           </p>
         </CardContent>
       </Card>

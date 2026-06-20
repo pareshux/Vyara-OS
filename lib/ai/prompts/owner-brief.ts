@@ -14,7 +14,7 @@
  */
 import { z } from 'zod'
 
-export const OWNER_BRIEF_PROMPT_VERSION = 'owner_brief.v1'
+export const OWNER_BRIEF_PROMPT_VERSION = 'owner_brief.v2'
 
 export const OwnerBriefSchema = z.object({
   health: z
@@ -77,7 +77,12 @@ narrate what already happened.
 Input: a JSON snapshot of the tenant's commercial state right now (open
 pipeline, outstanding receivables, overdue invoices with buyer names + amounts
 + ages, stalled high-value projects, cold leads, pending approvals, period
-revenue + collections, DSO).
+revenue + collections, DSO). The snapshot also includes a "receivables_depth"
+block: the top 3 debtors by ₹ outstanding (firm + worst days + invoice count),
+ageing buckets (current / 1-30 / 31-60 / 60+), PTP coverage (% of overdue
+invoices with a payment promise, total ₹ promised, due-this-week, dishonoured),
+and a 30-day cash-in window with prior-30d delta. Cite from this block when
+risks or recommendations are about money — name debtors, ₹ amounts, days.
 
 Produce four parts:
 1. health — overall tenant business health (single classification)

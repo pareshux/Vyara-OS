@@ -49,7 +49,10 @@ export async function getOwnerBrief(): Promise<GetOwnerBriefResult> {
   }
 
   const tenantId = profile.tenant_id as string
-  const cacheKey = `inline_text:owner_brief:${tenantId}`
+  // Cache key includes prompt version — bumping OWNER_BRIEF_PROMPT_VERSION
+  // (e.g. v1 → v2 when we added receivables_depth) automatically invalidates
+  // older cached briefs without touching the DB.
+  const cacheKey = `inline_text:owner_brief:${tenantId}:${OWNER_BRIEF_PROMPT_VERSION}`
   const freshSince = new Date(Date.now() - CACHE_TTL_MS).toISOString()
 
   // 1. Cache lookup
@@ -158,6 +161,36 @@ export async function getOwnerBrief(): Promise<GetOwnerBriefResult> {
       pending_approvals: overview.facts.pending_approval_count,
       overdue_tasks: overview.facts.overdue_task_count,
       paving_stage_projects: overview.facts.paving_stage_count,
+    },
+    // Slice 2: receivables depth — so the brief can cite concrete debtors
+    // and PTP signals instead of generic "improve collections".
+    receivables_depth: {
+      ageing_buckets: overview.ageing.buckets.map((b) => ({
+        bucket: b.key,
+        invoice_count: b.count,
+        outstanding_inr: b.value,
+      })),
+      worst_days_overdue: overview.ageing.worst_days_overdue,
+      top_debtors_3: overview.top_debtors.slice(0, 3).map((d) => ({
+        firm: d.firm_name,
+        outstanding_inr: d.outstanding,
+        worst_days: d.worst_days,
+        invoice_count: d.invoice_count,
+      })),
+      ptp: {
+        coverage_pct: overview.ptp_coverage.coverage_pct,
+        overdue_with_promise: overview.ptp_coverage.overdue_with_ptp,
+        overdue_without_promise: overview.ptp_coverage.overdue_total - overview.ptp_coverage.overdue_with_ptp,
+        total_promised_inr: overview.ptp_coverage.total_promised,
+        due_this_week: overview.ptp_coverage.due_this_week,
+        dishonoured_last_30d: overview.ptp_coverage.dishonoured_30d,
+      },
+      cash_in_30d: {
+        amount_inr: overview.cash_movement.receipts_in_30d,
+        prev_30d_inr: overview.cash_movement.receipts_in_prev_30d,
+        delta_pct: overview.cash_movement.delta_30d_vs_prev.pct,
+        receipt_count: overview.cash_movement.receipt_count_30d,
+      },
     },
   }
 
