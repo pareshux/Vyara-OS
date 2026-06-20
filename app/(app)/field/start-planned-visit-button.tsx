@@ -58,12 +58,12 @@ export function StartPlannedVisitButton({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" disabled={disabled}>
-          <Play className="size-3.5 mr-1.5" /> Visit started
+          <Play className="size-3.5 mr-1.5" /> Start visit
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Visit started · {subjectLabel}</DialogTitle>
+          <DialogTitle>Just arrived at {subjectLabel}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">

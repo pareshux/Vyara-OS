@@ -89,13 +89,14 @@ export async function VisitsSection({
     <div className="flex flex-col gap-4">
       {/* ── Currently visiting (live) ─────────────────────────── */}
       {!readOnly && hasLive && live && (() => {
-        // A visit that's been "in progress" for >6h almost certainly
-        // means the rep left without wrapping it up. Flag it visually
-        // so they can complete or cancel instead of being stuck.
+        // A visit that's been "in progress" for >2h is probably stale —
+        // the rep closed the tab mid-visit. Flag it amber so they can
+        // Complete or Cancel before the 3h auto-cancel threshold in
+        // startVisit kicks in (which fires on their *next* arrival).
         const ageMinutes = live.started_at
           ? (Date.now() - new Date(live.started_at).getTime()) / 60000
           : 0
-        const isStale = ageMinutes > 6 * 60
+        const isStale = ageMinutes > 2 * 60
         return (
         <Card className={isStale
           ? 'border-amber-300 bg-amber-50/40'

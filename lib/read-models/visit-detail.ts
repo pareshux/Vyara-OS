@@ -198,10 +198,14 @@ export async function getVisitDetail(visitId: string): Promise<VisitDetail | nul
   } else if (v.dealer_id) {
     const { data } = await supabase
       .from('dealer')
-      .select('id, name')
+      .select('id, firm:firm_id(name)')
       .eq('id', v.dealer_id)
       .maybeSingle()
-    if (data) subject = { type: 'dealer', id: data.id, label: data.name, href: `/dealers/${data.id}` }
+    if (data) {
+      const firm = Array.isArray(data.firm) ? data.firm[0] : data.firm
+      const label = (firm as { name?: string } | null)?.name ?? '—'
+      subject = { type: 'dealer', id: data.id, label, href: `/dealers/${data.id}` }
+    }
   }
 
   // 3. Attachments tied to this visit.

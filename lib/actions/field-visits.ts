@@ -175,12 +175,17 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
       ? ctx.supabase.from('firm').select('id, name').in('id', firmIds)
       : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
     dealerIds.length
-      ? ctx.supabase.from('dealer').select('id, name').in('id', dealerIds)
-      : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+      ? ctx.supabase.from('dealer').select('id, firm:firm_id(name)').in('id', dealerIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; firm: { name: string } | { name: string }[] | null }> }),
   ])
   const leadById = new Map((leadRows ?? []).map((r) => [r.id, r.title] as [string, string]))
   const firmById = new Map((firmRows ?? []).map((r) => [r.id, r.name] as [string, string]))
-  const dealerById = new Map((dealerRows ?? []).map((r) => [r.id, r.name] as [string, string]))
+  const dealerById = new Map(
+    (dealerRows ?? []).map((r) => {
+      const firm = Array.isArray(r.firm) ? r.firm[0] : r.firm
+      return [r.id, firm?.name ?? '—'] as [string, string]
+    }),
+  )
 
   const planned: TodayPlanItem[] = tasks.map((t) => {
     const subject = subjectFromTask(t)
@@ -221,7 +226,7 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
       project:project_id(name),
       lead:lead_id(title),
       firm:firm_id(name),
-      dealer:dealer_id(name)
+      dealer:dealer_id(firm:firm_id(name))
     `)
     .eq('user_id', ctx.userId)
     .gte('started_at', dayStartIso)
@@ -237,7 +242,11 @@ export async function getTodayVisitsContext(): Promise<TodayVisitsContext | { er
     const projectName = Array.isArray(v.project) ? v.project[0]?.name : (v.project as { name?: string } | null)?.name
     const leadTitle = Array.isArray(v.lead) ? v.lead[0]?.title : (v.lead as { title?: string } | null)?.title
     const firmName = Array.isArray(v.firm) ? v.firm[0]?.name : (v.firm as { name?: string } | null)?.name
-    const dealerName = Array.isArray(v.dealer) ? v.dealer[0]?.name : (v.dealer as { name?: string } | null)?.name
+    const dealerRow = Array.isArray(v.dealer) ? v.dealer[0] : v.dealer
+    const dealerFirm = Array.isArray((dealerRow as { firm?: unknown })?.firm)
+      ? (dealerRow as { firm?: { name?: string }[] }).firm?.[0]
+      : (dealerRow as { firm?: { name?: string } } | null)?.firm
+    const dealerName = dealerFirm?.name
     const subjectLabel =
       subject.type === 'project' ? (projectName ?? '—') :
       subject.type === 'lead' ? (leadTitle ?? '—') :
@@ -447,11 +456,14 @@ export async function startVisit(params: {
   if (!(params.odometer_km_at_arrival >= 0)) return { error: 'Odometer must be ≥ 0' }
 
   // Block starting a new visit if one is already in_progress for this rep.
-  // Exception: if the open visit was started > 12h ago it's almost
+  // Exception: if the open visit was started > 3h ago it's almost
   // certainly a stale "rep closed the tab mid-visit" row, not a real
   // ongoing visit. Auto-soft-cancel it and let the new arrival proceed.
   // We log the reason so the audit trail explains the cleanup.
-  const STALE_VISIT_THRESHOLD_MS = 12 * 60 * 60 * 1000
+  // Threshold tuned to a typical sales-visit duration; if a rep actually
+  // spends 4h at a customer they'll see the amber "Stuck visit" card on
+  // /field at the 6h mark and can Complete it manually before this fires.
+  const STALE_VISIT_THRESHOLD_MS = 3 * 60 * 60 * 1000
   const { data: live } = await ctx.supabase
     .from('field_visit')
     .select('id, started_at')

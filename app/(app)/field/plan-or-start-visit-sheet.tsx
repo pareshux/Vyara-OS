@@ -123,7 +123,7 @@ export function PlanOrStartVisitSheet({
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{mode === 'plan' ? 'Plan a visit' : 'Visit started'}</DialogTitle>
+          <DialogTitle>{mode === 'plan' ? 'Plan a visit' : 'Just arrived'}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           {/* Mode switch */}
