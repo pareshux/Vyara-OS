@@ -14,7 +14,7 @@
  */
 import { z } from 'zod'
 
-export const OWNER_BRIEF_PROMPT_VERSION = 'owner_brief.v2'
+export const OWNER_BRIEF_PROMPT_VERSION = 'owner_brief.v3'
 
 export const OwnerBriefSchema = z.object({
   health: z
@@ -83,6 +83,14 @@ ageing buckets (current / 1-30 / 31-60 / 60+), PTP coverage (% of overdue
 invoices with a payment promise, total ₹ promised, due-this-week, dishonoured),
 and a 30-day cash-in window with prior-30d delta. Cite from this block when
 risks or recommendations are about money — name debtors, ₹ amounts, days.
+
+The snapshot also includes a "revenue_depth" block: a 4-stage commercial funnel
+(open leads → sent quotes → accepted quotes → won leads with conversion %s),
+win rate + avg quote cycle days, top 3 reps by closed ₹ (with personal win
+rate), top loss reasons, and live dispatch state (in-transit + delivered +
+avg cycle). Cite from this block when opportunities or recommendations are
+about sales — name reps, conversion %s, loss reasons. If conversion drops
+sharply at a stage, that's a worth-naming risk.
 
 Produce four parts:
 1. health — overall tenant business health (single classification)

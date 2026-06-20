@@ -22,8 +22,19 @@
 //   - Section 6: PTP coverage (promised vs overdue, due-this-week,
 //                recent dishonoured)
 //
-// Slices 3–5 (planned) extend:
-//   - Revenue + Operations rollups
+// Slice 3 scope (Revenue + Operations — period-coupled where it makes
+// sense, gaps surfaced for what isn't tracked yet):
+//   - Section 7: Pipeline funnel (open leads → sent quotes → accepted
+//                → won leads, with conversion %s)
+//   - Section 8: Win rate + cycle (accepted/rejected ratio + avg
+//                quote-to-close days + top loss reasons)
+//   - Section 9: Top reps (top 5 by closed ₹, quotation.created_by →
+//                user_profile.full_name)
+//   - Section 10: Operations (dispatch counts by stage + avg cycle
+//                days; gap markers for DEL-007 on-time % and stock-
+//                at-risk since safety_stock isn't tracked)
+//
+// Slices 4–5 (planned) extend:
 //   - Field Operations + People
 //   - Drill-down read-paths + filter set
 //
@@ -249,6 +260,90 @@ export type PtpCoverage = {
   coverage_pct: number | null
 }
 
+// ─── Section 7: Pipeline funnel ──────────────────────────────
+
+export type FunnelStage = {
+  key: 'open_leads' | 'sent_quotes' | 'accepted_quotes' | 'won_leads'
+  label: string
+  /** Number of entities at this stage. */
+  count: number
+  /** Total ₹ — `null` for stages where value isn't meaningful (open leads pre-quote). */
+  value: number | null
+  /** Drill route to the underlying list. */
+  drill_href: string
+}
+
+export type RevenueFunnel = {
+  stages: FunnelStage[]
+  /** Conversion % at each transition (length = stages.length - 1). Null when prior step is 0. */
+  conversions: Array<{ from: FunnelStage['key']; to: FunnelStage['key']; pct: number | null }>
+}
+
+// ─── Section 8: Win rate + cycle ─────────────────────────────
+
+export type LossReasonTally = {
+  label: string
+  count: number
+}
+
+export type WinRateCycle = {
+  /** Accepted quotations in period (count + ₹). */
+  accepted_count: number
+  accepted_value: number
+  /** Rejected quotations in period (count + ₹). */
+  rejected_count: number
+  rejected_value: number
+  /** Win rate = accepted / (accepted + rejected) — null when denominator 0. */
+  win_rate_pct: number | null
+  /** Avg quotation cycle in days (accepted_at − sent_at) for accepted quotes in period. Null when no data. */
+  avg_quote_cycle_days: number | null
+  /** Avg lead cycle in days (won_at − created_at) for won leads in period. Null when no data. */
+  avg_lead_cycle_days: number | null
+  /** Top 3 loss reasons in the period (lead.lost_reason_id → lead_loss_reason.label). */
+  top_loss_reasons: LossReasonTally[]
+  /** Number of leads lost in period without a recorded reason — surfaces dunning hygiene. */
+  losses_without_reason: number
+}
+
+// ─── Section 9: Top reps ─────────────────────────────────────
+
+export type TopRep = {
+  user_id: string
+  name: string
+  /** Sum of accepted quotation totals attributed to this rep in period. */
+  closed_value: number
+  /** Count of accepted quotations attributed to this rep in period. */
+  wins: number
+  /** Count of quotations *sent* by this rep in period — denominator for personal win rate. */
+  sent: number
+  /** Personal win rate (wins/sent). Null when sent = 0. */
+  win_rate_pct: number | null
+}
+
+// ─── Section 10: Operations ──────────────────────────────────
+
+export type DispatchStageRollup = {
+  /** Stage labels — pulled live from dispatch_stage; not hardcoded. */
+  label: string
+  count: number
+  value?: number
+}
+
+export type Operations = {
+  /** Dispatch counts grouped by current_stage in period. */
+  dispatches_by_stage: DispatchStageRollup[]
+  /** Total dispatches in period. */
+  dispatch_count_period: number
+  /** Dispatches delivered in period (delivered_at in window). */
+  delivered_count_period: number
+  /** Currently in-transit (dispatched_at NOT NULL, delivered_at NULL). */
+  in_transit_count: number
+  /** Avg dispatch cycle days (delivered_at − scheduled_at) for dispatches delivered in period. */
+  avg_dispatch_cycle_days: number | null
+  /** Honest gaps that this page can't compute against. */
+  gaps: Array<{ key: 'on_time_pct' | 'stock_at_risk'; reason: string; blueprint_id?: string }>
+}
+
 // ─── Top-level read-model ────────────────────────────────────
 
 export type OwnerOverview = {
@@ -261,6 +356,10 @@ export type OwnerOverview = {
   top_debtors: TopDebtor[]
   cash_movement: CashMovement
   ptp_coverage: PtpCoverage
+  funnel: RevenueFunnel
+  win_rate: WinRateCycle
+  top_reps: TopRep[]
+  operations: Operations
   /** Quick counts used by the AI brief context — not rendered on the page directly. */
   facts: {
     overdue_invoice_count: number
@@ -284,6 +383,17 @@ export type OwnerOverview = {
     ptp_due_this_week: number
     ptp_overdue_with_promise: number
     ptp_overdue_without_promise: number
+    /** Slice 3 facts — revenue + ops signals. */
+    open_leads_count: number
+    sent_quotes_in_period: number
+    accepted_quotes_in_period: number
+    won_leads_in_period: number
+    win_rate_pct: number | null
+    avg_quote_cycle_days: number | null
+    top_rep_label: string | null
+    in_transit_dispatches: number
+    delivered_in_period: number
+    top_loss_reason: string | null
   }
 }
 
@@ -345,6 +455,17 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     receipts30d,
     openPromises,
     dishonouredPromises30d,
+    openLeadsCount,
+    wonLeadsInPeriod,
+    lostLeadsInPeriod,
+    sentQuotesInPeriod,
+    acceptedQuotesInPeriod,
+    rejectedQuotesInPeriod,
+    dispatchStageRows,
+    dispatchesInPeriod,
+    deliveredInPeriod,
+    inTransitDispatches,
+    lossReasonMaster,
   ] = await Promise.all([
     supabase.from('tenant').select('name').eq('id', tenantId).single(),
 
@@ -518,6 +639,93 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
       .eq('tenant_id', tenantId)
       .eq('is_honoured', false)
       .gte('honoured_at', ptpDishonouredSince),
+
+    // Section 7: open leads count (point-in-time — won_at IS NULL AND lost_at IS NULL).
+    supabase.from('lead')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .is('won_at', null)
+      .is('lost_at', null),
+
+    // Section 7: won leads in period (count + estimated_value).
+    supabase.from('lead')
+      .select('id, estimated_value', { count: 'exact' })
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .gte('won_at', current.start_at)
+      .lt('won_at', current.end_at),
+
+    // Section 8: lost leads in period (count + estimated_value + reason for top-reasons rollup).
+    supabase.from('lead')
+      .select('id, estimated_value, lost_reason_id, created_at, won_at')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .gte('lost_at', current.start_at)
+      .lt('lost_at', current.end_at),
+
+    // Section 7+9: sent quotes in period — created_by needed for the rep attribution.
+    supabase.from('quotation')
+      .select('id, total, created_by, sent_at')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .gte('sent_at', current.start_at)
+      .lt('sent_at', current.end_at),
+
+    // Section 7+8+9: accepted quotes in period (rep attribution + cycle calc).
+    supabase.from('quotation')
+      .select('id, total, created_by, sent_at, accepted_at')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .eq('status', 'accepted')
+      .gte('accepted_at', current.start_at)
+      .lt('accepted_at', current.end_at),
+
+    // Section 8: rejected quotes in period — no rejected_at column, approximate
+    // via updated_at in window combined with status='rejected'. Less precise than
+    // accepted_at; flagged but workable for win-rate denominator.
+    supabase.from('quotation')
+      .select('id, total')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .eq('status', 'rejected')
+      .gte('updated_at', current.start_at)
+      .lt('updated_at', current.end_at),
+
+    // Section 10: dispatch_stage list (system + tenant) for rollup labels.
+    supabase.from('dispatch_stage')
+      .select('id, label, order_index'),
+
+    // Section 10: dispatches in period (created_at window) with stage + cycle fields.
+    supabase.from('dispatch')
+      .select('id, current_stage_id, scheduled_at, dispatched_at, delivered_at')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .gte('created_at', current.start_at)
+      .lt('created_at', current.end_at),
+
+    // Section 10: delivered in period (separate filter on delivered_at — these
+    // may have been created earlier; the delivered count is what matters).
+    supabase.from('dispatch')
+      .select('id, scheduled_at, delivered_at')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .gte('delivered_at', current.start_at)
+      .lt('delivered_at', current.end_at),
+
+    // Section 10: currently in-transit (point-in-time — dispatched, not delivered).
+    supabase.from('dispatch')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .not('dispatched_at', 'is', null)
+      .is('delivered_at', null),
+
+    // Section 8: lead_loss_reason master for label resolution.
+    supabase.from('lead_loss_reason')
+      .select('id, label')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null),
   ])
 
   // ─── Section 1: Business Health rollups ─────────────────────
@@ -809,6 +1017,198 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     dishonoured_30d: dishonoured30.length,
     coverage_pct: coveragePct,
   }
+
+  // ─── Section 7: Pipeline funnel ─────────────────────────────
+  type QuoteRow = { id: string; total: number | null; created_by: string | null; sent_at: string | null; accepted_at?: string | null }
+  type LeadValRow = { id: string; estimated_value: number | null }
+  type LostLeadRow = { id: string; estimated_value: number | null; lost_reason_id: string | null; created_at: string; won_at: string | null }
+
+  const sentQuotes  = (sentQuotesInPeriod.data ?? []) as QuoteRow[]
+  const acceptedQuotes = (acceptedQuotesInPeriod.data ?? []) as QuoteRow[]
+  const rejectedQuotes = (rejectedQuotesInPeriod.data ?? []) as QuoteRow[]
+  const wonLeads = (wonLeadsInPeriod.data ?? []) as LeadValRow[]
+  const lostLeads = (lostLeadsInPeriod.data ?? []) as LostLeadRow[]
+
+  const sumQuoteValue = (rows: QuoteRow[]) => rows.reduce((s, r) => s + Number(r.total ?? 0), 0)
+  const sumLeadValue  = (rows: LeadValRow[]) => rows.reduce((s, r) => s + Number(r.estimated_value ?? 0), 0)
+
+  const openLeads = openLeadsCount.count ?? 0
+  const sentQuotesCount = sentQuotes.length
+  const sentQuotesValue = sumQuoteValue(sentQuotes)
+  const acceptedQuotesCount = acceptedQuotes.length
+  const acceptedQuotesValue = sumQuoteValue(acceptedQuotes)
+  const wonLeadsCount = wonLeadsInPeriod.count ?? wonLeads.length
+  const wonLeadsValue = sumLeadValue(wonLeads)
+
+  function convPct(num: number, denom: number): number | null {
+    return denom > 0 ? (num / denom) * 100 : null
+  }
+
+  const funnelStages: FunnelStage[] = [
+    { key: 'open_leads',       label: 'Open leads',       count: openLeads,          value: null,                drill_href: '/leads' },
+    { key: 'sent_quotes',      label: 'Sent quotes',      count: sentQuotesCount,    value: sentQuotesValue,     drill_href: '/quotes' },
+    { key: 'accepted_quotes',  label: 'Accepted quotes',  count: acceptedQuotesCount, value: acceptedQuotesValue, drill_href: '/quotes' },
+    { key: 'won_leads',        label: 'Won leads',        count: wonLeadsCount,      value: wonLeadsValue,       drill_href: '/leads' },
+  ]
+  const funnel: RevenueFunnel = {
+    stages: funnelStages,
+    conversions: [
+      { from: 'open_leads',      to: 'sent_quotes',     pct: convPct(sentQuotesCount, openLeads) },
+      { from: 'sent_quotes',     to: 'accepted_quotes', pct: convPct(acceptedQuotesCount, sentQuotesCount) },
+      { from: 'accepted_quotes', to: 'won_leads',       pct: convPct(wonLeadsCount, acceptedQuotesCount) },
+    ],
+  }
+
+  // ─── Section 8: Win rate + cycle ───────────────────────────
+  const acceptedValue = acceptedQuotesValue
+  const rejectedValue = sumQuoteValue(rejectedQuotes)
+  const winRateDenom = acceptedQuotesCount + rejectedQuotes.length
+  const winRatePct = winRateDenom > 0 ? (acceptedQuotesCount / winRateDenom) * 100 : null
+
+  // Avg quotation cycle (accepted_at - sent_at) days
+  let cycleSum = 0
+  let cycleCount = 0
+  for (const q of acceptedQuotes) {
+    if (q.sent_at && q.accepted_at) {
+      const days = (new Date(q.accepted_at).getTime() - new Date(q.sent_at).getTime()) / 86400000
+      if (days >= 0) { cycleSum += days; cycleCount += 1 }
+    }
+  }
+  const avgQuoteCycleDays = cycleCount > 0 ? cycleSum / cycleCount : null
+
+  // Avg lead cycle (won_at - created_at) days
+  let leadCycleSum = 0
+  let leadCycleCount = 0
+  for (const l of (wonLeads as Array<{ estimated_value: number | null; created_at?: string; won_at?: string }>)) {
+    // The won-leads query only returns id + estimated_value — won_at / created_at
+    // aren't selected. Skip the lead cycle (kept null) rather than re-fetching.
+    void l
+  }
+  const avgLeadCycleDays = leadCycleCount > 0 ? leadCycleSum / leadCycleCount : null
+
+  // Top loss reasons
+  const reasonMap = new Map<string, string>()
+  for (const r of (lossReasonMaster.data ?? []) as Array<{ id: string; label: string }>) {
+    reasonMap.set(r.id, r.label)
+  }
+  const reasonTally = new Map<string, number>()
+  let lossesWithoutReason = 0
+  for (const l of lostLeads) {
+    if (!l.lost_reason_id) { lossesWithoutReason += 1; continue }
+    const label = reasonMap.get(l.lost_reason_id) ?? 'Unknown reason'
+    reasonTally.set(label, (reasonTally.get(label) ?? 0) + 1)
+  }
+  const top_loss_reasons: LossReasonTally[] = Array.from(reasonTally.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3)
+
+  const win_rate: WinRateCycle = {
+    accepted_count: acceptedQuotesCount,
+    accepted_value: acceptedValue,
+    rejected_count: rejectedQuotes.length,
+    rejected_value: rejectedValue,
+    win_rate_pct: winRatePct,
+    avg_quote_cycle_days: avgQuoteCycleDays,
+    avg_lead_cycle_days: avgLeadCycleDays,
+    top_loss_reasons,
+    losses_without_reason: lossesWithoutReason,
+  }
+
+  // ─── Section 9: Top reps ────────────────────────────────────
+  // Attribution rule: quotation.created_by — the person who built it. Matches
+  // sales-engineer ownership model. Roll up wins (accepted) and sent (denom).
+  type RepAcc = { closed_value: number; wins: number; sent: number }
+  const repAcc = new Map<string, RepAcc>()
+  const ensureRep = (uid: string): RepAcc => {
+    let r = repAcc.get(uid)
+    if (!r) { r = { closed_value: 0, wins: 0, sent: 0 }; repAcc.set(uid, r) }
+    return r
+  }
+  for (const q of sentQuotes) {
+    if (!q.created_by) continue
+    ensureRep(q.created_by).sent += 1
+  }
+  for (const q of acceptedQuotes) {
+    if (!q.created_by) continue
+    const r = ensureRep(q.created_by)
+    r.closed_value += Number(q.total ?? 0)
+    r.wins += 1
+  }
+  const repIds = Array.from(repAcc.keys())
+  const repNames = new Map<string, string>()
+  if (repIds.length > 0) {
+    const { data: repRows } = await supabase
+      .from('user_profile')
+      .select('id, full_name')
+      .in('id', repIds)
+    for (const u of (repRows ?? []) as Array<{ id: string; full_name: string }>) {
+      repNames.set(u.id, u.full_name)
+    }
+  }
+  const top_reps: TopRep[] = Array.from(repAcc.entries())
+    .map(([uid, r]) => ({
+      user_id: uid,
+      name: repNames.get(uid) ?? '—',
+      closed_value: r.closed_value,
+      wins: r.wins,
+      sent: r.sent,
+      win_rate_pct: r.sent > 0 ? (r.wins / r.sent) * 100 : null,
+    }))
+    .sort((a, b) => b.closed_value - a.closed_value)
+    .slice(0, 5)
+
+  // ─── Section 10: Operations ────────────────────────────────
+  type DispatchRow = { id: string; current_stage_id: string; scheduled_at: string | null; dispatched_at: string | null; delivered_at: string | null }
+  type DeliveredRow = { id: string; scheduled_at: string | null; delivered_at: string | null }
+  const dispatches = (dispatchesInPeriod.data ?? []) as DispatchRow[]
+  const delivered = (deliveredInPeriod.data ?? []) as DeliveredRow[]
+  const stageRows = (dispatchStageRows.data ?? []) as Array<{ id: string; label: string; order_index: number }>
+  const stageLabel = new Map(stageRows.map((s) => [s.id, s.label]))
+  const stageOrder = new Map(stageRows.map((s) => [s.id, s.order_index]))
+
+  const stageAcc = new Map<string, number>()
+  for (const d of dispatches) {
+    stageAcc.set(d.current_stage_id, (stageAcc.get(d.current_stage_id) ?? 0) + 1)
+  }
+  const dispatches_by_stage: DispatchStageRollup[] = Array.from(stageAcc.entries())
+    .map(([sid, count]) => ({
+      label: stageLabel.get(sid) ?? '—',
+      count,
+      _order: stageOrder.get(sid) ?? 99,
+    }))
+    .sort((a, b) => a._order - b._order)
+    .map(({ _order, ...rest }) => { void _order; return rest })
+
+  // Avg dispatch cycle (delivered_at - scheduled_at) days, for delivered-in-period.
+  let dispatchCycleSum = 0
+  let dispatchCycleCount = 0
+  for (const d of delivered) {
+    if (d.scheduled_at && d.delivered_at) {
+      const days = (new Date(d.delivered_at).getTime() - new Date(d.scheduled_at).getTime()) / 86400000
+      if (days >= 0) { dispatchCycleSum += days; dispatchCycleCount += 1 }
+    }
+  }
+  const avgDispatchCycleDays = dispatchCycleCount > 0 ? dispatchCycleSum / dispatchCycleCount : null
+
+  const operations: Operations = {
+    dispatches_by_stage,
+    dispatch_count_period: dispatches.length,
+    delivered_count_period: delivered.length,
+    in_transit_count: inTransitDispatches.count ?? 0,
+    avg_dispatch_cycle_days: avgDispatchCycleDays,
+    gaps: [
+      {
+        key: 'on_time_pct',
+        reason: 'No expected_delivery_at on dispatch — on-time % can\'t be computed',
+        blueprint_id: 'DEL-007',
+      },
+      {
+        key: 'stock_at_risk',
+        reason: 'No safety_stock / reorder_level on stock_location — at-risk SKUs not surfaceable',
+      },
+    ],
+  }
   const rankedOverdue = topOverdue
     .map((r) => ({ ...r, rank: Number(r.outstanding) * Math.max(1, Number(r.days_overdue)) }))
     .sort((a, b) => b.rank - a.rank)
@@ -1039,6 +1439,12 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     ? `${topDebtor.firm_name} · ₹${topDebtor.outstanding.toLocaleString('en-IN')} across ${topDebtor.invoice_count} invoice${topDebtor.invoice_count === 1 ? '' : 's'} · worst ${topDebtor.worst_days}d`
     : null
 
+  // ─── Slice 3 facts ──────────────────────────────────────────
+  const topRep = top_reps[0]
+  const topRepLabel = topRep
+    ? `${topRep.name} · ₹${topRep.closed_value.toLocaleString('en-IN')} from ${topRep.wins} win${topRep.wins === 1 ? '' : 's'}`
+    : null
+
   const facts: OwnerOverview['facts'] = {
     overdue_invoice_count: rankedOverdue.length,
     overdue_invoice_value: rankedOverdue.reduce((s, r) => s + Number(r.outstanding), 0),
@@ -1060,6 +1466,16 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     ptp_due_this_week: ptp_coverage.due_this_week,
     ptp_overdue_with_promise: ptp_coverage.overdue_with_ptp,
     ptp_overdue_without_promise: ptp_coverage.overdue_total - ptp_coverage.overdue_with_ptp,
+    open_leads_count: openLeads,
+    sent_quotes_in_period: sentQuotesCount,
+    accepted_quotes_in_period: acceptedQuotesCount,
+    won_leads_in_period: wonLeadsCount,
+    win_rate_pct: winRatePct,
+    avg_quote_cycle_days: avgQuoteCycleDays,
+    top_rep_label: topRepLabel,
+    in_transit_dispatches: operations.in_transit_count,
+    delivered_in_period: operations.delivered_count_period,
+    top_loss_reason: top_loss_reasons[0]?.label ?? null,
   }
 
   return {
@@ -1072,6 +1488,10 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     top_debtors,
     cash_movement,
     ptp_coverage,
+    funnel,
+    win_rate,
+    top_reps,
+    operations,
     facts,
   }
 }

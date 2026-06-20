@@ -24,6 +24,10 @@ import { FinanceAgeing } from './finance-ageing'
 import { FinanceDebtors } from './finance-debtors'
 import { FinanceCashMovement } from './finance-cash-movement'
 import { FinancePtpCoverage } from './finance-ptp-coverage'
+import { RevenueFunnel } from './revenue-funnel'
+import { WinRate } from './win-rate'
+import { TopReps } from './top-reps'
+import { Operations } from './operations'
 import { Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -152,6 +156,58 @@ export default async function OwnerPage({
         <FinancePtpCoverage ptp={overview.ptp_coverage} />
       </section>
 
+      {/* Section 7: Pipeline funnel — Slice 3 (Revenue + Ops) */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Pipeline funnel
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Period-coupled · click a stage to drill in
+          </p>
+        </div>
+        <RevenueFunnel funnel={overview.funnel} />
+      </section>
+
+      {/* Section 8: Win rate + cycle */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Win rate &amp; cycle
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Accepted vs rejected · avg days · loss reasons
+          </p>
+        </div>
+        <WinRate win={overview.win_rate} />
+      </section>
+
+      {/* Section 9: Top reps */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Top reps
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Top 5 by closed ₹ in period · win rate per rep
+          </p>
+        </div>
+        <TopReps reps={overview.top_reps} />
+      </section>
+
+      {/* Section 10: Operations */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Operations
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Dispatch volume + cycle · honest gaps for on-time % and stock at risk
+          </p>
+        </div>
+        <Operations ops={overview.operations} />
+      </section>
+
       {/* Section 2: Attention Centre — kept last so the owner ends on the
           ranked action list (the "what should I do next?" view). */}
       <section className="flex flex-col gap-3">
@@ -169,14 +225,17 @@ export default async function OwnerPage({
       {/* Footer — disclosure on what's not in this slice */}
       <Card className="bg-muted/30 border-dashed">
         <CardContent className="pt-4 text-sm text-muted-foreground flex flex-col gap-1">
-          <p className="font-medium text-foreground">Slices 1 + 2 of the Owner Dashboard.</p>
+          <p className="font-medium text-foreground">Slices 1 + 2 + 3 of the Owner Dashboard.</p>
           <p>
-            Slice 2 went finance-depth (ageing · top debtors · cash movement ·
-            PTP coverage) per the &ldquo;money first&rdquo; principle for executive views.
-            Next slices add Revenue + Operations rollups, Field + People, and
-            drill-down filters. Three sections show <span className="text-foreground">&ldquo;not tracked yet&rdquo;</span>
-            {' '}markers — the underlying data (complaints, dispatch SLA, generic firm credit limit, cash outflow)
-            is tracked in the Blueprint (CS-001, DEL-007, REL-016, FIN-014) and slots in cleanly when those ship.
+            Slice 3 added revenue depth (pipeline funnel · win rate &amp; cycle ·
+            top reps · operations) — periodically-coupled where useful, with
+            honest gap markers for on-time delivery (DEL-007) and stock at risk
+            (no safety_stock field yet). Next slice adds Field Operations + People
+            rollups; the final slice adds drill-down filters + Quick Actions +
+            saved views. Five sections still show <span className="text-foreground">&ldquo;not tracked yet&rdquo;</span>
+            {' '}markers across the page — the underlying data (complaints, dispatch SLA,
+            generic firm credit limit, cash outflow, safety stock) is tracked in the Blueprint
+            (CS-001, DEL-007, REL-016, FIN-014) and slots in cleanly when those ship.
           </p>
         </CardContent>
       </Card>

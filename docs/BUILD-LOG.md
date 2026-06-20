@@ -23,7 +23,14 @@
 
 ## 2026-06-21
 
-### Owner Dashboard — INT-014 Slice 2 · Finance depth (pending commit)
+### Owner Dashboard — INT-014 Slice 3 · Revenue + Ops (pending commit)
+- **Tracks:** INT-014 (Slices 1+2+3 ✅)
+- **Capability:** Intelligence (cross-capability reads: Revenue, Delivery, Platform)
+- **Tier:** Should-have
+- **Status change:** ✅ Slices 1+2 → ✅ Slices 1+2+3
+- **Notes:** Four new sections added between PTP coverage and the Attention Centre, so the full page now reads: Brief → Health KPIs → § Ageing → § Debtors → § Cash → § PTP → § Funnel → § Win rate → § Top reps → § Operations → Attention Centre. **Foundational audit before code:** quotation has `status` CHECK enum (draft/sent/revised/accepted/rejected/expired — note the actual closure verbs are accepted/rejected, NOT won/lost) + `sent_at` + `accepted_at` (no `rejected_at`, so rejected-in-period approximated via `updated_at` window — flagged but workable for win-rate denominator). lead has `won_at`, `lost_at`, `lost_reason_id`, `created_at`. dispatch has `scheduled_at`/`dispatched_at`/`delivered_at` but NO `expected_delivery_at` → on-time % surfaced as honest gap marker → DEL-007. stock_location has NO `safety_stock`/`reorder_level` → stock-at-risk surfaced as honest gap marker (no Blueprint item yet — discoverable for future). `lead_loss_reason` master exists per-tenant for label resolution. **Files shipped:** `lib/read-models/owner-overview.ts` — 4 new types (`RevenueFunnel`, `WinRateCycle`, `TopRep`, `Operations`), 11 new queries to Promise.all (open leads head, won/lost leads in period, sent/accepted/rejected quotes in period with created_by + sent_at + accepted_at for cycle calc, dispatch_stage master, dispatches/delivered/in-transit, lead_loss_reason master). A 12th new query (user_profile rep names) runs after the Promise.all once rep IDs are known — same pattern as Slice 1's buyer-name fetch. Funnel conversions can exceed 100% on short windows when wins predate the window — we surface that rather than capping (calibration honesty). Cycle calcs use defensive `>=0` guard. `facts` block extended with 10 new fields including a citation-ready `top_rep_label` and `top_loss_reason`. **4 new components** under `app/(app)/owner/`: `revenue-funnel.tsx` (vertical 4-stage bars with proportional widths + conversion-% chips between rows, click any stage → underlying list); `win-rate.tsx` (headline % with Strong/Average/Below-par chip + 3-stat sub-strip (cycle / lost ₹ / won ₹) + top-3 loss-reason chips + amber "leads closed without reason" hygiene flag rendering only when non-zero); `top-reps.tsx` (top 5 list with trophy/award icons for ranks 1–3, personal win-rate inline); `operations.tsx` (2-card layout: live ops card with dispatch counts + in-transit + delivered + avg cycle + by-stage chips; gaps card with on-time % → DEL-007 chip + stock-at-risk reason). All four reuse the same `formatMoney` (Indian short format) + tabular-nums + lucide + status-never-color-only pattern from Slices 1+2. **Page wiring** in `page.tsx` — 4 new section blocks inserted after PTP coverage; footer copy updated to acknowledge Slices 1+2+3 and list the 5 gap markers (CS-001, DEL-007, REL-016, FIN-014, safety_stock). **AI brief context extended** (`lib/actions/owner-brief.ts`) with a `revenue_depth` block (funnel stages + conversions + win rate + accepted/rejected ₹ + top 3 loss reasons + top 3 reps with personal win rate + ops snapshot). System prompt v2 → v3 with cache-key versioning (cache key still includes prompt version so v2 cached briefs auto-invalidate). **Smoke test:** `npx tsc --noEmit` clean across all changes. `next dev` boots in 1.5s; `/owner` compiles in 1.9s (1805 modules — Slice 2 was 1808; -3 modules makes sense, some lucide icons reused across slices). 307 to `/login` for unauthenticated curl expected. **No migrations** in this slice. **Slices 4–5 planned:** S4 Field + People (rep scorecards, attendance rollup, who's on duty right now), S5 drill-down filters + Quick Actions + saved views.
+
+### Owner Dashboard — INT-014 Slice 2 · Finance depth (d702fcc)
 - **Tracks:** INT-014 (Slices 1+2 ✅)
 - **Capability:** Intelligence (cross-capability reads: Finance, Relationship)
 - **Tier:** Should-have
@@ -32,7 +39,7 @@
 
 ## 2026-06-20
 
-### Owner Dashboard — INT-014 Slice 1 (pending commit)
+### Owner Dashboard — INT-014 Slice 1 (8ae1175)
 - **Tracks:** INT-014 (✅ Slice 1, 🚧 ongoing)
 - **Capability:** Intelligence (with reads across Revenue, Finance, Relationship, Platform)
 - **Tier:** Should-have

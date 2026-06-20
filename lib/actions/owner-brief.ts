@@ -192,6 +192,41 @@ export async function getOwnerBrief(): Promise<GetOwnerBriefResult> {
         receipt_count: overview.cash_movement.receipt_count_30d,
       },
     },
+    // Slice 3: revenue + ops depth — so the brief can cite concrete reps,
+    // funnel conversion %, win rate, and live dispatch state.
+    revenue_depth: {
+      funnel: overview.funnel.stages.map((s) => ({
+        stage: s.key,
+        count: s.count,
+        value_inr: s.value,
+      })),
+      conversions: overview.funnel.conversions.map((c) => ({
+        from: c.from,
+        to: c.to,
+        pct: c.pct,
+      })),
+      win_rate_pct: overview.win_rate.win_rate_pct,
+      avg_quote_cycle_days: overview.win_rate.avg_quote_cycle_days,
+      accepted_value_inr: overview.win_rate.accepted_value,
+      rejected_value_inr: overview.win_rate.rejected_value,
+      top_loss_reasons: overview.win_rate.top_loss_reasons.map((r) => ({
+        reason: r.label,
+        count: r.count,
+      })),
+      losses_without_reason: overview.win_rate.losses_without_reason,
+      top_reps_3: overview.top_reps.slice(0, 3).map((r) => ({
+        name: r.name,
+        closed_value_inr: r.closed_value,
+        wins: r.wins,
+        win_rate_pct: r.win_rate_pct,
+      })),
+      operations: {
+        dispatches_in_period: overview.operations.dispatch_count_period,
+        delivered_in_period: overview.operations.delivered_count_period,
+        in_transit_now: overview.operations.in_transit_count,
+        avg_dispatch_cycle_days: overview.operations.avg_dispatch_cycle_days,
+      },
+    },
   }
 
   // 3. Call AI
