@@ -28,17 +28,11 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { captureError } from '@/lib/observability/capture'
+import { ATTACHMENT_KINDS, ATTACHMENT_BUCKET, type AttachmentKind } from '@/lib/attachments/path'
 
-const BUCKET = 'ai-uploads'
+export type { AttachmentKind }
 
-export const ATTACHMENT_KINDS = [
-  'photo',
-  'document',
-  'voice_note',
-  'signature',
-  'receipt',
-] as const
-export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number]
+const BUCKET = ATTACHMENT_BUCKET
 
 const ENTITY_TYPES = [
   'field_visit',

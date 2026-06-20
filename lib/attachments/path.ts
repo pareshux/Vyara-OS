@@ -20,3 +20,19 @@ export function buildAttachmentPath(input: {
 }
 
 export const ATTACHMENT_BUCKET = 'ai-uploads'
+
+/**
+ * Allowed kinds — lives here (alongside the path util) instead of in
+ * lib/actions/attachments.ts so client components and consumers can
+ * import it without dragging the 'use server' module across the
+ * client/server boundary. Server actions can also import this.
+ */
+export const ATTACHMENT_KINDS = [
+  'photo',
+  'document',
+  'voice_note',
+  'signature',
+  'receipt',
+] as const
+
+export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number]

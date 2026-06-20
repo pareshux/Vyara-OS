@@ -19,8 +19,8 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Camera, Paperclip, Loader2, FileText, Mic } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { createAttachment, type AttachmentKind } from '@/lib/actions/attachments'
-import { ATTACHMENT_BUCKET, buildAttachmentPath } from '@/lib/attachments/path'
+import { createAttachment } from '@/lib/actions/attachments'
+import { ATTACHMENT_BUCKET, buildAttachmentPath, type AttachmentKind } from '@/lib/attachments/path'
 
 const ACCEPT_BY_KIND: Record<AttachmentKind, string> = {
   photo: 'image/*',
