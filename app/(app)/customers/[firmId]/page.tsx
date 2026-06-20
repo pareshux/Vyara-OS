@@ -42,6 +42,9 @@ import {
   Sparkles,
   TrendingUp,
   IndianRupee,
+  Package,
+  CalendarDays,
+  Truck,
 } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -87,7 +90,7 @@ export default async function Customer360Page(
   const data = await getCustomer360(firmId)
   if (!data) notFound()
 
-  const { firm, primary_contact, contacts, contact_count, projects, kpis } = data
+  const { firm, primary_contact, contacts, contact_count, projects, orders, kpis } = data
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-6 max-w-5xl">
@@ -225,6 +228,14 @@ export default async function Customer360Page(
             {projects.total > 0 && (
               <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">
                 {projects.total}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="orders" className="rounded-none pb-3 px-4">
+            Orders
+            {orders.total > 0 && (
+              <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">
+                {orders.total}
               </span>
             )}
           </TabsTrigger>
@@ -396,6 +407,103 @@ export default async function Customer360Page(
                         ? formatINR(p.estimated_value)
                         : '—'}
                     </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Orders tab ───────────────────────────────────────── */}
+        <TabsContent value="orders" className="mt-4 flex flex-col gap-3">
+          {orders.total > 0 && (
+            <div className="flex items-center gap-4 text-xs text-muted-foreground tabular-nums">
+              <span>
+                <span className="font-medium text-foreground">{orders.total}</span> total
+              </span>
+              {orders.active_count > 0 && (
+                <span>
+                  <span className="font-medium text-foreground">{orders.active_count}</span> active
+                </span>
+              )}
+              {orders.total_value > 0 && (
+                <span>
+                  <span className="font-medium text-foreground">{formatINR(orders.total_value)}</span> total value
+                </span>
+              )}
+              {orders.total > orders.showing && (
+                <span className="ml-auto">
+                  Showing {orders.showing} of {orders.total} · newest first
+                </span>
+              )}
+            </div>
+          )}
+
+          {orders.items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-10 text-center">
+              <Package className="size-7 mb-3 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-foreground">No orders yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Orders appear here when a quote is converted or a direct order is created for {firm.name}.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {orders.items.map((o) => (
+                <Link
+                  key={o.id}
+                  href={`/orders/${o.id}`}
+                  className="group rounded-lg border border-border bg-card hover:border-foreground/20 hover:bg-muted/50 transition-colors p-3 flex flex-col gap-2"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Package className="size-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium text-foreground font-mono tabular-nums">
+                          {o.order_number}
+                        </span>
+                        {o.current_stage && (
+                          <Badge
+                            variant="outline"
+                            className="border-0 text-[10px]"
+                            style={{
+                              backgroundColor: `${o.current_stage.color}20`,
+                              color: o.current_stage.color,
+                            }}
+                          >
+                            {o.current_stage.label}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        {o.project && (
+                          <span className="flex items-center gap-1 truncate">
+                            <FolderOpen className="size-3" />
+                            {o.project.name}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 tabular-nums">
+                          <CalendarDays className="size-3" />
+                          Ordered {new Date(o.order_date + 'T12:00:00').toLocaleDateString('en-IN', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                          })}
+                        </span>
+                        {o.expected_delivery_at && (
+                          <span className="flex items-center gap-1 tabular-nums">
+                            <Truck className="size-3" />
+                            Expect {new Date(o.expected_delivery_at + 'T12:00:00').toLocaleDateString('en-IN', {
+                              day: 'numeric', month: 'short',
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-sm tabular-nums font-medium text-foreground">
+                        {formatINR(o.value)}
+                      </span>
+                      <ChevronRight className="size-4 text-muted-foreground/50 group-hover:text-muted-foreground" />
+                    </div>
                   </div>
                 </Link>
               ))}

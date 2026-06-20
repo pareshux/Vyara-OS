@@ -59,6 +59,16 @@ export type Customer360Project = {
   firm_role: 'buyer' | 'architect'
 }
 
+export type Customer360Order = {
+  id: string
+  order_number: string
+  value: number
+  order_date: string
+  expected_delivery_at: string | null
+  current_stage: { id: string; label: string; color: string } | null
+  project: { id: string; name: string } | null
+}
+
 export type Customer360Kpis = {
   // Computed across all projects this firm participates in (capped at the
   // total we fetched — for Vyara today total is small enough that the page
@@ -81,11 +91,19 @@ export type Customer360 = {
     total: number
     showing: number
   }
+  orders: {
+    items: Customer360Order[]
+    total: number
+    showing: number
+    total_value: number
+    active_count: number
+  }
   kpis: Customer360Kpis
 }
 
 // How many projects to show on the page before the "Showing X of Y" line.
 const PROJECTS_PAGE_SIZE = 10
+const ORDERS_PAGE_SIZE = 10
 
 function titleCase(snake: string): string {
   return snake
@@ -151,7 +169,15 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
   // aggregate (no joins, no limit) for KPIs across ALL projects. The aggregate
   // query also pulls `current_stage_id->is_terminal` so we can count active
   // projects without over-fetching.
-  const [{ data: projectRows, count: projectTotal }, { data: projectAggRows }] = await Promise.all([
+  // Orders: filtered by sales_order.buyer_firm_id direct join. Same two-query
+  // pattern as projects — limited list for the Orders tab + lightweight
+  // aggregate (no joins, no limit) for total_value / active_count.
+  const [
+    { data: projectRows, count: projectTotal },
+    { data: projectAggRows },
+    { data: orderRows, count: orderTotal },
+    { data: orderAggRows },
+  ] = await Promise.all([
     supabase
       .from('project')
       .select(
@@ -172,6 +198,23 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
          current_stage:current_stage_id(is_terminal)`
       )
       .or(`buyer_firm_id.eq.${firmId},architect_firm_id.eq.${firmId}`)
+      .is('deleted_at', null),
+    supabase
+      .from('sales_order')
+      .select(
+        `id, order_number, value, order_date, expected_delivery_at,
+         current_stage:current_stage_id(id, label, color),
+         project:project_id(id, name)`,
+        { count: 'exact' }
+      )
+      .eq('buyer_firm_id', firmId)
+      .is('deleted_at', null)
+      .order('order_date', { ascending: false })
+      .limit(ORDERS_PAGE_SIZE),
+    supabase
+      .from('sales_order')
+      .select(`value, current_stage:current_stage_id(is_terminal)`)
+      .eq('buyer_firm_id', firmId)
       .is('deleted_at', null),
   ])
 
@@ -218,6 +261,38 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
   }))
   const total = projectTotal ?? mergedItems.length
 
+  // Orders shaping.
+  type OrderRow = {
+    id: string
+    order_number: string
+    value: number
+    order_date: string
+    expected_delivery_at: string | null
+    current_stage: { id: string; label: string; color: string } | { id: string; label: string; color: string }[] | null
+    project: { id: string; name: string } | { id: string; name: string }[] | null
+  }
+  const orderItems = ((orderRows ?? []) as unknown as OrderRow[]).map<Customer360Order>((o) => ({
+    id: o.id,
+    order_number: o.order_number,
+    value: o.value,
+    order_date: o.order_date,
+    expected_delivery_at: o.expected_delivery_at,
+    current_stage: Array.isArray(o.current_stage) ? (o.current_stage[0] ?? null) : o.current_stage,
+    project: Array.isArray(o.project) ? (o.project[0] ?? null) : o.project,
+  }))
+
+  type OrderAggRow = {
+    value: number | null
+    current_stage: { is_terminal: boolean } | { is_terminal: boolean }[] | null
+  }
+  let total_order_value = 0
+  let active_order_count = 0
+  for (const row of ((orderAggRows ?? []) as unknown as OrderAggRow[])) {
+    total_order_value += row.value ?? 0
+    const stage = Array.isArray(row.current_stage) ? row.current_stage[0] ?? null : row.current_stage
+    if (stage && !stage.is_terminal) active_order_count++
+  }
+
   return {
     firm: {
       id: firmRow.id as string,
@@ -240,6 +315,13 @@ export async function getCustomer360(firmId: string): Promise<Customer360 | null
       items: mergedItems,
       total,
       showing: mergedItems.length,
+    },
+    orders: {
+      items: orderItems,
+      total: orderTotal ?? orderItems.length,
+      showing: orderItems.length,
+      total_value: total_order_value,
+      active_count: active_order_count,
     },
     kpis: {
       total_estimated_value,

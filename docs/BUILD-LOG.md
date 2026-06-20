@@ -23,7 +23,14 @@
 
 ## 2026-06-20
 
-### Customer 360 — Slice 1.6 · Tab restructure + Contacts tab (pending commit)
+### Customer 360 — Slice 2.1 · Orders tab (pending commit)
+- **Tracks:** REL-009 (still ✅ Partial)
+- **Capability:** Relationship (read-through to Revenue)
+- **Tier:** Should-have
+- **Status change:** ✅ Partial → ✅ Partial (extends)
+- **Notes:** First Slice 2 tab. Read-model extension follows the pattern locked in Slice 1.6: one limited query for the tab list + one lightweight aggregate (no joins, no limit) for totals. Orders queried by `sales_order.buyer_firm_id` direct (the cleanest path — `sales_order` has buyer_firm_id stored explicitly, no need to traverse projects). New shape: `orders: { items, total, showing, total_value, active_count }` with `active_count` computed from `pipeline_stage.is_terminal` (same heuristic as projects). New Customer360Order type carries order_number / value / order_date / expected_delivery_at / current_stage / project link. UI: tab between Projects and Contacts; stats line above the list shows total · active · total_value · "Showing X of Y" when truncated; card rows show order_number (mono font), stage badge, project name (link target), order date, expected delivery (if set), value right-aligned. Each row deep-links to `/orders/[id]`. Empty state copy explains how orders arrive. **Architectural payoff:** the page didn't need restructuring — adding the tab is `import` + `destructure` + `<TabsTrigger>` + `<TabsContent>`. Slice 2.2 (next tab) will follow the same pattern.
+
+### Customer 360 — Slice 1.6 · Tab restructure + Contacts tab (821085d)
 - **Tracks:** REL-009 (still ✅ Partial — structural pivot, not a new tier)
 - **Capability:** Relationship
 - **Tier:** Should-have
