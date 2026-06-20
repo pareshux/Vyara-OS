@@ -33,6 +33,7 @@ export type ExtractionEntityKind =
   | 'odometer_photo'
   | 'voice_visit_note'
   | 'visit_prep_brief'
+  | 'team_day_summary'
 
 function getServiceClient(): SupabaseClient {
   return createServiceClient(

@@ -15,7 +15,7 @@
  * lat/lng to the eventual server action. The chip owns its visual
  * state (idle / capturing / ok / denied / unavailable).
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MapPin, MapPinOff, CheckCircle2 } from 'lucide-react'
 import { reverseGeocodeAction } from '@/lib/actions/reverse-geocode'
 
@@ -29,14 +29,19 @@ export function LocationCaptureChip({
   value,
   onChange,
   size = 'md',
+  autoCapture = true,
 }: {
   value: CapturedLocation | null
   onChange: (v: CapturedLocation | null) => void
   size?: 'sm' | 'md'
+  /** Auto-tap on mount so reps don't forget. Once a value is set
+   *  (or the user denies), we don't re-trigger. */
+  autoCapture?: boolean
 }) {
   const [status, setStatus] = useState<
     'idle' | 'capturing' | 'denied' | 'unavailable' | 'ok'
   >(value ? 'ok' : 'idle')
+  const autoCapturedRef = useRef(false)
 
   function capture() {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -64,6 +69,18 @@ export function LocationCaptureChip({
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
     )
   }
+
+  // Auto-trigger once on mount when there's no value yet. Browsers
+  // cache permission grants, so after the first session this is
+  // friction-free — and reps stop forgetting to tap the chip.
+  useEffect(() => {
+    if (!autoCapture) return
+    if (autoCapturedRef.current) return
+    if (value) return            // already have a location
+    autoCapturedRef.current = true
+    capture()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoCapture])
 
   // Padding / font sizes per size variant.
   const padding = size === 'sm' ? 'px-3 py-2' : 'px-3 py-2.5'

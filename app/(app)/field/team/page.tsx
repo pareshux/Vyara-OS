@@ -10,6 +10,7 @@ import { getTeamSnapshot, listPendingClaims, type TeamRepRow } from '@/lib/actio
 import { getTodayContext } from '@/lib/actions/field-attendance'
 import { ApproveClaimButton, RejectClaimButton } from './claim-actions'
 import { MyDayChip } from './my-day-chip'
+import { TeamDaySummaryCard } from './team-day-summary-card'
 
 export const dynamic = 'force-dynamic'
 
@@ -193,6 +194,9 @@ export default async function TeamPage({
         </div>
       </div>
 
+      {/* ── AI team digest — what the sales head reads first ── */}
+      {isToday && <TeamDaySummaryCard date={date} />}
+
       {/* ── Roll-up counters ──────────────────────────────────── */}
       <div className="grid grid-cols-4 gap-2">
         <RollupChip label="On duty" value={onDuty} tone="emerald" icon={MapPin} />
@@ -250,62 +254,70 @@ export default async function TeamPage({
             const att = r.attendance
             const isOnDuty = !!att?.check_in_at && !att?.check_out_at
             return (
-              <Link
+              <div
                 key={r.user_id}
-                href={`/field/team/${r.user_id}?date=${date}`}
-                className="block rounded-lg border border-border bg-card px-3 py-3 hover:bg-muted/20 transition-colors"
+                className="rounded-lg border border-border bg-card px-3 py-3"
               >
-                {/* Row 1 — identity + status */}
-                <div className="flex items-start gap-3">
-                  <div className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground shrink-0">
-                    {initials(r.full_name)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium">{r.full_name}</p>
-                      <Badge variant="outline" className="text-[10px] uppercase border-0 bg-muted text-muted-foreground">
-                        {r.role.replace('_', ' ')}
-                      </Badge>
-                      <StatusPill rep={r} isToday={isToday} />
-                      {stale && (
-                        <Badge variant="outline" className="text-[10px] uppercase border-0 bg-amber-50 text-amber-700">
-                          <Clock className="size-2.5 mr-0.5" /> Quiet 2h+
+                {/* Whole row 1 + row 2 is the drill-in link. Row 3 (Maps)
+                    is a sibling so we don't nest <a> tags. */}
+                <Link
+                  href={`/field/team/${r.user_id}?date=${date}`}
+                  className="block hover:opacity-80 transition-opacity"
+                >
+                  {/* Row 1 — identity + status */}
+                  <div className="flex items-start gap-3">
+                    <div className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground shrink-0">
+                      {initials(r.full_name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium">{r.full_name}</p>
+                        <Badge variant="outline" className="text-[10px] uppercase border-0 bg-muted text-muted-foreground">
+                          {r.role.replace('_', ' ')}
                         </Badge>
+                        <StatusPill rep={r} isToday={isToday} />
+                        {stale && (
+                          <Badge variant="outline" className="text-[10px] uppercase border-0 bg-amber-50 text-amber-700">
+                            <Clock className="size-2.5 mr-0.5" /> Quiet 2h+
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-1" />
+                  </div>
+
+                  {/* Row 2 — visit counts + time strip */}
+                  {att && (att.check_in_at || att.status_for_day !== 'on_duty') && (
+                    <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums flex-wrap">
+                      <span>
+                        <span className="text-foreground font-medium">{r.visits_today}</span> done
+                        {' · '}
+                        <span className="text-foreground font-medium">{r.planned_count}</span> planned
+                        {r.in_progress_count > 0 && (
+                          <> · <span className="text-emerald-700 font-medium">{r.in_progress_count} live</span></>
+                        )}
+                      </span>
+                      {att.check_in_at && <span>· in {formatTime(att.check_in_at)}</span>}
+                      {att.check_out_at && <span>· out {formatTime(att.check_out_at)}</span>}
+                      {att.total_km != null
+                        ? <span>· {att.total_km.toLocaleString('en-IN')} km</span>
+                        : att.running_km != null
+                          ? <span>· {att.running_km.toLocaleString('en-IN')} km so far</span>
+                          : null}
+                      {att.reimbursement_amount != null && <span>· {rs(att.reimbursement_amount)}</span>}
+                      {r.last_activity_at && isOnDuty && (
+                        <span>· active {formatRelative(r.last_activity_at)}</span>
                       )}
                     </div>
-                  </div>
-                  <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-1" />
-                </div>
+                  )}
+                  {!att && isToday && (
+                    <p className="mt-2 text-[11px] text-muted-foreground italic">Not checked in yet</p>
+                  )}
+                </Link>
 
-                {/* Row 2 — visit counts + time strip */}
-                {att && (att.check_in_at || att.status_for_day !== 'on_duty') && (
-                  <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums flex-wrap">
-                    <span>
-                      <span className="text-foreground font-medium">{r.visits_today}</span> done
-                      {' · '}
-                      <span className="text-foreground font-medium">{r.planned_count}</span> planned
-                      {r.in_progress_count > 0 && (
-                        <> · <span className="text-emerald-700 font-medium">{r.in_progress_count} live</span></>
-                      )}
-                    </span>
-                    {att.check_in_at && <span>· in {formatTime(att.check_in_at)}</span>}
-                    {att.check_out_at && <span>· out {formatTime(att.check_out_at)}</span>}
-                    {att.total_km != null
-                      ? <span>· {att.total_km.toLocaleString('en-IN')} km</span>
-                      : att.running_km != null
-                        ? <span>· {att.running_km.toLocaleString('en-IN')} km so far</span>
-                        : null}
-                    {att.reimbursement_amount != null && <span>· {rs(att.reimbursement_amount)}</span>}
-                    {r.last_activity_at && isOnDuty && (
-                      <span>· active {formatRelative(r.last_activity_at)}</span>
-                    )}
-                  </div>
-                )}
-                {!att && isToday && (
-                  <p className="mt-2 text-[11px] text-muted-foreground italic">Not checked in yet</p>
-                )}
-
-                {/* Row 3 — where they are right now */}
+                {/* Row 3 — where they are right now. Sibling of the
+                    drill-in Link, not nested, so opening Maps doesn't
+                    also navigate to the drill-in page. */}
                 {r.latest_location && (
                   <div className="mt-2 flex items-center gap-2">
                     <MapPin className="size-3.5 text-blue-700 shrink-0" />
@@ -313,8 +325,7 @@ export default async function TeamPage({
                       href={`https://www.google.com/maps?q=${r.latest_location.lat},${r.latest_location.lng}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-xs text-blue-700 hover:underline inline-flex items-center gap-1 truncate"
+                      className="text-xs text-blue-700 hover:underline inline-flex items-center gap-1 truncate min-w-0"
                       title={r.latest_location.source === 'visit' ? 'Latest visit pin' : 'Check-in spot'}
                     >
                       <span className="truncate">
@@ -323,12 +334,12 @@ export default async function TeamPage({
                       </span>
                       <ExternalLink className="size-3 shrink-0" />
                     </a>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[10px] text-muted-foreground shrink-0">
                       ({r.latest_location.source === 'visit' ? 'last visit' : 'check-in'})
                     </span>
                   </div>
                 )}
-              </Link>
+              </div>
             )
           })}
         </div>
