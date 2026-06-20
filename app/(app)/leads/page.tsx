@@ -4,8 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Users, LayoutGrid, List as ListIcon, Filter } from 'lucide-react'
+import { Plus, Users, LayoutGrid, List as ListIcon } from 'lucide-react'
 import { LeadKanban } from './kanban'
+import { ListFilter } from '@/components/app/list-filter'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,8 +33,11 @@ export default async function LeadsPage({
 
   const params = await searchParams
   const view = (typeof params.view === 'string' ? params.view : 'list') as 'list' | 'pipeline'
+  const q = typeof params.q === 'string' ? params.q.trim() : ''
   const stageFilter = typeof params.stage === 'string' ? params.stage : null
   const ownerFilter = typeof params.owner === 'string' ? params.owner : null
+  const sourceFilter = typeof params.source === 'string' ? params.source : null
+  const segmentFilter = typeof params.segment === 'string' ? params.segment : null
 
   const [{ data: stages }, { data: sources }, { data: owners }] = await Promise.all([
     supabase
@@ -50,7 +54,7 @@ export default async function LeadsPage({
       .order('full_name'),
   ])
 
-  let q = supabase
+  let query = supabase
     .from('lead')
     .select(
       `id, lead_number, title, segment, estimated_value, expected_close_at,
@@ -62,9 +66,13 @@ export default async function LeadsPage({
     .is('deleted_at', null)
     .order('last_activity_at', { ascending: false })
     .limit(200)
-  if (stageFilter) q = q.eq('current_stage_id', stageFilter)
-  if (ownerFilter) q = q.eq('owner_id', ownerFilter)
-  const { data: leadsRaw } = await q
+
+  if (stageFilter) query = query.eq('current_stage_id', stageFilter)
+  if (ownerFilter) query = query.eq('owner_id', ownerFilter)
+  if (sourceFilter) query = query.eq('source_id', sourceFilter)
+  if (segmentFilter) query = query.eq('segment', segmentFilter)
+
+  const { data: leadsRaw } = await query
 
   type LeadRow = {
     id: string
@@ -84,12 +92,9 @@ export default async function LeadsPage({
     source: { id: string; code: string; label: string } | null
     owner: { id: string; full_name: string } | null
   }
+
   const normalize = (r: unknown): LeadRow => {
-    const obj = r as Record<string, unknown> & {
-      stage?: unknown
-      source?: unknown
-      owner?: unknown
-    }
+    const obj = r as Record<string, unknown> & { stage?: unknown; source?: unknown; owner?: unknown }
     const stage = Array.isArray(obj.stage) ? obj.stage[0] : obj.stage
     const source = Array.isArray(obj.source) ? obj.source[0] : obj.source
     const owner = Array.isArray(obj.owner) ? obj.owner[0] : obj.owner
@@ -100,7 +105,19 @@ export default async function LeadsPage({
       owner: (owner as LeadRow['owner']) ?? null,
     }
   }
-  const leads: LeadRow[] = ((leadsRaw ?? []) as unknown[]).map(normalize)
+
+  let leads: LeadRow[] = ((leadsRaw ?? []) as unknown[]).map(normalize)
+
+  // Text search (applied in-memory — ilike across joined fields is cleaner here)
+  if (q) {
+    const needle = q.toLowerCase()
+    leads = leads.filter((l) =>
+      l.title.toLowerCase().includes(needle) ||
+      (l.contact_name_raw ?? '').toLowerCase().includes(needle) ||
+      (l.city ?? '').toLowerCase().includes(needle) ||
+      (l.lead_number ?? '').toLowerCase().includes(needle)
+    )
+  }
 
   const totalCount = leads.length
   const pipelineValue = leads
@@ -113,18 +130,7 @@ export default async function LeadsPage({
     .filter((l) => l.stage?.is_lost)
     .reduce((s, l) => s + Number(l.estimated_value ?? 0), 0)
 
-  function qs(patch: Record<string, string | null>) {
-    const sp = new URLSearchParams()
-    if (view) sp.set('view', view)
-    if (stageFilter) sp.set('stage', stageFilter)
-    if (ownerFilter) sp.set('owner', ownerFilter)
-    for (const [k, v] of Object.entries(patch)) {
-      if (v == null) sp.delete(k)
-      else sp.set(k, v)
-    }
-    const s = sp.toString()
-    return s ? `?${s}` : ''
-  }
+  const viewToggleHref = `/leads?view=${view === 'pipeline' ? 'list' : 'pipeline'}${stageFilter ? `&stage=${stageFilter}` : ''}${ownerFilter ? `&owner=${ownerFilter}` : ''}${sourceFilter ? `&source=${sourceFilter}` : ''}${segmentFilter ? `&segment=${segmentFilter}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-7xl">
@@ -141,7 +147,7 @@ export default async function LeadsPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href={`/leads${qs({ view: view === 'pipeline' ? 'list' : 'pipeline' })}`}>
+          <Link href={viewToggleHref}>
             <Button variant="outline" size="sm">
               {view === 'pipeline' ? <ListIcon className="size-4 mr-1.5" /> : <LayoutGrid className="size-4 mr-1.5" />}
               {view === 'pipeline' ? 'List view' : 'Pipeline'}
@@ -156,45 +162,37 @@ export default async function LeadsPage({
         </div>
       </div>
 
-      {/* Filter chips */}
-      <div className="flex items-center gap-2 flex-wrap text-xs">
-        <span className="flex items-center gap-1 text-muted-foreground">
-          <Filter className="size-3" /> Stage:
-        </span>
-        <Link
-          href={`/leads${qs({ stage: null })}`}
-          className={`px-2.5 py-1 rounded-full border text-xs ${!stageFilter ? 'bg-foreground text-background border-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
-        >
-          All
-        </Link>
-        {(stages ?? []).map((s) => (
-          <Link
-            key={s.id}
-            href={`/leads${qs({ stage: stageFilter === s.id ? null : s.id })}`}
-            className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${stageFilter === s.id ? 'border-transparent text-white' : 'border-border text-muted-foreground hover:text-foreground'}`}
-            style={stageFilter === s.id ? { backgroundColor: s.color } : {}}
-          >
-            {s.label}
-          </Link>
-        ))}
-
-        <span className="flex items-center gap-1 text-muted-foreground ml-3">Owner:</span>
-        <Link
-          href={`/leads${qs({ owner: null })}`}
-          className={`px-2.5 py-1 rounded-full border text-xs ${!ownerFilter ? 'bg-foreground text-background border-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
-        >
-          All
-        </Link>
-        {(owners ?? []).slice(0, 5).map((o) => (
-          <Link
-            key={o.id}
-            href={`/leads${qs({ owner: ownerFilter === o.id ? null : o.id })}`}
-            className={`px-2.5 py-1 rounded-full border text-xs ${ownerFilter === o.id ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:text-foreground'}`}
-          >
-            {o.full_name}
-          </Link>
-        ))}
-      </div>
+      {/* Filter bar */}
+      <ListFilter
+        searchPlaceholder="Search by name, contact, city…"
+        keepParams={['view']}
+        selects={[
+          {
+            key: 'stage',
+            label: 'Stage',
+            placeholder: 'All stages',
+            options: (stages ?? []).map((s) => ({ value: s.id, label: s.label, color: s.color })),
+          },
+          {
+            key: 'owner',
+            label: 'Owner',
+            placeholder: 'All owners',
+            options: (owners ?? []).map((o) => ({ value: o.id, label: o.full_name })),
+          },
+          {
+            key: 'source',
+            label: 'Source',
+            placeholder: 'All sources',
+            options: (sources ?? []).map((s) => ({ value: s.id, label: s.label })),
+          },
+          {
+            key: 'segment',
+            label: 'Segment',
+            placeholder: 'All segments',
+            options: Object.entries(SEG_LABELS).map(([v, l]) => ({ value: v, label: l })),
+          },
+        ]}
+      />
 
       {/* Body */}
       {view === 'pipeline' ? (
@@ -216,7 +214,7 @@ export default async function LeadsPage({
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Users className="size-8 mb-3 text-muted-foreground/50" />
             <p className="text-sm font-medium">No leads match your filters.</p>
-            <p className="mt-1 text-sm text-muted-foreground">Capture one to begin.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Try clearing the filters or capture a new lead.</p>
             <Link href="/leads/new" className="mt-3"><Button size="sm">New lead</Button></Link>
           </CardContent>
         </Card>

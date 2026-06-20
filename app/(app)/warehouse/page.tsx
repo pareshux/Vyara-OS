@@ -8,18 +8,58 @@
  *   - No deep nav — one tap to act
  */
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Truck, Calendar } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Truck, Calendar, Plus } from 'lucide-react'
 import { WarehouseRowActions } from './row-actions'
+import { PhotoEntryButton } from './photo-entry-button'
+import { ListFilter } from '@/components/app/list-filter'
 
 export const dynamic = 'force-dynamic'
 
-export default async function WarehousePage() {
+export default async function WarehousePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  const sp = await searchParams
+  const q = (sp.q ?? '').trim()
+
+  const { data: profile } = await supabase
+    .from('user_profile')
+    .select('tenant_id, role')
+    .eq('id', user.id)
+    .single()
+
+  let photoEntryEnabled = false
+  if (profile?.tenant_id) {
+    const svc = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    const { data: tenantRow } = await svc
+      .from('tenant')
+      .select('settings')
+      .eq('id', profile.tenant_id)
+      .single()
+    const tenantSettings = (tenantRow?.settings ?? null) as
+      | { ai?: { dispatch_diary_enabled?: boolean } }
+      | null
+    photoEntryEnabled = tenantSettings?.ai?.dispatch_diary_enabled === true
+  }
+
+  const canUsePhotoEntry =
+    photoEntryEnabled &&
+    !!profile &&
+    ['admin', 'manager', 'sales_engineer'].includes(profile.role)
 
   const today = new Date()
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
@@ -36,7 +76,6 @@ export default async function WarehousePage() {
     )
     .is('deleted_at', null)
     .or('current_stage_id.not.is.null')
-    // Only non-terminal stages (manually filter below since "is_terminal" isn't on dispatch row)
     .order('scheduled_at', { ascending: true })
 
   type Row = {
@@ -58,12 +97,12 @@ export default async function WarehousePage() {
     return st?.stage_key !== 'closed' && st?.stage_key !== 'cancelled' && st?.stage_key !== 'pod_uploaded'
   })
 
-  const todayList = active.filter((r) => {
+  const weekList = active.filter((r) => {
     if (!r.scheduled_at) return false
     return r.scheduled_at >= todayStart && r.scheduled_at < inSevenDays
   })
 
-  // Group by stage_key
+  // Normalise first so we can search
   type Norm = {
     id: string
     dispatch_number: string
@@ -71,6 +110,7 @@ export default async function WarehousePage() {
     vehicle_number: string | null
     driver_phone: string | null
     scheduled_at: string | null
+    project_id: string | null
     project_name: string
     project_city: string | null
     order_number: string
@@ -91,6 +131,7 @@ export default async function WarehousePage() {
       vehicle_number: r.vehicle_number,
       driver_phone: r.driver_phone,
       scheduled_at: r.scheduled_at,
+      project_id: p?.id ?? null,
       project_name: p?.name ?? '—',
       project_city: p?.city ?? null,
       order_number: o?.order_number ?? '—',
@@ -101,25 +142,55 @@ export default async function WarehousePage() {
     }
   }
 
+  let normalised = weekList.map(normalize)
+
+  // Apply search across project / dispatch / order / transporter
+  if (q) {
+    const needle = q.toLowerCase()
+    normalised = normalised.filter(
+      (d) =>
+        d.project_name.toLowerCase().includes(needle) ||
+        d.dispatch_number.toLowerCase().includes(needle) ||
+        d.order_number.toLowerCase().includes(needle) ||
+        (d.transporter_name?.toLowerCase().includes(needle) ?? false) ||
+        (d.vehicle_number?.toLowerCase().includes(needle) ?? false)
+    )
+  }
+
   const groups: Record<string, Norm[]> = { scheduled: [], in_transit: [], delivered: [] }
-  for (const r of todayList) {
-    const n = normalize(r)
-    if (groups[n.stage_key]) groups[n.stage_key].push(n)
+  for (const d of normalised) {
+    if (groups[d.stage_key] !== undefined) groups[d.stage_key].push(d)
   }
 
   return (
     <div className="p-6 flex flex-col gap-6 max-w-4xl">
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Truck className="size-5" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Truck className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold">Warehouse — today &amp; week ahead</h1>
+            <p className="text-sm text-muted-foreground tabular-nums">
+              {active.length} active · {normalised.length}{normalised.length < weekList.length ? ` of ${weekList.length}` : ''} in next 7 days
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-semibold">Warehouse — today &amp; week ahead</h1>
-          <p className="text-sm text-muted-foreground tabular-nums">
-            {active.length} active · {todayList.length} in next 7 days
-          </p>
+        <div className="flex items-center gap-2">
+          {canUsePhotoEntry && profile && (
+            <PhotoEntryButton tenantId={profile.tenant_id} />
+          )}
+          <Link href="/orders">
+            <Button size="sm">
+              <Plus className="size-4 mr-1.5" />
+              Schedule dispatch
+            </Button>
+          </Link>
         </div>
       </div>
+
+      {/* Search */}
+      <ListFilter searchPlaceholder="Search by project, dispatch #, order, or transporter…" />
 
       <Section
         title="To dispatch"
@@ -142,13 +213,15 @@ export default async function WarehousePage() {
         emptyText="Nothing waiting for POD."
       />
 
-      {todayList.length === 0 && (
+      {normalised.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
             <Calendar className="size-8 mx-auto mb-3 text-muted-foreground/50" />
-            <p className="text-sm font-medium">No active dispatches in the next 7 days.</p>
+            <p className="text-sm font-medium">
+              {q ? 'No dispatches match that search.' : 'No active dispatches in the next 7 days.'}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Open an order &amp; click <span className="font-medium">Schedule dispatch</span>.
+              {q ? 'Try a different term.' : <>Open an order &amp; click <span className="font-medium">Schedule dispatch</span>.</>}
             </p>
           </CardContent>
         </Card>
@@ -172,6 +245,7 @@ function Section({
     vehicle_number: string | null
     driver_phone: string | null
     scheduled_at: string | null
+    project_id: string | null
     project_name: string
     project_city: string | null
     order_number: string

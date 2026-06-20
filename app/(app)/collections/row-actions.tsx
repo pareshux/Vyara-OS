@@ -26,7 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Send, Wallet, Calendar, AlertTriangle, XCircle } from 'lucide-react'
+import { MoreHorizontal, Send, Wallet, Calendar, AlertTriangle, XCircle, Sparkles } from 'lucide-react'
 import {
   recordReceipt,
   recordPromiseToPay,
@@ -34,6 +34,7 @@ import {
   markCollectionDisputed,
   writeOffCollection,
 } from '@/lib/actions/collections'
+import { extractWhatsappPTP } from '@/lib/actions/whatsapp-ptp'
 
 interface Props {
   collectionId: string
@@ -42,6 +43,7 @@ interface Props {
   outstanding: number
   buyerName: string
   buyerPhone: string | null
+  aiWhatsappEnabled?: boolean
 }
 
 type DialogKind = 'receipt' | 'ptp' | 'dunning' | 'dispute' | 'writeoff' | null
@@ -53,6 +55,7 @@ export function CollectionRowActions({
   outstanding,
   buyerName,
   buyerPhone,
+  aiWhatsappEnabled,
 }: Props) {
   const router = useRouter()
   const [dialog, setDialog] = useState<DialogKind>(null)
@@ -108,6 +111,7 @@ export function CollectionRowActions({
         invoiceNumber={invoiceNumber}
         outstanding={outstanding}
         onSuccess={refresh}
+        aiWhatsappEnabled={aiWhatsappEnabled ?? false}
       />
       <DunningDialog
         open={dialog === 'dunning'}
@@ -237,7 +241,7 @@ function ReceiptDialog({
 // ── PTP dialog ────────────────────────────────────────────────────────────────
 
 function PTPDialog({
-  open, onOpenChange, collectionId, invoiceId, invoiceNumber, outstanding, onSuccess,
+  open, onOpenChange, collectionId, invoiceId, invoiceNumber, outstanding, onSuccess, aiWhatsappEnabled,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -246,6 +250,7 @@ function PTPDialog({
   invoiceNumber: string
   outstanding: number
   onSuccess: () => void
+  aiWhatsappEnabled: boolean
 }) {
   const [amount, setAmount] = useState(outstanding)
   const inSevenDays = (() => {
@@ -255,6 +260,51 @@ function PTPDialog({
   const [notes, setNotes] = useState('')
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
+
+  // WhatsApp-paste AI affordance state
+  const [showWhatsapp, setShowWhatsapp] = useState(false)
+  const [waText, setWaText] = useState('')
+  const [waExtracting, setWaExtracting] = useState(false)
+  const [waBanner, setWaBanner] = useState<{ intent: string; confidence: number; warnings: string[] } | null>(null)
+
+  async function extractFromWhatsApp() {
+    if (waText.trim().length < 5) { toast.error('Paste a message first'); return }
+    setWaExtracting(true)
+    setWaBanner(null)
+    const res = await extractWhatsappPTP(waText)
+    setWaExtracting(false)
+    if (!res.ok) { toast.error(res.error); return }
+    const d = res.data
+    if (d.intent !== 'promise_to_pay') {
+      // Other intents — show banner explaining we won't pre-fill
+      setWaBanner({
+        intent: d.intent,
+        confidence: d.intent_confidence,
+        warnings: [
+          ...(d.intent === 'dispute' && d.dispute_reason ? [`Dispute reason: ${d.dispute_reason}`] : []),
+          ...d.warnings,
+        ],
+      })
+      toast.warning(`Detected intent: ${d.intent} — not a promise to pay`)
+      return
+    }
+    // Apply PTP fields
+    if (d.amount != null && d.amount > 0) setAmount(d.amount)
+    if (d.promise_date) setDate(d.promise_date)
+    const noteParts: string[] = []
+    noteParts.push(`From WhatsApp: "${waText.replace(/\s+/g, ' ').trim().slice(0, 160)}${waText.length > 160 ? '…' : ''}"`)
+    if (d.mode_hint && d.mode_hint !== 'unknown') noteParts.push(`Mode: ${d.mode_hint}`)
+    if (d.contact_name_mentioned) noteParts.push(`Contact: ${d.contact_name_mentioned}`)
+    if (d.urgency && d.urgency !== 'normal') noteParts.push(`Urgency: ${d.urgency}`)
+    if (d.notes) noteParts.push(d.notes)
+    setNotes(noteParts.join('\n'))
+    setWaBanner({
+      intent: d.intent,
+      confidence: d.intent_confidence,
+      warnings: d.warnings,
+    })
+    toast.success(`Pre-filled from WhatsApp (${(res.latency_ms / 1000).toFixed(1)}s)`)
+  }
 
   function submit() {
     setErr(null)
@@ -277,6 +327,70 @@ function PTPDialog({
       <DialogContent>
         <DialogHeader><DialogTitle>Promise to pay — {invoiceNumber}</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3">
+          {aiWhatsappEnabled && (
+            <div className="rounded-md border border-border bg-muted/30 p-2 flex flex-col gap-2">
+              {!showWhatsapp ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="self-start h-7 text-xs"
+                  onClick={() => setShowWhatsapp(true)}
+                >
+                  <Sparkles className="size-3.5 mr-1.5 text-primary" />
+                  Paste WhatsApp reply to pre-fill
+                </Button>
+              ) : (
+                <>
+                  <Label className="text-xs flex items-center gap-1.5">
+                    <Sparkles className="size-3.5 text-primary" />
+                    Paste the buyer&apos;s WhatsApp message
+                  </Label>
+                  <Textarea
+                    rows={3}
+                    placeholder={`e.g. "Monday tak transfer kar denge. Account problem hai is week."`}
+                    value={waText}
+                    onChange={(e) => setWaText(e.target.value)}
+                    className="text-sm"
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <Button
+                      type="button" variant="ghost" size="sm" className="h-7 text-xs"
+                      onClick={() => { setShowWhatsapp(false); setWaText(''); setWaBanner(null) }}
+                    >
+                      Skip
+                    </Button>
+                    <Button
+                      type="button" size="sm" className="h-7 text-xs"
+                      onClick={extractFromWhatsApp}
+                      disabled={waExtracting || waText.trim().length < 5}
+                    >
+                      {waExtracting ? 'Reading…' : 'Extract'}
+                    </Button>
+                  </div>
+                  {waBanner && (
+                    <div
+                      className={`text-xs px-2 py-1.5 rounded ${
+                        waBanner.intent === 'promise_to_pay'
+                          ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-900 border border-amber-200'
+                      }`}
+                    >
+                      <div className="font-medium">
+                        Intent: {waBanner.intent.replace('_', ' ')} ({Math.round(waBanner.confidence * 100)}%)
+                      </div>
+                      {waBanner.warnings.length > 0 && (
+                        <ul className="mt-0.5 italic">
+                          {waBanner.warnings.map((w, i) => <li key={i}>· {w}</li>)}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="ptp-amt">Promised amount</Label>
@@ -289,7 +403,7 @@ function PTPDialog({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="ptp-notes">Notes / contact context</Label>
-            <Textarea id="ptp-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Textarea id="ptp-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
           {err && <p className="text-xs text-destructive">{err}</p>}
           <div className="flex gap-2 justify-end">

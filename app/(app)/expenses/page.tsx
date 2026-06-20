@@ -23,6 +23,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { LogExpenseSheet } from '@/components/expense/log-expense-sheet'
+import { ListFilter } from '@/components/app/list-filter'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,7 +67,11 @@ function formatDate(iso: string): string {
   })
 }
 
-export default async function ExpensesPage() {
+export default async function ExpensesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; category?: string }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -81,16 +86,34 @@ export default async function ExpensesPage() {
   const tenantId = profile.tenant_id as string
   const isAdminish = profile.role === 'admin' || profile.role === 'manager'
 
-  const result = await listMyExpenses({ status: 'all' })
-  const rows: ExpenseRow[] = result.ok ? result.expenses : []
-  const total = result.ok ? result.totalAmount : 0
+  const sp = await searchParams
+  const statusFilter = sp.status ?? null
+  const categoryFilter = sp.category ?? null
 
-  // Rollups by status.
+  const result = await listMyExpenses({ status: 'all' })
+  const allRows: ExpenseRow[] = result.ok ? result.expenses : []
+
+  // Rollups from the full set (always show real totals on cards)
   const byStatus = new Map<ExpenseStatus, { count: number; total: number }>()
-  for (const r of rows) {
+  for (const r of allRows) {
     const cur = byStatus.get(r.status) ?? { count: 0, total: 0 }
     byStatus.set(r.status, { count: cur.count + 1, total: cur.total + r.amount })
   }
+
+  // Filter options derived from full set
+  const categoryOptions = [...new Set(allRows.map((r) => r.category_label))]
+    .sort()
+    .map((label) => ({ value: label, label }))
+  const statusOptions = (Object.keys(STATUS_LABEL) as ExpenseStatus[])
+    .filter((s) => (byStatus.get(s)?.count ?? 0) > 0)
+    .map((s) => ({ value: s, label: STATUS_LABEL[s] }))
+
+  // Apply filters
+  let rows = allRows
+  if (statusFilter) rows = rows.filter((r) => r.status === statusFilter)
+  if (categoryFilter) rows = rows.filter((r) => r.category_label === categoryFilter)
+
+  const total = rows.reduce((s, r) => s + r.amount, 0)
 
   // Group by date for the list.
   const byDate = new Map<string, ExpenseRow[]>()
@@ -107,7 +130,7 @@ export default async function ExpensesPage() {
         <Wallet className="size-5 text-primary" />
         <h1 className="text-xl font-semibold">{isAdminish ? 'Team expenses' : 'My expenses'}</h1>
         <Badge variant="outline" className="ml-1 text-[10px] uppercase">
-          {rows.length} items
+          {rows.length}{rows.length < allRows.length ? ` of ${allRows.length}` : ''} items
         </Badge>
         <span className="text-xs text-muted-foreground tabular-nums ml-auto">
           {formatINR(total)} total
@@ -134,6 +157,21 @@ export default async function ExpensesPage() {
             )
           })}
         </div>
+      )}
+
+      {/* Filters */}
+      {allRows.length > 0 && (
+        <ListFilter
+          searchPlaceholder=""
+          selects={[
+            ...(statusOptions.length > 1
+              ? [{ key: 'status', label: 'Status', placeholder: 'All statuses', options: statusOptions }]
+              : []),
+            ...(categoryOptions.length > 1
+              ? [{ key: 'category', label: 'Category', placeholder: 'All categories', options: categoryOptions }]
+              : []),
+          ]}
+        />
       )}
 
       {/* Quick-add button */}

@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { FileText, Upload, Plus, Search, X } from 'lucide-react'
+import { FileText, Upload, Plus } from 'lucide-react'
+import { ListFilter } from '@/components/app/list-filter'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,10 +17,19 @@ const BUCKET_STYLES: Record<string, { bg: string; color: string; label: string }
   closed:  { bg: '#DCFCE7', color: '#15803D', label: 'Closed' },
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  draft: 'Draft',
+  sent: 'Sent',
+  partial_paid: 'Partial paid',
+  paid: 'Paid',
+  cancelled: 'Cancelled',
+  written_off: 'Written off',
+}
+
 export default async function InvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; bucket?: string; status?: string }>
+  searchParams: Promise<{ q?: string; bucket?: string; status?: string; buyer?: string; month?: string; source?: string }>
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -29,16 +39,18 @@ export default async function InvoicesPage({
   const q = (sp.q ?? '').trim()
   const bucketFilter = sp.bucket ?? null
   const statusFilter = sp.status ?? null
+  const buyerFilter = sp.buyer ?? null   // buyer_firm_id UUID
+  const monthFilter = sp.month ?? null   // YYYY-MM
+  const sourceFilter = sp.source ?? null
 
   const { data: invoicesRaw } = await supabase
     .from('invoice_ageing_v')
     .select('*')
     .order('due_date', { ascending: true })
 
-  // Pull invoice metadata in parallel
   const { data: meta } = await supabase
     .from('invoice')
-    .select('id, source, is_running_bill, running_bill_seq, project:project_id(id, name), buyer:buyer_firm_id(name)')
+    .select('id, source, is_running_bill, running_bill_seq, buyer_firm_id, project:project_id(id, name), buyer:buyer_firm_id(id, name)')
     .is('deleted_at', null)
 
   type Row = {
@@ -58,21 +70,60 @@ export default async function InvoicesPage({
     days_overdue: number
     ageing_bucket: string
   }
+  type MetaRow = {
+    id: string
+    source: string
+    is_running_bill: boolean
+    running_bill_seq: number | null
+    buyer_firm_id: string | null
+    project: { id: string; name: string } | { id: string; name: string }[] | null
+    buyer: { id: string; name: string } | { id: string; name: string }[] | null
+  }
+
   const allRows = (invoicesRaw ?? []) as unknown as Row[]
+  const metaList = (meta ?? []) as unknown as MetaRow[]
   const metaById = Object.fromEntries(
-    ((meta ?? []) as unknown as Array<{ id: string; source: string; is_running_bill: boolean; running_bill_seq: number | null; project: { id: string; name: string } | { id: string; name: string }[] | null; buyer: { name: string } | { name: string }[] | null }>).map((m) => [
+    metaList.map((m) => [
       m.id,
       {
         source: m.source,
         is_running_bill: m.is_running_bill,
         running_bill_seq: m.running_bill_seq,
+        buyer_firm_id: m.buyer_firm_id,
         project: (Array.isArray(m.project) ? m.project[0] : m.project) as { id: string; name: string } | null,
-        buyer: (Array.isArray(m.buyer) ? m.buyer[0] : m.buyer) as { name: string } | null,
+        buyer: (Array.isArray(m.buyer) ? m.buyer[0] : m.buyer) as { id: string; name: string } | null,
       },
     ])
   )
 
-  // Bucket totals (computed from the full unfiltered set so chips always show real distribution)
+  // ── Derive filter options from full data set ─────────────────────────────────
+  const buyerMap = new Map<string, string>()
+  for (const m of metaList) {
+    const buyer = (Array.isArray(m.buyer) ? m.buyer[0] : m.buyer) as { id: string; name: string } | null
+    if (m.buyer_firm_id && buyer?.name) buyerMap.set(m.buyer_firm_id, buyer.name)
+  }
+  const buyerOptions = [...buyerMap.entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, name]) => ({ value: id, label: name }))
+
+  const monthSet = new Set<string>()
+  for (const r of allRows) {
+    const d = new Date(r.invoice_date)
+    monthSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  const monthOptions = [...monthSet]
+    .sort((a, b) => b.localeCompare(a))
+    .map((ym) => {
+      const [yr, mo] = ym.split('-')
+      const d = new Date(parseInt(yr), parseInt(mo) - 1)
+      return { value: ym, label: d.toLocaleString('en-IN', { month: 'long', year: 'numeric' }) }
+    })
+
+  const sourceOptions = [...new Set(metaList.map((m) => m.source).filter(Boolean))]
+    .sort()
+    .map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))
+
+  // ── Bucket totals from the full set (always show real distribution) ──────────
   const buckets = ['current', '1-30', '31-60', '60+', 'closed']
   const bucketTotals = buckets.map((b) => ({
     key: b,
@@ -80,10 +131,24 @@ export default async function InvoicesPage({
     outstanding: allRows.filter((r) => r.ageing_bucket === b).reduce((s, r) => s + Number(r.outstanding), 0),
   }))
 
-  // Apply filters and search
+  // ── Apply filters ────────────────────────────────────────────────────────────
   let rows = allRows
   if (bucketFilter) rows = rows.filter((r) => r.ageing_bucket === bucketFilter)
   if (statusFilter) rows = rows.filter((r) => r.status === statusFilter)
+  if (buyerFilter) {
+    const matchIds = new Set(metaList.filter((m) => m.buyer_firm_id === buyerFilter).map((m) => m.id))
+    rows = rows.filter((r) => matchIds.has(r.id))
+  }
+  if (monthFilter) {
+    rows = rows.filter((r) => {
+      const d = new Date(r.invoice_date)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === monthFilter
+    })
+  }
+  if (sourceFilter) {
+    const matchIds = new Set(metaList.filter((m) => m.source === sourceFilter).map((m) => m.id))
+    rows = rows.filter((r) => matchIds.has(r.id))
+  }
   if (q) {
     const needle = q.toLowerCase()
     rows = rows.filter((r) => {
@@ -97,18 +162,21 @@ export default async function InvoicesPage({
     })
   }
 
-  const statuses = ['draft', 'sent', 'partial_paid', 'paid', 'cancelled', 'written_off']
+  const statuses = Object.keys(STATUS_LABELS)
   const statusCounts = Object.fromEntries(
     statuses.map((s) => [s, allRows.filter((r) => r.status === s).length])
   )
 
-  function buildQs(opts: { q?: string | null; bucket?: string | null; status?: string | null }) {
+  function bucketHref(key: string) {
     const params = new URLSearchParams()
-    if (opts.q) params.set('q', opts.q)
-    if (opts.bucket) params.set('bucket', opts.bucket)
-    if (opts.status) params.set('status', opts.status)
-    const s = params.toString()
-    return s ? `?${s}` : ''
+    if (q) params.set('q', q)
+    if (statusFilter) params.set('status', statusFilter)
+    if (buyerFilter) params.set('buyer', buyerFilter)
+    if (monthFilter) params.set('month', monthFilter)
+    if (sourceFilter) params.set('source', sourceFilter)
+    if (bucketFilter !== key) params.set('bucket', key)
+    const qs = params.toString()
+    return `/invoices${qs ? `?${qs}` : ''}`
   }
 
   return (
@@ -117,13 +185,7 @@ export default async function InvoicesPage({
         <div>
           <h1 className="text-lg font-semibold text-foreground">Invoices</h1>
           <p className="text-sm text-muted-foreground tabular-nums">
-            {rows.length} {rows.length === 1 ? 'invoice' : 'invoices'}
-            {(q || bucketFilter || statusFilter) && (
-              <>
-                {' '}
-                <Link href="/invoices" className="text-xs text-primary hover:underline">(clear filters)</Link>
-              </>
-            )}
+            {rows.length}{rows.length < allRows.length ? ` of ${allRows.length}` : ''} {rows.length === 1 ? 'invoice' : 'invoices'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -136,13 +198,13 @@ export default async function InvoicesPage({
         </div>
       </div>
 
-      {/* Ageing chip cards — clickable filters */}
+      {/* Ageing bucket cards — clickable filters */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {bucketTotals.map((b) => {
           const s = BUCKET_STYLES[b.key]
           const active = bucketFilter === b.key
           return (
-            <Link key={b.key} href={buildQs({ q, status: statusFilter, bucket: active ? null : b.key })}>
+            <Link key={b.key} href={bucketHref(b.key)}>
               <Card size="sm" className={`cursor-pointer transition-all ${active ? 'ring-2 ring-primary' : 'hover:bg-muted/30'}`}>
                 <CardContent className="pt-3 pb-3 flex flex-col gap-1">
                   <span className="text-xs font-medium" style={{ color: s.color }}>{s.label}</span>
@@ -159,61 +221,29 @@ export default async function InvoicesPage({
         })}
       </div>
 
-      {/* Search + status filter */}
-      <Card>
-        <CardContent className="pt-3 flex flex-col gap-3">
-          <form action="/invoices" method="get" className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="size-4 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                name="q"
-                defaultValue={q}
-                placeholder="Search by invoice number, external number, buyer, or project…"
-                className="flex h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 py-1 text-sm shadow-xs"
-              />
-            </div>
-            {bucketFilter && <input type="hidden" name="bucket" value={bucketFilter} />}
-            {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
-            <Button type="submit" size="sm" variant="outline">Search</Button>
-            {q && (
-              <Button type="button" size="sm" variant="ghost" asChild>
-                <Link href={buildQs({ bucket: bucketFilter, status: statusFilter })}>
-                  <X className="size-3.5" />
-                </Link>
-              </Button>
-            )}
-          </form>
-
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href={buildQs({ q, bucket: bucketFilter })}
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
-                !statusFilter ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'
-              }`}
-            >
-              All statuses
-            </Link>
-            {statuses.map((s) => {
-              const active = statusFilter === s
-              const count = statusCounts[s] ?? 0
-              if (count === 0 && !active) return null
-              return (
-                <Link
-                  key={s}
-                  href={buildQs({ q, bucket: bucketFilter, status: active ? null : s })}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors capitalize ${
-                    active ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'
-                  }`}
-                >
-                  {s.replace('_', ' ')}
-                  <span className="tabular-nums font-semibold">{count}</span>
-                </Link>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Filter bar */}
+      <ListFilter
+        searchPlaceholder="Search by invoice #, buyer, or project…"
+        selects={[
+          {
+            key: 'status',
+            label: 'Status',
+            placeholder: 'All statuses',
+            options: statuses
+              .filter((s) => (statusCounts[s] ?? 0) > 0)
+              .map((s) => ({ value: s, label: `${STATUS_LABELS[s]} (${statusCounts[s]})` })),
+          },
+          ...(buyerOptions.length > 1
+            ? [{ key: 'buyer', label: 'Buyer', placeholder: 'All buyers', options: buyerOptions }]
+            : []),
+          ...(monthOptions.length > 1
+            ? [{ key: 'month', label: 'Month', placeholder: 'All months', options: monthOptions }]
+            : []),
+          ...(sourceOptions.length > 1
+            ? [{ key: 'source', label: 'Source', placeholder: 'All sources', options: sourceOptions }]
+            : []),
+        ]}
+      />
 
       {rows.length === 0 ? (
         <Card>

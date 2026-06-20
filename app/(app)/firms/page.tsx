@@ -1,13 +1,8 @@
 /**
  * /firms — list of every organisation in the tenant (Blueprint REL-009 Slice 1.5).
  *
- * Single discovery surface for every firm regardless of relationship type
- * (architect, contractor, customer, distributor, …). Clicking a row lands
- * on Customer 360 (/customers/[firmId]).
- *
- * Dealers have a dedicated /dealers page because they carry extra fields
- * (tier, code, credit limit). They appear here too — filter by 'dealer' to
- * see them; click through to the same 360.
+ * Filtering is server-side (URL params). FirmsClient is a thin wrapper for the
+ * ListFilter component + table rendering only (no filter state).
  */
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -15,12 +10,20 @@ import { FirmsClient, type FirmRow, type RelationshipTypeOption } from './firms-
 
 export const dynamic = 'force-dynamic'
 
-export default async function FirmsPage() {
+export default async function FirmsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; type?: string }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: firmRows }, { data: typeRows }] = await Promise.all([
+  const sp = await searchParams
+  const q = (sp.q ?? '').trim()
+  const typeFilter = sp.type ?? null
+
+  const [{ data: allFirmRows }, { data: typeRows }] = await Promise.all([
     supabase
       .from('firm')
       .select(
@@ -48,7 +51,7 @@ export default async function FirmsPage() {
     relationship_type: { code: string; label: string } | { code: string; label: string }[] | null
   }
 
-  const firms: FirmRow[] = ((firmRows ?? []) as unknown as RawRow[]).map((f) => {
+  const allFirms: FirmRow[] = ((allFirmRows ?? []) as unknown as RawRow[]).map((f) => {
     const rt = Array.isArray(f.relationship_type) ? f.relationship_type[0] ?? null : f.relationship_type
     return {
       id: f.id,
@@ -62,14 +65,40 @@ export default async function FirmsPage() {
     }
   })
 
-  const types: RelationshipTypeOption[] = (typeRows ?? []).map((t) => ({
-    code: t.code as string,
-    label: t.label as string,
-  }))
+  // Filter in-memory (firms are bounded; avoids complex ilike OR on joined column)
+  let firms = allFirms
+  if (typeFilter) {
+    firms = firms.filter((f) => f.type_code === typeFilter)
+  }
+  if (q) {
+    const needle = q.toLowerCase()
+    firms = firms.filter(
+      (f) =>
+        f.name.toLowerCase().includes(needle) ||
+        (f.city?.toLowerCase().includes(needle) ?? false) ||
+        (f.phone?.toLowerCase().includes(needle) ?? false) ||
+        (f.gstin?.toLowerCase().includes(needle) ?? false)
+    )
+  }
+
+  // Count per type for the dropdown option labels
+  const countByType = new Map<string, number>()
+  for (const f of allFirms) countByType.set(f.type_code, (countByType.get(f.type_code) ?? 0) + 1)
+
+  const types: RelationshipTypeOption[] = (typeRows ?? [])
+    .filter((t) => countByType.has(t.code as string))
+    .map((t) => ({
+      code: t.code as string,
+      label: `${t.label} (${countByType.get(t.code as string) ?? 0})`,
+    }))
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-6xl">
-      <FirmsClient firms={firms} types={types} />
+      <FirmsClient
+        firms={firms}
+        types={types}
+        totalCount={allFirms.length}
+      />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { UserPlus, Users } from 'lucide-react'
 import { CreateContactSheet } from './create-contact-sheet'
+import { ListFilter } from '@/components/app/list-filter'
 
 interface Firm {
   id: string
@@ -18,15 +19,17 @@ interface Contact {
   phone: string | null
   email: string | null
   city: string | null
-  firm: { name: string } | null
+  firm: { id: string; name: string } | null
 }
 
 interface ContactsClientProps {
   contacts: Contact[]
   firms: Firm[]
+  firmOptions: { value: string; label: string }[]
+  totalCount: number
 }
 
-export function ContactsClient({ contacts, firms }: ContactsClientProps) {
+export function ContactsClient({ contacts, firms, firmOptions, totalCount }: ContactsClientProps) {
   const [sheetOpen, setSheetOpen] = useState(false)
 
   return (
@@ -34,8 +37,10 @@ export function ContactsClient({ contacts, firms }: ContactsClientProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">Contacts</h1>
-          <p className="text-sm text-muted-foreground">
-            {contacts.length} {contacts.length === 1 ? 'contact' : 'contacts'}
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {contacts.length < totalCount
+              ? `${contacts.length} of ${totalCount} contacts`
+              : `${totalCount} ${totalCount === 1 ? 'contact' : 'contacts'}`}
           </p>
         </div>
         <Button size="sm" onClick={() => setSheetOpen(true)}>
@@ -44,7 +49,16 @@ export function ContactsClient({ contacts, firms }: ContactsClientProps) {
         </Button>
       </div>
 
-      {contacts.length === 0 ? (
+      <ListFilter
+        searchPlaceholder="Search by name, phone, email, or role…"
+        selects={
+          firmOptions.length > 0
+            ? [{ key: 'firm', label: 'Firm', placeholder: 'All firms', options: firmOptions }]
+            : []
+        }
+      />
+
+      {totalCount === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-16 text-center">
           <Users className="size-8 mb-3 text-muted-foreground/50" />
           <p className="text-sm font-medium text-foreground">No contacts yet</p>
@@ -54,6 +68,12 @@ export function ContactsClient({ contacts, firms }: ContactsClientProps) {
           <Button size="sm" className="mt-4" onClick={() => setSheetOpen(true)}>
             Add contact
           </Button>
+        </div>
+      ) : contacts.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-16 text-center">
+          <Users className="size-7 mb-3 text-muted-foreground/50" />
+          <p className="text-sm font-medium text-foreground">No matches</p>
+          <p className="mt-1 text-sm text-muted-foreground">Try a different search or clear the filters.</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">

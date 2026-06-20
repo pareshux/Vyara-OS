@@ -1,10 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Wallet, AlertCircle } from 'lucide-react'
 import { CollectionRowActions } from './row-actions'
+import { ListFilter } from '@/components/app/list-filter'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,15 +17,52 @@ const BUCKET_STYLES: Record<string, { bg: string; color: string; label: string }
   '60+':   { bg: '#FEE2E2', color: '#B91C1C', label: '60+ days' },
 }
 
-export default async function CollectionsPage() {
+export default async function CollectionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; bucket?: string; stage?: string; buyer?: string }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Pull open collections (not closed/paid/written_off) joined to invoice + buyer + ageing
+  const sp = await searchParams
+  const q = (sp.q ?? '').trim()
+  const bucketFilter = sp.bucket ?? null
+  const stageFilter = sp.stage ?? null
+  const buyerFilter = sp.buyer ?? null  // buyer firm id
+
+  const { data: profile } = await supabase
+    .from('user_profile')
+    .select('tenant_id, role')
+    .eq('id', user.id)
+    .single()
+
+  let whatsappPtpEnabled = false
+  if (profile?.tenant_id) {
+    const svc = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    const { data: tenantRow } = await svc
+      .from('tenant')
+      .select('settings')
+      .eq('id', profile.tenant_id)
+      .single()
+    const tenantSettings = (tenantRow?.settings ?? null) as
+      | { ai?: { whatsapp_ptp_enabled?: boolean } }
+      | null
+    whatsappPtpEnabled = tenantSettings?.ai?.whatsapp_ptp_enabled === true
+  }
+  const canUseAI =
+    whatsappPtpEnabled &&
+    !!profile &&
+    ['admin', 'manager', 'sales_engineer'].includes(profile.role)
+
   const [
     { data: collections },
     { data: ageing },
+    { data: collectionStages },
   ] = await Promise.all([
     supabase
       .from('collection')
@@ -38,6 +77,7 @@ export default async function CollectionsPage() {
       .is('closed_at', null)
       .order('updated_at', { ascending: false }),
     supabase.from('invoice_ageing_v').select('id, ageing_bucket, days_overdue, outstanding'),
+    supabase.from('collection_stage').select('id, stage_key, label, color').order('order_index'),
   ])
 
   type Row = {
@@ -56,30 +96,89 @@ export default async function CollectionsPage() {
       buyer: { id: string; name: string; phone: string | null } | { id: string; name: string; phone: string | null }[] | null
     } | { id: string; invoice_number: string; due_date: string; billed_amount: number; paid_amount: number; status: string; project: { id: string; name: string } | null; buyer: { id: string; name: string; phone: string | null } | null }[] | null
   }
-  const rows = (collections ?? []) as unknown as Row[]
+  const allRows = (collections ?? []) as unknown as Row[]
   const ageingByInvoice: Record<string, { bucket: string; days_overdue: number; outstanding: number }> =
     Object.fromEntries((ageing ?? []).map((a) => [a.id as string, { bucket: a.ageing_bucket as string, days_overdue: Number(a.days_overdue), outstanding: Number(a.outstanding) }]))
 
-  // Compute bucket totals (skip closed)
+  // Bucket totals from the full set
   const buckets = ['current', '1-30', '31-60', '60+'] as const
   const bucketTotals = buckets.map((b) => {
-    const inBucket = rows.filter((r) => {
+    const inBucket = allRows.filter((r) => {
       const inv = Array.isArray(r.invoice) ? r.invoice[0] : r.invoice
       if (!inv) return false
-      const a = ageingByInvoice[inv.id]
-      return a?.bucket === b
+      return ageingByInvoice[inv.id]?.bucket === b
     })
     const total = inBucket.reduce((s, r) => {
       const inv = Array.isArray(r.invoice) ? r.invoice[0] : r.invoice
       if (!inv) return s
-      const a = ageingByInvoice[inv.id]
-      return s + (a?.outstanding ?? 0)
+      return s + (ageingByInvoice[inv.id]?.outstanding ?? 0)
     }, 0)
     return { key: b, count: inBucket.length, total }
   })
 
+  // Derive buyer options from the full set
+  const buyerMap = new Map<string, string>()
+  for (const r of allRows) {
+    const inv = Array.isArray(r.invoice) ? r.invoice[0] : r.invoice
+    if (!inv) continue
+    const buyer = (Array.isArray(inv.buyer) ? inv.buyer[0] : inv.buyer) as { id: string; name: string } | null
+    if (buyer?.id && buyer.name) buyerMap.set(buyer.id, buyer.name)
+  }
+  const buyerOptions = [...buyerMap.entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, name]) => ({ value: id, label: name }))
+
+  // Apply filters in-memory
+  let rows = allRows
+  if (bucketFilter) {
+    rows = rows.filter((r) => {
+      const inv = Array.isArray(r.invoice) ? r.invoice[0] : r.invoice
+      if (!inv) return false
+      return ageingByInvoice[inv.id]?.bucket === bucketFilter
+    })
+  }
+  if (stageFilter) {
+    rows = rows.filter((r) => r.current_stage_id === stageFilter)
+  }
+  if (buyerFilter) {
+    rows = rows.filter((r) => {
+      const inv = Array.isArray(r.invoice) ? r.invoice[0] : r.invoice
+      if (!inv) return false
+      const buyer = (Array.isArray(inv.buyer) ? inv.buyer[0] : inv.buyer) as { id: string } | null
+      return buyer?.id === buyerFilter
+    })
+  }
+  if (q) {
+    const needle = q.toLowerCase()
+    rows = rows.filter((r) => {
+      const inv = Array.isArray(r.invoice) ? r.invoice[0] : r.invoice
+      if (!inv) return false
+      const buyer = (Array.isArray(inv.buyer) ? inv.buyer[0] : inv.buyer) as { name: string } | null
+      return (
+        inv.invoice_number.toLowerCase().includes(needle) ||
+        (buyer?.name ?? '').toLowerCase().includes(needle)
+      )
+    })
+  }
+
   const grandOutstanding = bucketTotals.reduce((s, b) => s + b.total, 0)
   const overdueCount = (bucketTotals[1].count ?? 0) + (bucketTotals[2].count ?? 0) + (bucketTotals[3].count ?? 0)
+
+  function bucketHref(key: string) {
+    const params = new URLSearchParams()
+    if (q) params.set('q', q)
+    if (stageFilter) params.set('stage', stageFilter)
+    if (buyerFilter) params.set('buyer', buyerFilter)
+    if (bucketFilter !== key) params.set('bucket', key)
+    const qs = params.toString()
+    return `/collections${qs ? `?${qs}` : ''}`
+  }
+
+  const stageOptions = (collectionStages ?? []).map((s) => ({
+    value: s.id as string,
+    label: s.label as string,
+    color: s.color as string,
+  }))
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-6xl">
@@ -90,38 +189,58 @@ export default async function CollectionsPage() {
         <div>
           <h1 className="text-lg font-semibold text-foreground">Collections</h1>
           <p className="text-sm text-muted-foreground tabular-nums">
-            ₹{grandOutstanding.toLocaleString('en-IN')} outstanding · {rows.length} open · {overdueCount} overdue
+            ₹{grandOutstanding.toLocaleString('en-IN')} outstanding · {allRows.length} open · {overdueCount} overdue
           </p>
         </div>
       </div>
 
-      {/* Bucket KPI cards */}
+      {/* Bucket KPI cards — now clickable filters */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {bucketTotals.map((b) => {
           const s = BUCKET_STYLES[b.key]
+          const active = bucketFilter === b.key
           return (
-            <Card key={b.key} size="sm">
-              <CardContent className="pt-3 pb-3 flex flex-col gap-1">
-                <span className="text-xs font-medium" style={{ color: s.color }}>{s.label}</span>
-                <span className="tabular-nums text-lg font-semibold text-foreground">
-                  ₹{b.total.toLocaleString('en-IN')}
-                </span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {b.count} {b.count === 1 ? 'invoice' : 'invoices'}
-                </span>
-              </CardContent>
-            </Card>
+            <Link key={b.key} href={bucketHref(b.key)}>
+              <Card size="sm" className={`cursor-pointer transition-all ${active ? 'ring-2 ring-primary' : 'hover:bg-muted/30'}`}>
+                <CardContent className="pt-3 pb-3 flex flex-col gap-1">
+                  <span className="text-xs font-medium" style={{ color: s.color }}>{s.label}</span>
+                  <span className="tabular-nums text-lg font-semibold text-foreground">
+                    ₹{b.total.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {b.count} {b.count === 1 ? 'invoice' : 'invoices'}
+                  </span>
+                </CardContent>
+              </Card>
+            </Link>
           )
         })}
       </div>
+
+      {/* Filter bar */}
+      <ListFilter
+        searchPlaceholder="Search by buyer or invoice number…"
+        selects={[
+          ...(stageOptions.length > 0
+            ? [{ key: 'stage', label: 'Stage', placeholder: 'All stages', options: stageOptions }]
+            : []),
+          ...(buyerOptions.length > 1
+            ? [{ key: 'buyer', label: 'Buyer', placeholder: 'All buyers', options: buyerOptions }]
+            : []),
+        ]}
+      />
 
       {rows.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Wallet className="size-8 mb-3 text-muted-foreground/50" />
-            <p className="text-sm font-medium text-foreground">All collected — nothing open.</p>
+            <p className="text-sm font-medium text-foreground">
+              {q || bucketFilter || stageFilter ? 'No collections match the filters' : 'All collected — nothing open.'}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              When invoices are created, they show up here for follow-up.
+              {q || bucketFilter || stageFilter
+                ? 'Try clearing some filters.'
+                : 'When invoices are created, they show up here for follow-up.'}
             </p>
           </CardContent>
         </Card>
@@ -195,6 +314,7 @@ export default async function CollectionsPage() {
                         outstanding={outstanding}
                         buyerName={buyer?.name ?? ''}
                         buyerPhone={buyer?.phone ?? null}
+                        aiWhatsappEnabled={canUseAI}
                       />
                     </td>
                   </tr>

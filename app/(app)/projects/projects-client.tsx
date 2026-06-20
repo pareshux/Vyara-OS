@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { FolderKanban, PlusCircle } from 'lucide-react'
 import { CreateProjectSheet } from './create-project-sheet'
 import { ScannableStatusDot } from '@/components/projects/scannable-progress-header'
+import { ListFilter } from '@/components/app/list-filter'
 import type { Health } from '@/lib/read-models/project-progress'
 
 interface PipelineStage {
@@ -22,7 +23,7 @@ interface Project {
   city: string | null
   estimated_value: number | null
   current_stage: PipelineStage | null
-  owner: { full_name: string } | null
+  owner: { id: string; full_name: string } | null
   health: Health
   health_reason: string
 }
@@ -43,6 +44,11 @@ interface ProjectsClientProps {
   users: UserProfile[]
   currentUserId: string
   stageCounts: { label: string; color: string; count: number }[]
+  stageOptions: { id: string; label: string; color: string }[]
+  ownerOptions: { id: string; label: string }[]
+  segmentOptions: { value: string; label: string }[]
+  totalCount: number
+  filteredCount: number
 }
 
 export function ProjectsClient({
@@ -51,6 +57,11 @@ export function ProjectsClient({
   users,
   currentUserId,
   stageCounts,
+  stageOptions,
+  ownerOptions,
+  segmentOptions,
+  totalCount,
+  filteredCount,
 }: ProjectsClientProps) {
   const [sheetOpen, setSheetOpen] = useState(false)
 
@@ -59,8 +70,10 @@ export function ProjectsClient({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">Projects</h1>
-          <p className="text-sm text-muted-foreground">
-            {projects.length} {projects.length === 1 ? 'project' : 'projects'}
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {filteredCount < totalCount
+              ? `${filteredCount} of ${totalCount} projects`
+              : `${totalCount} ${totalCount === 1 ? 'project' : 'projects'}`}
           </p>
         </div>
         <Button size="sm" onClick={() => setSheetOpen(true)}>
@@ -69,6 +82,7 @@ export function ProjectsClient({
         </Button>
       </div>
 
+      {/* Stage distribution (full-set counts, display-only) */}
       {stageCounts.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {stageCounts.map((s) => (
@@ -77,10 +91,7 @@ export function ProjectsClient({
               className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
               style={{ backgroundColor: `${s.color}20`, color: s.color }}
             >
-              <span
-                className="size-1.5 rounded-full inline-block"
-                style={{ backgroundColor: s.color }}
-              />
+              <span className="size-1.5 rounded-full inline-block" style={{ backgroundColor: s.color }} />
               {s.label}
               <span className="tabular-nums font-semibold">{s.count}</span>
             </span>
@@ -88,16 +99,47 @@ export function ProjectsClient({
         </div>
       )}
 
+      {/* Filter bar */}
+      <ListFilter
+        searchPlaceholder="Search by name or city…"
+        selects={[
+          {
+            key: 'stage',
+            label: 'Stage',
+            placeholder: 'All stages',
+            options: stageOptions.map((s) => ({ value: s.id, label: s.label, color: s.color })),
+          },
+          {
+            key: 'owner',
+            label: 'Owner',
+            placeholder: 'All owners',
+            options: ownerOptions.map((o) => ({ value: o.id, label: o.label })),
+          },
+          {
+            key: 'segment',
+            label: 'Segment',
+            placeholder: 'All segments',
+            options: segmentOptions,
+          },
+        ]}
+      />
+
       {projects.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-16 text-center">
           <FolderKanban className="size-8 mb-3 text-muted-foreground/50" />
-          <p className="text-sm font-medium text-foreground">No projects yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create your first project to start tracking specifications.
+          <p className="text-sm font-medium text-foreground">
+            {filteredCount < totalCount ? 'No projects match the filters' : 'No projects yet'}
           </p>
-          <Button size="sm" className="mt-4" onClick={() => setSheetOpen(true)}>
-            Create project
-          </Button>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {filteredCount < totalCount
+              ? 'Try clearing some filters.'
+              : 'Create your first project to start tracking specifications.'}
+          </p>
+          {filteredCount >= totalCount && (
+            <Button size="sm" className="mt-4" onClick={() => setSheetOpen(true)}>
+              Create project
+            </Button>
+          )}
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">

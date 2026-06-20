@@ -5,22 +5,32 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Truck, Tablet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ListFilter } from '@/components/app/list-filter'
 
 export const dynamic = 'force-dynamic'
 
-export default async function DispatchesPage() {
+export default async function DispatchesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; stage?: string; transporter?: string }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  const sp = await searchParams
+  const q = (sp.q ?? '').trim()
+  const stageFilter = sp.stage ?? null
+  const transporterFilter = sp.transporter ?? null  // transporter_id UUID
 
   const [{ data: dispatches }, { data: stages }] = await Promise.all([
     supabase
       .from('dispatch')
       .select(
         `id, dispatch_number, scheduled_at, dispatched_at, delivered_at,
-         lr_number, vehicle_number,
+         lr_number, vehicle_number, transporter_id,
          project:project_id(id, name),
-         transporter:transporter_id(name),
+         transporter:transporter_id(id, name),
          order:sales_order_id(id, order_number),
          stage:current_stage_id(id, label, color, order_index)`
       )
@@ -37,18 +47,64 @@ export default async function DispatchesPage() {
     delivered_at: string | null
     lr_number: string | null
     vehicle_number: string | null
+    transporter_id: string | null
     project: { id: string; name: string } | { id: string; name: string }[] | null
-    transporter: { name: string } | { name: string }[] | null
+    transporter: { id: string; name: string } | { id: string; name: string }[] | null
     order: { id: string; order_number: string } | { id: string; order_number: string }[] | null
     stage: { id: string; label: string; color: string; order_index: number } | { id: string; label: string; color: string; order_index: number }[] | null
   }
-  const rows = (dispatches ?? []) as unknown as Row[]
+
+  const allRows = (dispatches ?? []) as unknown as Row[]
+
+  // Derive transporter options from full set
+  const transporterMap = new Map<string, string>()
+  for (const r of allRows) {
+    const t = Array.isArray(r.transporter) ? r.transporter[0] : r.transporter
+    if (r.transporter_id && t?.name) transporterMap.set(r.transporter_id, t.name)
+  }
+  const transporterOptions = [...transporterMap.entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, name]) => ({ value: id, label: name }))
+
+  let rows = allRows
+
+  // Apply filters in-memory
+  if (stageFilter) {
+    rows = rows.filter((r) => {
+      const stage = Array.isArray(r.stage) ? r.stage[0] : r.stage
+      return stage?.id === stageFilter
+    })
+  }
+  if (transporterFilter) {
+    rows = rows.filter((r) => r.transporter_id === transporterFilter)
+  }
+  if (q) {
+    const needle = q.toLowerCase()
+    rows = rows.filter((r) => {
+      const project = Array.isArray(r.project) ? r.project[0] : r.project
+      const order = Array.isArray(r.order) ? r.order[0] : r.order
+      const transporter = Array.isArray(r.transporter) ? r.transporter[0] : r.transporter
+      return (
+        r.dispatch_number.toLowerCase().includes(needle) ||
+        (project?.name ?? '').toLowerCase().includes(needle) ||
+        (order?.order_number ?? '').toLowerCase().includes(needle) ||
+        (transporter?.name ?? '').toLowerCase().includes(needle) ||
+        (r.vehicle_number ?? '').toLowerCase().includes(needle)
+      )
+    })
+  }
   const stageCounts = (stages ?? []).map((s) => ({
     ...s,
-    count: rows.filter((r) => {
+    count: allRows.filter((r) => {
       const st = Array.isArray(r.stage) ? r.stage[0] : r.stage
       return st?.id === s.id
     }).length,
+  }))
+
+  const stageOptions = (stages ?? []).map((s) => ({
+    value: s.id as string,
+    label: `${s.label} (${stageCounts.find((c) => c.id === s.id)?.count ?? 0})`,
+    color: s.color as string,
   }))
 
   return (
@@ -58,6 +114,7 @@ export default async function DispatchesPage() {
           <h1 className="text-lg font-semibold text-foreground">Dispatches</h1>
           <p className="text-sm text-muted-foreground tabular-nums">
             {rows.length} {rows.length === 1 ? 'dispatch' : 'dispatches'}
+            {rows.length < allRows.length && ` of ${allRows.length}`}
           </p>
         </div>
         <Button size="sm" variant="outline" asChild>
@@ -68,6 +125,7 @@ export default async function DispatchesPage() {
         </Button>
       </div>
 
+      {/* Stage distribution (full-set, display-only) */}
       {stageCounts.some((s) => s.count > 0) && (
         <div className="flex flex-wrap gap-2">
           {stageCounts.map((s) => (
@@ -84,13 +142,33 @@ export default async function DispatchesPage() {
         </div>
       )}
 
+      {/* Filter bar */}
+      <ListFilter
+        searchPlaceholder="Search by dispatch #, order, project, or transporter…"
+        selects={[
+          {
+            key: 'stage',
+            label: 'Stage',
+            placeholder: 'All stages',
+            options: stageOptions,
+          },
+          ...(transporterOptions.length > 1
+            ? [{ key: 'transporter', label: 'Transporter', placeholder: 'All transporters', options: transporterOptions }]
+            : []),
+        ]}
+      />
+
       {rows.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Truck className="size-8 mb-3 text-muted-foreground/50" />
-            <p className="text-sm font-medium text-foreground">No dispatches yet</p>
+            <p className="text-sm font-medium text-foreground">
+              {q || stageFilter || transporterFilter ? 'No dispatches match the filters' : 'No dispatches yet'}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Open a sales order and click <span className="font-medium">Schedule dispatch</span>.
+              {q || stageFilter || transporterFilter
+                ? 'Try clearing the filters.'
+                : 'Open a sales order and click Schedule dispatch.'}
             </p>
           </CardContent>
         </Card>

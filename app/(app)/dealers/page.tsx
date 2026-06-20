@@ -5,13 +5,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Users, AlertTriangle, BarChart3, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { NewDealerSheet } from './new-dealer-sheet'
+import { ListFilter } from '@/components/app/list-filter'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DealersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: 'active' | 'inactive' | 'dormant'; view?: 'overview' | 'performance' }>
+  searchParams: Promise<{ filter?: 'active' | 'inactive' | 'dormant'; view?: 'overview' | 'performance'; q?: string; tier?: string; territory?: string }>
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -20,6 +21,9 @@ export default async function DealersPage({
   const sp = await searchParams
   const filter = sp.filter ?? null
   const view = sp.view === 'performance' ? 'performance' : 'overview'
+  const q = (sp.q ?? '').trim()
+  const tierFilter = sp.tier ?? null
+  const territoryFilter = sp.territory ?? null
 
   const [
     { data: dealersRaw },
@@ -164,12 +168,32 @@ export default async function DealersPage({
     return { ...d, firmObj, tierObj, territoryObj, outstanding, lastOrderDate, daysSinceOrder, isDormant, thisMonth, lastMonth }
   })
 
-  const filtered = rows.filter((r) => {
+  // Tier + territory options from active dealers only
+  const tierOptions = ((tiersRaw ?? []) as { id: string; label: string }[])
+    .filter((t) => rows.some((r) => r.tier_id === t.id))
+    .map((t) => ({ value: t.id, label: t.label }))
+  const territoryOptions = ((territoriesRaw ?? []) as { id: string; label: string }[])
+    .filter((t) => rows.some((r) => r.territory_id === t.id))
+    .map((t) => ({ value: t.id, label: t.label }))
+
+  let filtered = rows.filter((r) => {
     if (filter === 'active') return r.is_active && !r.isDormant
     if (filter === 'inactive') return !r.is_active
     if (filter === 'dormant') return r.isDormant
     return true
   })
+
+  if (tierFilter) filtered = filtered.filter((r) => r.tier_id === tierFilter)
+  if (territoryFilter) filtered = filtered.filter((r) => r.territory_id === territoryFilter)
+  if (q) {
+    const needle = q.toLowerCase()
+    filtered = filtered.filter(
+      (r) =>
+        r.firmObj?.name.toLowerCase().includes(needle) ||
+        r.dealer_code.toLowerCase().includes(needle) ||
+        (r.firmObj?.city?.toLowerCase().includes(needle) ?? false)
+    )
+  }
 
   const counts = {
     all: rows.length,
@@ -189,7 +213,7 @@ export default async function DealersPage({
           <div>
             <h1 className="text-lg font-semibold text-foreground">Dealers</h1>
             <p className="text-sm text-muted-foreground tabular-nums">
-              {rows.length} dealers · ₹{totalOutstanding.toLocaleString('en-IN')} outstanding
+              {filtered.length}{filtered.length < rows.length ? ` of ${rows.length}` : ''} dealers · ₹{totalOutstanding.toLocaleString('en-IN')} outstanding
             </p>
           </div>
         </div>
@@ -200,16 +224,21 @@ export default async function DealersPage({
         />
       </div>
 
-      {/* View toggle */}
+      {/* View toggle + status chips */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
           {(['overview', 'performance'] as const).map((v) => {
             const active = view === v
-            const href = `/dealers?view=${v}${filter ? `&filter=${filter}` : ''}`
+            const p = new URLSearchParams()
+            p.set('view', v)
+            if (filter) p.set('filter', filter)
+            if (q) p.set('q', q)
+            if (tierFilter) p.set('tier', tierFilter)
+            if (territoryFilter) p.set('territory', territoryFilter)
             return (
               <Link
                 key={v}
-                href={href}
+                href={`/dealers?${p.toString()}`}
                 className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${
                   active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
@@ -220,7 +249,7 @@ export default async function DealersPage({
             )
           })}
         </div>
-        <span className="text-xs text-muted-foreground ml-2">Filter:</span>
+        <span className="text-xs text-muted-foreground ml-2">Status:</span>
         {([
           { key: null,        label: 'All',      count: counts.all },
           { key: 'active',    label: 'Active',   count: counts.active },
@@ -228,13 +257,16 @@ export default async function DealersPage({
           { key: 'inactive',  label: 'Inactive', count: counts.inactive },
         ]).map((c) => {
           const active = filter === c.key
-          const href = c.key
-            ? `/dealers?filter=${c.key}${view !== 'overview' ? `&view=${view}` : ''}`
-            : (view !== 'overview' ? `/dealers?view=${view}` : '/dealers')
+          const p = new URLSearchParams()
+          if (c.key) p.set('filter', c.key)
+          if (view !== 'overview') p.set('view', view)
+          if (q) p.set('q', q)
+          if (tierFilter) p.set('tier', tierFilter)
+          if (territoryFilter) p.set('territory', territoryFilter)
           return (
             <Link
               key={c.label}
-              href={href}
+              href={`/dealers${p.toString() ? `?${p.toString()}` : ''}`}
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
                 active ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'
               }`}
@@ -246,16 +278,30 @@ export default async function DealersPage({
         })}
       </div>
 
+      {/* Search + tier + territory filter bar */}
+      <ListFilter
+        searchPlaceholder="Search by dealer name, code, or city…"
+        keepParams={['filter', 'view']}
+        selects={[
+          ...(tierOptions.length > 1
+            ? [{ key: 'tier', label: 'Tier', placeholder: 'All tiers', options: tierOptions }]
+            : []),
+          ...(territoryOptions.length > 1
+            ? [{ key: 'territory', label: 'Territory', placeholder: 'All territories', options: territoryOptions }]
+            : []),
+        ]}
+      />
+
       {filtered.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Users className="size-8 mb-3 text-muted-foreground/50" />
             <p className="text-sm font-medium text-foreground">
-              {filter ? `No ${filter} dealers` : 'No dealers yet'}
+              {filter || q || tierFilter || territoryFilter ? 'No dealers match the filters' : 'No dealers yet'}
             </p>
             <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-              {filter
-                ? 'Try clearing the filter.'
+              {filter || q || tierFilter || territoryFilter
+                ? 'Try clearing the filters.'
                 : 'Convert an existing firm to a dealer to start tracking the channel.'}
             </p>
           </CardContent>
