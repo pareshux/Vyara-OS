@@ -23,6 +23,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getCustomer360 } from '@/lib/read-models/customer-360'
+import { FirmBrief } from '@/components/app/firm-brief'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -39,7 +40,6 @@ import {
   ChevronRight,
   Clock,
   Users,
-  Sparkles,
   TrendingUp,
   IndianRupee,
   Package,
@@ -365,22 +365,8 @@ export default async function Customer360Page(
             </Card>
           </div>
 
-          {/* AI insights placeholder */}
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-start gap-3">
-                <div className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary shrink-0">
-                  <Sparkles className="size-4" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">AI insights</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Relationship brief and next-best-action arrive here once we wire REL-011. The data is ready: projects, contacts, visits, payment history will be summarised into a 3-line read.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* AI relationship health brief (REL-011) */}
+          <FirmBrief firmId={firm.id} />
 
           {/* Notes */}
           {firm.notes && (

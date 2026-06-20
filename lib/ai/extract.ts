@@ -34,6 +34,7 @@ export type ExtractionEntityKind =
   | 'voice_visit_note'
   | 'visit_prep_brief'
   | 'team_day_summary'
+  | 'firm_brief'
 
 function getServiceClient(): SupabaseClient {
   return createServiceClient(

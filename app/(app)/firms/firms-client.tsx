@@ -1,9 +1,16 @@
 'use client'
 
 import Link from 'next/link'
-import { Building2, Phone, MapPin, Hash, ChevronRight } from 'lucide-react'
+import { Building2, Phone, MapPin, Hash, ChevronRight, AlertCircle, Clock, FileText, Folders } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ListFilter } from '@/components/app/list-filter'
+
+export type FirmSignals = {
+  overdue?: { count: number; outstanding: number; days: number }
+  stale_quote?: { count: number; days: number }
+  stuck_project?: { count: number; days: number }
+  stale_lead?: { count: number; days: number }
+}
 
 export type FirmRow = {
   id: string
@@ -14,6 +21,7 @@ export type FirmRow = {
   state: string
   phone: string | null
   gstin: string | null
+  signals: FirmSignals
 }
 
 export type RelationshipTypeOption = {
@@ -24,10 +32,84 @@ export type RelationshipTypeOption = {
 interface Props {
   firms: FirmRow[]
   types: RelationshipTypeOption[]
+  cityOptions: { value: string; label: string }[]
+  stateOptions: { value: string; label: string }[]
+  hasAnySignals: boolean
   totalCount: number
 }
 
-export function FirmsClient({ firms, types, totalCount }: Props) {
+function formatINR(v: number): string {
+  if (v >= 100000) return `₹${(v / 100000).toFixed(1).replace(/\.0$/, '')}L`
+  return `₹${v.toLocaleString('en-IN')}`
+}
+
+function SignalChips({ signals }: { signals: FirmSignals }) {
+  const chips: React.ReactNode[] = []
+
+  if (signals.overdue) {
+    chips.push(
+      <span
+        key="overdue"
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-50 text-red-700 border border-red-200"
+        title={`${signals.overdue.count} overdue invoice${signals.overdue.count > 1 ? 's' : ''}, oldest ${signals.overdue.days}d`}
+      >
+        <AlertCircle className="size-2.5" />
+        {formatINR(signals.overdue.outstanding)} overdue · {signals.overdue.days}d
+      </span>
+    )
+  }
+
+  if (signals.stale_quote) {
+    chips.push(
+      <span
+        key="quote"
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200"
+        title={`${signals.stale_quote.count} quote${signals.stale_quote.count > 1 ? 's' : ''} sent, no response for ${signals.stale_quote.days}d`}
+      >
+        <FileText className="size-2.5" />
+        Quote awaiting · {signals.stale_quote.days}d
+      </span>
+    )
+  }
+
+  if (signals.stuck_project) {
+    chips.push(
+      <span
+        key="project"
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200"
+        title={`${signals.stuck_project.count} project${signals.stuck_project.count > 1 ? 's' : ''} not updated in ${signals.stuck_project.days}d`}
+      >
+        <Folders className="size-2.5" />
+        Project stale · {signals.stuck_project.days}d
+      </span>
+    )
+  }
+
+  if (signals.stale_lead) {
+    chips.push(
+      <span
+        key="lead"
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
+        title={`${signals.stale_lead.count} lead${signals.stale_lead.count > 1 ? 's' : ''} not updated in ${signals.stale_lead.days}d`}
+      >
+        <Clock className="size-2.5" />
+        Lead stale · {signals.stale_lead.days}d
+      </span>
+    )
+  }
+
+  if (chips.length === 0) return null
+  return <div className="flex flex-wrap gap-1 mt-1">{chips}</div>
+}
+
+export function FirmsClient({
+  firms,
+  types,
+  cityOptions,
+  stateOptions,
+  hasAnySignals,
+  totalCount,
+}: Props) {
   return (
     <>
       <div className="flex flex-col gap-1">
@@ -48,6 +130,20 @@ export function FirmsClient({ firms, types, totalCount }: Props) {
             placeholder: 'All types',
             options: types.map((t) => ({ value: t.code, label: t.label })),
           },
+          ...(cityOptions.length > 1
+            ? [{ key: 'city', label: 'City', placeholder: 'All cities', options: cityOptions }]
+            : []),
+          ...(stateOptions.length > 1
+            ? [{ key: 'state', label: 'State', placeholder: 'All states', options: stateOptions }]
+            : []),
+          ...(hasAnySignals
+            ? [{
+                key: 'attention',
+                label: 'Health',
+                placeholder: 'All firms',
+                options: [{ value: 'yes', label: 'Needs attention' }],
+              }]
+            : []),
         ]}
       />
 
@@ -64,7 +160,7 @@ export function FirmsClient({ firms, types, totalCount }: Props) {
           <Building2 className="size-7 mb-3 text-muted-foreground/50" />
           <p className="text-sm font-medium text-foreground">No matches</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Try a different type or clear the search.
+            Try different filters or clear the search.
           </p>
         </div>
       ) : (
@@ -81,60 +177,64 @@ export function FirmsClient({ firms, types, totalCount }: Props) {
               </tr>
             </thead>
             <tbody>
-              {firms.map((f) => (
-                <tr
-                  key={f.id}
-                  className="group border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/customers/${f.id}`}
-                      className="font-medium text-foreground hover:text-primary inline-flex items-center gap-1.5"
-                    >
-                      <Building2 className="size-3.5 text-muted-foreground shrink-0" />
-                      {f.name}
-                    </Link>
-                  </td>
-                  <td className="hidden px-4 py-3 sm:table-cell">
-                    <Badge variant="outline" className="text-xs">
-                      {f.type_label}
-                    </Badge>
-                  </td>
-                  <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
-                    {f.city ? (
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin className="size-3" />
-                        {f.city}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground/50">—</span>
-                    )}
-                  </td>
-                  <td className="hidden px-4 py-3 text-muted-foreground tabular-nums md:table-cell">
-                    {f.phone ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Phone className="size-3" />
-                        {f.phone}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground/50">—</span>
-                    )}
-                  </td>
-                  <td className="hidden px-4 py-3 text-muted-foreground font-mono text-xs tabular-nums lg:table-cell">
-                    {f.gstin ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Hash className="size-3" />
-                        {f.gstin}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground/50">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground inline-block" />
-                  </td>
-                </tr>
-              ))}
+              {firms.map((f) => {
+                const hasSignal = f.signals.overdue || f.signals.stale_quote || f.signals.stuck_project || f.signals.stale_lead
+                return (
+                  <tr
+                    key={f.id}
+                    className="group border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/customers/${f.id}`}
+                        className="font-medium text-foreground hover:text-primary inline-flex items-center gap-1.5"
+                      >
+                        <Building2 className="size-3.5 text-muted-foreground shrink-0" />
+                        {f.name}
+                      </Link>
+                      {hasSignal && <SignalChips signals={f.signals} />}
+                    </td>
+                    <td className="hidden px-4 py-3 sm:table-cell">
+                      <Badge variant="outline" className="text-xs">
+                        {f.type_label}
+                      </Badge>
+                    </td>
+                    <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
+                      {f.city ? (
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="size-3" />
+                          {f.city}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </td>
+                    <td className="hidden px-4 py-3 text-muted-foreground tabular-nums md:table-cell">
+                      {f.phone ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Phone className="size-3" />
+                          {f.phone}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </td>
+                    <td className="hidden px-4 py-3 text-muted-foreground font-mono text-xs tabular-nums lg:table-cell">
+                      {f.gstin ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Hash className="size-3" />
+                          {f.gstin}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <ChevronRight className="size-4 text-muted-foreground/40 group-hover:text-muted-foreground inline-block" />
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
