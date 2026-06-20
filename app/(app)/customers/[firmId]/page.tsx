@@ -47,6 +47,7 @@ import {
   Truck,
   FileText,
   FileCheck2,
+  Wallet,
   AlertCircle,
 } from 'lucide-react'
 
@@ -130,7 +131,7 @@ export default async function Customer360Page(
   const data = await getCustomer360(firmId)
   if (!data) notFound()
 
-  const { firm, primary_contact, contacts, contact_count, projects, orders, invoices, quotes, kpis } = data
+  const { firm, primary_contact, contacts, contact_count, projects, orders, invoices, quotes, collections, kpis } = data
   const todayStr = new Date().toISOString().slice(0, 10)
 
   return (
@@ -293,6 +294,14 @@ export default async function Customer360Page(
             {invoices.total > 0 && (
               <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">
                 {invoices.total}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="collections" className="rounded-none pb-3 px-4">
+            Collections
+            {collections.overdue_count > 0 && (
+              <span className="ml-1.5 tabular-nums text-xs text-red-600 font-medium">
+                {collections.overdue_count} overdue
               </span>
             )}
           </TabsTrigger>
@@ -748,6 +757,117 @@ export default async function Customer360Page(
                             {formatINR(outstanding)} due
                           </span>
                         )}
+                        <ChevronRight className="size-4 text-muted-foreground/50 group-hover:text-muted-foreground" />
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Collections tab ──────────────────────────────────── */}
+        <TabsContent value="collections" className="mt-4 flex flex-col gap-3">
+          {(collections.total > 0 || collections.total_outstanding > 0) && (
+            <div className="flex items-center gap-4 text-xs text-muted-foreground tabular-nums">
+              <span>
+                <span className="font-medium text-foreground">{collections.total}</span> tracked
+              </span>
+              {collections.overdue_count > 0 && (
+                <span className="text-red-600">
+                  <span className="font-medium">{collections.overdue_count}</span> overdue
+                </span>
+              )}
+              {collections.total_outstanding > 0 && (
+                <span>
+                  <span className="font-medium text-foreground">
+                    {formatINR(collections.total_outstanding)}
+                  </span> outstanding
+                </span>
+              )}
+              {collections.total > collections.showing && (
+                <span className="ml-auto">
+                  Showing {collections.showing} of {collections.total}
+                </span>
+              )}
+            </div>
+          )}
+
+          {collections.items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-10 text-center">
+              <Wallet className="size-7 mb-3 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-foreground">No collections tracked</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                When invoices are raised for {firm.name}, collections are automatically created to track payment.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {collections.items.map((c) => {
+                const isOverdue = c.due_date < todayStr && c.outstanding > 0
+                return (
+                  <Link
+                    key={c.id}
+                    href={`/invoices/${c.invoice_id}`}
+                    className="group rounded-lg border border-border bg-card hover:border-foreground/20 hover:bg-muted/50 transition-colors p-3 flex flex-col gap-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Wallet className="size-3.5 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-medium text-foreground font-mono tabular-nums">
+                            {c.invoice_number}
+                          </span>
+                          {c.current_stage && (
+                            <Badge
+                              variant="outline"
+                              className="border-0 text-[10px]"
+                              style={{
+                                backgroundColor: `${c.current_stage.color}20`,
+                                color: c.current_stage.color,
+                              }}
+                            >
+                              {c.current_stage.label}
+                            </Badge>
+                          )}
+                          {isOverdue && (
+                            <Badge variant="outline" className="border-0 text-[10px] bg-red-50 text-red-600">
+                              Overdue
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1 tabular-nums">
+                            <CalendarDays className="size-3" />
+                            {new Date(c.invoice_date + 'T12:00:00').toLocaleDateString('en-IN', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                            })}
+                          </span>
+                          <span className={`flex items-center gap-1 tabular-nums ${isOverdue ? 'text-red-600' : ''}`}>
+                            <Clock className="size-3" />
+                            Due {new Date(c.due_date + 'T12:00:00').toLocaleDateString('en-IN', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                            })}
+                          </span>
+                          {c.next_action_at && (
+                            <span className="flex items-center gap-1 tabular-nums">
+                              Next action {new Date(c.next_action_at).toLocaleDateString('en-IN', {
+                                day: 'numeric', month: 'short',
+                              })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {c.outstanding > 0 && (
+                          <span className={`text-sm tabular-nums font-medium ${isOverdue ? 'text-red-600' : 'text-foreground'}`}>
+                            {formatINR(c.outstanding)}
+                          </span>
+                        )}
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          of {formatINR(c.billed_amount)}
+                        </span>
                         <ChevronRight className="size-4 text-muted-foreground/50 group-hover:text-muted-foreground" />
                       </div>
                     </div>
