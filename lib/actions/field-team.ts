@@ -315,10 +315,12 @@ export type RepDayDetail = {
     check_in_at: string | null
     check_in_lat: number | null
     check_in_lng: number | null
+    check_in_location_label: string | null
     check_in_odometer_km: number | null
     check_out_at: string | null
     check_out_lat: number | null
     check_out_lng: number | null
+    check_out_location_label: string | null
     check_out_odometer_km: number | null
     vehicle_label: string | null
     total_km: number | null
@@ -339,6 +341,7 @@ export type RepDayDetail = {
     duration_minutes: number | null
     lat: number | null
     lng: number | null
+    location_label: string | null
     subject_type: 'project' | 'lead' | 'firm' | 'dealer'
     subject_id: string
     subject_label: string
@@ -388,8 +391,8 @@ export async function getRepDayDetail(
     ctx.supabase
       .from('field_attendance')
       .select(`
-        id, status_for_day, check_in_at, check_in_lat, check_in_lng, check_in_odometer_km,
-        check_out_at, check_out_lat, check_out_lng, check_out_odometer_km,
+        id, status_for_day, check_in_at, check_in_lat, check_in_lng, check_in_location_label, check_in_odometer_km,
+        check_out_at, check_out_lat, check_out_lng, check_out_location_label, check_out_odometer_km,
         total_km, rate_applied, reimbursement_amount, claim_status,
         submitted_at, approved_at, rejection_reason, notes,
         vehicle:vehicle_id(vehicle_number)
@@ -401,7 +404,7 @@ export async function getRepDayDetail(
     ctx.supabase
       .from('field_visit')
       .select(`
-        id, state, started_at, visited_at, odometer_km_at_arrival, duration_minutes, lat, lng,
+        id, state, started_at, visited_at, odometer_km_at_arrival, duration_minutes, lat, lng, location_label,
         project_id, lead_id, firm_id, dealer_id, contact_id,
         contact_name_raw, contact_phone_raw, is_interested, notes_text,
         visit_purpose:visit_purpose_id(label),
@@ -472,6 +475,7 @@ export async function getRepDayDetail(
       duration_minutes: (v.duration_minutes as number | null) ?? null,
       lat: v.lat != null ? Number(v.lat) : null,
       lng: v.lng != null ? Number(v.lng) : null,
+      location_label: (v.location_label as string | null) ?? null,
       subject_type: subj.type,
       subject_id: subj.id,
       subject_label: subjectLabel,
@@ -542,10 +546,12 @@ export async function getRepDayDetail(
           check_in_at: (att.check_in_at as string | null) ?? null,
           check_in_lat: att.check_in_lat != null ? Number(att.check_in_lat) : null,
           check_in_lng: att.check_in_lng != null ? Number(att.check_in_lng) : null,
+          check_in_location_label: (att.check_in_location_label as string | null) ?? null,
           check_in_odometer_km: att.check_in_odometer_km != null ? Number(att.check_in_odometer_km) : null,
           check_out_at: (att.check_out_at as string | null) ?? null,
           check_out_lat: att.check_out_lat != null ? Number(att.check_out_lat) : null,
           check_out_lng: att.check_out_lng != null ? Number(att.check_out_lng) : null,
+          check_out_location_label: (att.check_out_location_label as string | null) ?? null,
           check_out_odometer_km: att.check_out_odometer_km != null ? Number(att.check_out_odometer_km) : null,
           vehicle_label: vehicleLabel,
           total_km: att.total_km != null ? Number(att.total_km) : null,

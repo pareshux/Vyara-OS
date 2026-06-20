@@ -11,6 +11,7 @@ import { getTodayContext } from '@/lib/actions/field-attendance'
 import { ApproveClaimButton, RejectClaimButton } from './claim-actions'
 import { MyDayChip } from './my-day-chip'
 import { TeamDaySummaryCard } from './team-day-summary-card'
+import { LocationMapButton } from '@/components/map/location-map-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -315,28 +316,19 @@ export default async function TeamPage({
                   )}
                 </Link>
 
-                {/* Row 3 — where they are right now. Sibling of the
-                    drill-in Link, not nested, so opening Maps doesn't
-                    also navigate to the drill-in page. */}
+                {/* Row 3 — where they are right now. Tap the chip to
+                    open a modal with the embedded map; no navigation
+                    away. Sibling of the drill-in Link (not nested) so
+                    the click doesn't bubble into the row. */}
                 {r.latest_location && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <MapPin className="size-3.5 text-blue-700 shrink-0" />
-                    <a
-                      href={`https://www.google.com/maps?q=${r.latest_location.lat},${r.latest_location.lng}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-blue-700 hover:underline inline-flex items-center gap-1 truncate min-w-0"
-                      title={r.latest_location.source === 'visit' ? 'Latest visit pin' : 'Check-in spot'}
-                    >
-                      <span className="truncate">
-                        {r.latest_location.label
-                          ?? `${r.latest_location.lat.toFixed(4)}°, ${r.latest_location.lng.toFixed(4)}°`}
-                      </span>
-                      <ExternalLink className="size-3 shrink-0" />
-                    </a>
-                    <span className="text-[10px] text-muted-foreground shrink-0">
-                      ({r.latest_location.source === 'visit' ? 'last visit' : 'check-in'})
-                    </span>
+                  <div className="mt-2">
+                    <LocationMapButton
+                      lat={r.latest_location.lat}
+                      lng={r.latest_location.lng}
+                      label={r.latest_location.label}
+                      source={r.latest_location.source}
+                      repName={r.full_name}
+                    />
                   </div>
                 )}
               </div>

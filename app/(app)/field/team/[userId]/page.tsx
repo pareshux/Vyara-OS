@@ -10,6 +10,7 @@ import { getRepDayDetail } from '@/lib/actions/field-team'
 import { ApproveClaimButton, RejectClaimButton } from '../claim-actions'
 import { FieldDayKpiStrip } from '../../field-day-kpis'
 import { getFieldDay } from '@/lib/read-models/field-day'
+import { OsmMap } from '@/components/map/osm-map'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,6 +111,45 @@ export default async function RepDayPage({
   // FO-7 / FLD-015 — same KPI strip the rep sees on their own /field.
   const fieldDay = await getFieldDay(userId, date)
 
+  // Latest known location — prefer the most recent visit pin, fall
+  // back to check-in. Drives the inline map card.
+  const visitsByRecency = [...visits].sort(
+    (a, b) => new Date(b.visited_at).getTime() - new Date(a.visited_at).getTime(),
+  )
+  const latestVisitWithLoc = visitsByRecency.find((v) => v.lat != null && v.lng != null)
+  const latestLocation: {
+    lat: number
+    lng: number
+    label: string | null
+    source: 'visit' | 'check_in' | 'check_out'
+    when: string | null
+  } | null =
+    latestVisitWithLoc
+      ? {
+          lat: latestVisitWithLoc.lat!,
+          lng: latestVisitWithLoc.lng!,
+          label: latestVisitWithLoc.location_label,
+          source: 'visit',
+          when: latestVisitWithLoc.visited_at,
+        }
+      : attendance?.check_out_lat != null && attendance?.check_out_lng != null
+        ? {
+            lat: attendance.check_out_lat,
+            lng: attendance.check_out_lng,
+            label: attendance.check_out_location_label,
+            source: 'check_out',
+            when: attendance.check_out_at,
+          }
+        : attendance?.check_in_lat != null && attendance?.check_in_lng != null
+          ? {
+              lat: attendance.check_in_lat,
+              lng: attendance.check_in_lng,
+              label: attendance.check_in_location_label,
+              source: 'check_in',
+              when: attendance.check_in_at,
+            }
+          : null
+
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-3xl">
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -146,6 +186,46 @@ export default async function RepDayPage({
 
       {/* Day KPI strip — visits, distance, on-duty, expenses. */}
       {fieldDay && <FieldDayKpiStrip kpis={fieldDay.kpis} />}
+
+      {/* ── Where they are ───────────────────────────────────── */}
+      {latestLocation && (
+        <Card>
+          <CardContent className="py-4 flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold flex items-center gap-1.5">
+                  <MapPin className="size-4 text-blue-700" />
+                  {latestLocation.source === 'visit' ? 'Last seen at' :
+                   latestLocation.source === 'check_out' ? 'Checked out from' :
+                   'Checked in from'}
+                </p>
+                <p className="text-sm mt-1 truncate">
+                  {latestLocation.label ?? (
+                    <span className="tabular-nums">
+                      {latestLocation.lat.toFixed(4)}°, {latestLocation.lng.toFixed(4)}°
+                    </span>
+                  )}
+                </p>
+                {latestLocation.when && (
+                  <p className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
+                    {formatTime(latestLocation.when)}
+                  </p>
+                )}
+              </div>
+              <a
+                href={`https://www.google.com/maps?q=${latestLocation.lat},${latestLocation.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-primary hover:underline inline-flex items-center gap-1 shrink-0"
+              >
+                Google Maps
+                <ExternalLink className="size-3" />
+              </a>
+            </div>
+            <OsmMap lat={latestLocation.lat} lng={latestLocation.lng} aspect="wide" />
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Attendance summary ───────────────────────────────── */}
       {!attendance ? (
