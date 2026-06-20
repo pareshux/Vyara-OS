@@ -278,3 +278,10 @@
 - **Tier:** Foundation
 - **Status change:** 💭 → ✅
 - **Notes:** Migration 0024. 10 new tables, RLS, seed. Started the Field Operations capability.
+
+### 2026-06-20 — REL-011: Firm health signals + AI relationship brief (82b5d76)
+- **Tracks:** REL-011
+- **Capability:** Relationship + Intelligence
+- **Tier:** Should-have
+- **Status change:** 💭 → ✅
+- **Notes:** Two surfaces. /firms list: 4 bulk queries run in parallel (overdue invoices by buyer_firm_id, stale sent quotes >7d via project join, active projects not updated >14d, open leads not updated >3d) → per-firm signal map → color chips on each row (red overdue, amber quote awaiting, orange project stale, blue lead stale) + new City/State/Attention filters. Customer 360 Overview tab: <FirmBrief> async server component replaces "coming soon" placeholder; lib/actions/firm-brief.ts assembles 5-query context, calls Claude via extractFromText, caches in ai_extraction with 24h TTL (gte created_at guard); lib/ai/prompts/firm-brief.ts defines FirmBriefSchema (health enum + headline + bullets) and a prompt that demands concrete ₹ amounts, invoice numbers, days-overdue.
