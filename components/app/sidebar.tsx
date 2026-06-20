@@ -35,21 +35,26 @@ type FeatureKey =
 
 // Capability-aligned nav per Blueprint v3 §0.2. Groups render in
 // declared order. 'home' + 'utility' groups render without a header
-// (daily-use + miscellany). Capability groups (relationship, revenue,
-// delivery, finance) render under uppercase muted labels matching the
-// existing "Admin" section style.
-type GroupKey = 'home' | 'relationship' | 'revenue' | 'delivery' | 'finance' | 'utility'
+// (daily-use + miscellany). Capability groups render under uppercase
+// muted labels matching the existing "Admin" section style.
+// Section order follows the Blueprint capability sequence (Relationship,
+// Revenue, Delivery, Field Operations, Finance) so the nav mirrors
+// the operating-model document the team reads.
+type GroupKey = 'home' | 'relationship' | 'revenue' | 'delivery' | 'field_ops' | 'finance' | 'utility'
 
 const GROUP_LABEL: Record<GroupKey, string | null> = {
   home:         null,           // no header
   relationship: 'Relationship',
   revenue:      'Revenue',
   delivery:     'Delivery',
+  field_ops:    'Field Ops',
   finance:      'Finance',
   utility:      null,           // no header
 }
 
-const GROUP_ORDER: GroupKey[] = ['home', 'relationship', 'revenue', 'delivery', 'finance', 'utility']
+const GROUP_ORDER: GroupKey[] = [
+  'home', 'relationship', 'revenue', 'delivery', 'field_ops', 'finance', 'utility',
+]
 
 type NavItem = {
   label: string
@@ -62,7 +67,6 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   // Home — daily-use surfaces, no group header.
   { label: 'Dashboard',   href: '/dashboard',   icon: LayoutDashboard, group: 'home' },
-  { label: 'Field',       href: '/field',       icon: MapPin,          group: 'home',          feature: 'enable_field_sales' },
 
   // Relationship — people + organisations (Blueprint capability §2.1).
   // Dealer is a relationship type, not a separate module — lives here.
@@ -78,6 +82,11 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Inventory',   href: '/inventory',   icon: Boxes,           group: 'delivery',      feature: 'enable_inventory' },
   { label: 'Warehouses',  href: '/warehouses',  icon: Warehouse,       group: 'delivery',      feature: 'enable_warehouse' },
   { label: 'Dispatches',  href: '/dispatches',  icon: Truck,           group: 'delivery',      feature: 'enable_dispatches' },
+
+  // Field Ops — activity-based execution (Blueprint capability §2.4).
+  // Role-aware link resolver below routes managers to /field/team and
+  // reps to /field — same nav item, different landing.
+  { label: 'Field',       href: '/field',       icon: MapPin,          group: 'field_ops',     feature: 'enable_field_sales' },
 
   // Finance — receivables, payables, claims (Blueprint §2.6).
   { label: 'Invoices',    href: '/invoices',    icon: FileText,        group: 'finance' },
