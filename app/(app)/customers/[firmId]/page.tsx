@@ -46,6 +46,7 @@ import {
   CalendarDays,
   Truck,
   FileText,
+  FileCheck2,
   AlertCircle,
 } from 'lucide-react'
 
@@ -59,6 +60,24 @@ const SEGMENT_LABEL: Record<string, string> = {
   government: 'Government',
   corporate: 'Corporate',
   generic: 'Generic',
+}
+
+const QUOTE_STATUS_LABEL: Record<string, string> = {
+  draft: 'Draft',
+  sent: 'Sent',
+  revised: 'Revised',
+  accepted: 'Won',
+  rejected: 'Lost',
+  expired: 'Expired',
+}
+
+const QUOTE_STATUS_CLASS: Record<string, string> = {
+  draft: 'bg-muted text-muted-foreground',
+  sent: 'bg-blue-50 text-blue-700',
+  revised: 'bg-amber-50 text-amber-700',
+  accepted: 'bg-green-50 text-green-700',
+  rejected: 'bg-red-50 text-red-700',
+  expired: 'bg-muted/50 text-muted-foreground/70',
 }
 
 const INVOICE_STATUS_LABEL: Record<string, string> = {
@@ -111,7 +130,7 @@ export default async function Customer360Page(
   const data = await getCustomer360(firmId)
   if (!data) notFound()
 
-  const { firm, primary_contact, contacts, contact_count, projects, orders, invoices, kpis } = data
+  const { firm, primary_contact, contacts, contact_count, projects, orders, invoices, quotes, kpis } = data
   const todayStr = new Date().toISOString().slice(0, 10)
 
   return (
@@ -258,6 +277,14 @@ export default async function Customer360Page(
             {orders.total > 0 && (
               <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">
                 {orders.total}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="quotes" className="rounded-none pb-3 px-4">
+            Quotes
+            {quotes.total > 0 && (
+              <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">
+                {quotes.total}
               </span>
             )}
           </TabsTrigger>
@@ -531,6 +558,97 @@ export default async function Customer360Page(
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <span className="text-sm tabular-nums font-medium text-foreground">
                         {formatINR(o.value)}
+                      </span>
+                      <ChevronRight className="size-4 text-muted-foreground/50 group-hover:text-muted-foreground" />
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Quotes tab ───────────────────────────────────────── */}
+        <TabsContent value="quotes" className="mt-4 flex flex-col gap-3">
+          {quotes.total > 0 && (
+            <div className="flex items-center gap-4 text-xs text-muted-foreground tabular-nums">
+              <span>
+                <span className="font-medium text-foreground">{quotes.total}</span> total
+              </span>
+              {quotes.open_count > 0 && (
+                <span>
+                  <span className="font-medium text-foreground">{quotes.open_count}</span> open
+                </span>
+              )}
+              {quotes.total_value > 0 && (
+                <span>
+                  <span className="font-medium text-foreground">{formatINR(quotes.total_value)}</span> total value
+                </span>
+              )}
+              {quotes.total > quotes.showing && (
+                <span className="ml-auto">
+                  Showing {quotes.showing} of {quotes.total} · newest first
+                </span>
+              )}
+            </div>
+          )}
+
+          {quotes.items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-10 text-center">
+              <FileCheck2 className="size-7 mb-3 text-muted-foreground/50" />
+              <p className="text-sm font-medium text-foreground">No quotes yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Quotes raised on projects associated with {firm.name} will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {quotes.items.map((q) => (
+                <Link
+                  key={q.id}
+                  href={q.project ? `/projects/${q.project.id}` : '#'}
+                  className="group rounded-lg border border-border bg-card hover:border-foreground/20 hover:bg-muted/50 transition-colors p-3 flex flex-col gap-2"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <FileCheck2 className="size-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-sm font-medium text-foreground font-mono tabular-nums">
+                          {q.quotation_number}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={`border-0 text-[10px] ${QUOTE_STATUS_CLASS[q.status] ?? 'bg-muted text-muted-foreground'}`}
+                        >
+                          {QUOTE_STATUS_LABEL[q.status] ?? q.status}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        {q.project && (
+                          <span className="flex items-center gap-1 truncate">
+                            <FolderOpen className="size-3" />
+                            {q.project.name}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 tabular-nums">
+                          <CalendarDays className="size-3" />
+                          Created {new Date(q.created_at + 'T12:00:00').toLocaleDateString('en-IN', {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                          })}
+                        </span>
+                        {q.valid_until && (
+                          <span className={`flex items-center gap-1 tabular-nums ${q.valid_until < todayStr && !['accepted', 'rejected', 'expired'].includes(q.status) ? 'text-amber-600' : ''}`}>
+                            <Clock className="size-3" />
+                            Valid till {new Date(q.valid_until + 'T12:00:00').toLocaleDateString('en-IN', {
+                              day: 'numeric', month: 'short',
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-sm tabular-nums font-medium text-foreground">
+                        {formatINR(q.total)}
                       </span>
                       <ChevronRight className="size-4 text-muted-foreground/50 group-hover:text-muted-foreground" />
                     </div>
