@@ -1,16 +1,15 @@
 /**
- * OsmMap — iframe-based OpenStreetMap embed with a single pin.
+ * OsmMap — iframe-based map embed with a single pin.
  *
- * Free, no API key. Renders an iframe pointing at
- * openstreetmap.org/export/embed.html so we don't pull in Leaflet or
- * a tile-rendering JS library for the MVP.
+ * Provider selection (per render):
+ *   1. Google Maps Embed API — used when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+ *      is set. Same pin, much better India tile detail. The Maps Embed
+ *      API is *free* (no per-call billing), just needs a key with the
+ *      "Maps Embed API" enabled.
+ *   2. OpenStreetMap (fallback) — free, no key, but India tile detail
+ *      is sparse outside metros.
  *
- * Swap path to Google Maps Embed API (when we need clusters, traffic,
- * directions): replace the iframe `src` builder with Google's URL
- * scheme and add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to env. Same
- * component contract.
- *
- * Server component — no state, no JS. Embedded anywhere.
+ * Server component — no state, no JS.
  */
 
 export type OsmMapProps = {
@@ -27,12 +26,19 @@ export type OsmMapProps = {
 }
 
 export function OsmMap({ lat, lng, delta = 0.01, aspect = 'wide', className }: OsmMapProps) {
-  // bbox = west,south,east,north  (longitude/lng on west/east, lat on south/north)
-  const west = lng - delta
-  const east = lng + delta
-  const south = lat - delta
-  const north = lat + delta
-  const src = `https://www.openstreetmap.org/export/embed.html?bbox=${west}%2C${south}%2C${east}%2C${north}&layer=mapnik&marker=${lat}%2C${lng}`
+  const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+
+  // Google Maps Embed: cleaner tiles for India. Zoom is logarithmic;
+  // 15 ≈ neighbourhood, 17 ≈ street, 18 ≈ building.
+  const src = googleKey
+    ? `https://www.google.com/maps/embed/v1/place?key=${googleKey}&q=${lat},${lng}&zoom=16`
+    : (() => {
+        const west = lng - delta
+        const east = lng + delta
+        const south = lat - delta
+        const north = lat + delta
+        return `https://www.openstreetmap.org/export/embed.html?bbox=${west}%2C${south}%2C${east}%2C${north}&layer=mapnik&marker=${lat}%2C${lng}`
+      })()
 
   const aspectClass =
     aspect === 'square' ? 'aspect-square' :
@@ -47,6 +53,7 @@ export function OsmMap({ lat, lng, delta = 0.01, aspect = 'wide', className }: O
         loading="lazy"
         referrerPolicy="no-referrer"
         title="Location map"
+        allowFullScreen
       />
     </div>
   )
