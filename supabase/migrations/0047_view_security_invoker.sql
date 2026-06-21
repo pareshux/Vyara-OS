@@ -1,0 +1,32 @@
+-- ============================================================
+-- 0047_view_security_invoker.sql — CRITICAL: cross-tenant data leak fix
+--
+-- Discovered during Raj demo Phase 2: when Raj admin queries
+-- invoice_ageing_v through PostgREST (via JWT, not service-role),
+-- the view returns Vyara invoices too. RLS leaks.
+--
+-- Root cause: PostgreSQL views run with the OWNER's privileges by
+-- default (security_definer-like). Our views are owned by the
+-- `postgres` superuser which has BYPASSRLS, so RLS on the underlying
+-- tables is silently bypassed when accessed through the view.
+--
+-- PostgreSQL 15+ introduced `security_invoker` view option which
+-- forces RLS to evaluate as the CALLING user (the authenticated JWT
+-- session) instead of the view owner. Supabase runs PG 15+; this
+-- is the right fix.
+--
+-- Impact pre-fix: any authenticated user could SELECT from these
+-- views and see ALL tenants' rows. Tested + confirmed for
+-- invoice_ageing_v during Raj Phase 2.
+--
+-- Scope: invoice_ageing_v (Finance ageing dashboard, owner overview,
+-- collections), dealer_ledger_v (dealer portal balances).
+--
+-- Test: after this migration, `signInAs(Raj).select(invoice_ageing_v)`
+-- returns ONLY Raj invoices.
+--
+-- Reverse: ALTER VIEW <view> SET (security_invoker = false);
+-- ============================================================
+
+ALTER VIEW invoice_ageing_v SET (security_invoker = true);
+ALTER VIEW dealer_ledger_v  SET (security_invoker = true);
