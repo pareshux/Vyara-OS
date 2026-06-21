@@ -33,7 +33,7 @@ export default function LoginPage() {
           </div>
           <div className="text-center">
             <h1 className="text-xl font-semibold tracking-tight text-foreground">CRMOS</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">Manufacturing Revenue &amp; Project OS</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">Modular Business Operating System</p>
           </div>
         </div>
 
@@ -52,7 +52,7 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  placeholder="you@vyaratiles.com"
+                  placeholder="you@company.com"
                   className="w-full"
                 />
               </div>

@@ -17,8 +17,9 @@ export const VisitPrepBriefSchema = z.object({
     .string()
     .describe(
       'One short sentence (≤14 words) capturing the most important thing to know walking in. ' +
-        'Examples: "Won the spec but pending paving-stage follow-up since 2 weeks." / ' +
+        'Examples: "Won the spec but follow-up pending since 2 weeks." / ' +
         '"Sent ₹4.2L quote; no response in 9 days." / ' +
+        '"AMC visit overdue 18 days — customer chasing." / ' +
         'If there is genuinely no signal say "No prior context — fresh conversation."',
     ),
   bullets: z

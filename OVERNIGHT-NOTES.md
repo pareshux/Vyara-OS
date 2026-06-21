@@ -10,7 +10,7 @@
 | 3 | CS-001 minimum-viable complaint module | _committing_ | 13 unit + 11 integration + 192 vitest total | n/a |
 | 4 | CS-009 AMC contracts + Surat complaint→AMC linkage | _committing_ | 7 unit + 11 integration + 199 vitest total | n/a |
 | 5a | Drawing-approval gate (data + read-only helper) | _committing_ | 6 unit + 205 vitest total | n/a |
-| 6 | Vyara-isms hunt | _pending_ | _pending_ | n/a |
+| 6 | Vyara-isms hunt (5 triggers + AI prompts + page titles) | _committing_ | trigger smoke verified RA-CMP rendering · 205 vitest pass | n/a |
 
 I'll update this table as each phase commits.
 
@@ -19,6 +19,23 @@ I'll update this table as each phase commits.
 ## Architectural decisions made overnight (every one is flippable)
 
 > Each entry: **decision · reason · cost-to-flip**.
+
+**Phase 6 (Vyara-isms hunt):**
+- **Migration 0051: rewrote all 5 number-trigger functions** to be tenant-aware via a new `render_tenant_code(tenant_id, kind, seq)` DB helper. Triggers now read `tenant.settings.codes.<kind>` → render with {yyyy} + {nnn|nnnn|nnnnn} tokens → fall back to the hardcoded 'VT-' default when the template is missing or malformed. Affected triggers: quotation / sales_order / invoice / complaint / amc_contract. Pre-fill behaviour preserved — if the action layer sets the number before insert, the trigger no-ops. **Empirically verified:** insert a Raj complaint without pre-filled number → trigger renders `RA-CMP-2026-NNNN` (matches Raj's template). · Cost to flip: drop the helper and the COALESCE in each trigger; revert to hardcoded VT-* prefix (loses cross-industry friendliness).
+- **Added complaint + amc code templates to Raj's tenant.settings.codes** (`RA-CMP-{yyyy}-{nnnn}`, `RA-AMC-{yyyy}-{nnnn}`). Vyara doesn't have these keys — its complaints + AMCs would auto-render to `VT-CMP-*` / `VT-AMC-*` (the trigger falls back to the default), which is exactly right for Vyara.
+- **AI prompt fixes:**
+  - `dispatch-diary.ts` — replaced Vyara-specific examples ("VT-SO-2026-0099", "concrete pavers / kerbstones / tiles") with industry-neutral language ("XX-SO-YYYY-NNNN with prefix varying by tenant", "concrete pavers / kerbs / tiles, electrical panels / cables, machined parts, fabricated assemblies — products vary by tenant").
+  - `invoice-photo.ts` — header now says "Indian B2B operating system" (was "Indian building-materials manufacturer's operating system"). Project-match hint says "in our records" (was "in Vyara").
+  - `daily-digest.ts` — header comment says "industry-neutral language — works for building-materials, EPC, service, distribution tenants" (was "building-materials manufacturer's leadership, Mehul / Vyara MD-level").
+  - `visit-prep-brief.ts` — examples broadened: removed "paving-stage follow-up" specific phrasing, added an AMC-visit example.
+- **Page metadata + login page:**
+  - `app/layout.tsx` title now "Vyara OS" (was "CRMOS"); description now "Modular Business Operating System for manufacturing, contracting, distribution, and service companies." (was "Manufacturing Revenue & Project OS for Vyara Tiles").
+  - `app/(auth)/login/page.tsx` placeholder now `you@company.com` (was `you@vyaratiles.com`). Subtitle "Modular Business Operating System" (was "Manufacturing Revenue & Project OS").
+
+**Vyara-isms remaining (not fixed in this overnight pass; recorded for future):**
+- `is_paving_stage` flag on pipeline_stage is fully Vyara-specific. Raj has no stage with `is_paving_stage=true` so the Slice-1 paving-followup Inngest cron silently no-ops for Raj. Generalising to a per-tenant `is_hero_stage` with a tenant-configurable label is a bigger refactor (touches Inngest + the project advance flow + the project-progress read-model). Deferred.
+- The `next_code_sequence` RPC (PLAT-010) doesn't know about `complaint` or `amc` kinds. The DB trigger handles it (via its own `nextval()` call inline), but the TypeScript `nextCode` helper can't pre-fill these in the action layer. Action layer for createComplaint / createAmcContract therefore relies on the trigger (which now works correctly thanks to 0051). Extending the RPC + CodeKind type would let the action pre-fill too. Low priority since the trigger fallback now does the right thing.
+- 30+ files still reference "Vyara" / "tiles" / "paving" in various copy / labels. The big ones (AI prompts, login, layout) are fixed. Per-page copy audit is a separate sweep.
 
 **Phase 5a (drawing-approval gate):**
 - **Seeded gate_requirement rows for both Raj pipelines** (epc_project drawings_approved + panel_order drawings_approved). Both require `drawing_approval_pack` document; is_hard=true.

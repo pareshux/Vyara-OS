@@ -56,7 +56,7 @@ export const InvoicePhotoSchema = z.object({
   project_or_site: z
     .string()
     .nullable()
-    .describe('Project name, site, or PO reference if printed. Used to match a project in Vyara.'),
+    .describe('Project name, site, or PO reference if printed. Used to match a project in our records.'),
   order_reference: z
     .string()
     .nullable()
@@ -98,10 +98,10 @@ export type InvoicePhotoResult = z.infer<typeof InvoicePhotoSchema>
 
 // ─── Prompt ─────────────────────────────────────────────────────────────────
 
-export const INVOICE_PHOTO_SYSTEM_PROMPT = `You are an extraction assistant for an Indian building-materials manufacturer's operating system (CRMOS). Your job is to read a photographed tax invoice and return structured JSON.
+export const INVOICE_PHOTO_SYSTEM_PROMPT = `You are an extraction assistant for an Indian B2B operating system. Your job is to read a photographed tax invoice and return structured JSON.
 
 THE BUSINESS CONTEXT
-- The user uploads photos / scans of Indian GST invoices (their own, or invoices they pay against, or RA-bills / running-account bills for paving and construction projects).
+- The user uploads photos / scans of Indian GST invoices (their own, or invoices they pay against, or RA-bills / running-account bills for construction, EPC, manufacturing, or service projects).
 - These are usually computer-printed but may include handwritten annotations.
 - The buyer block usually carries: name, GSTIN, address, sometimes phone.
 - The money block carries: subtotal, CGST, SGST or IGST, total, sometimes retention withheld.

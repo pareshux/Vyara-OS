@@ -1,10 +1,11 @@
 /**
  * Daily digest narrative prompt + Zod schema.
  *
- * Composes a 2-3 sentence executive summary for a building-materials
- * manufacturer's leadership (Mehul / Vyara MD-level). Different shape from
- * extraction prompts: input is structured stats, output is narrative + a
- * structured "focus_items" list of 3-4 actions to attend to today.
+ * Composes a 2-3 sentence executive summary for tenant leadership
+ * (admin / MD-level). Different shape from extraction prompts: input is
+ * structured stats, output is narrative + a structured "focus_items"
+ * list of 3-4 actions to attend to today. Industry-neutral language —
+ * works for building-materials, EPC, service, distribution tenants.
  */
 import { z } from 'zod'
 

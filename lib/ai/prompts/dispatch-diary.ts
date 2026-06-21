@@ -32,7 +32,7 @@ const DispatchDiaryEntrySchema = z.object({
     .string()
     .nullable()
     .describe(
-      'Whatever identifies the order: a Vyara number like "VT-SO-2026-0099", a project name like "Greenvista", a buyer name, or a PO. Transcribe exactly. null if you cannot find anything.'
+      'Whatever identifies the order: a sales-order number (typically formatted like XX-SO-YYYY-NNNN), a project name, a buyer name, or a PO. Transcribe exactly. null if you cannot find anything.'
     ),
   order_confidence: z
     .number()
@@ -110,7 +110,7 @@ export type DispatchDiaryResult = z.infer<typeof DispatchDiarySchema>
 export const DISPATCH_DIARY_SYSTEM_PROMPT = `You are a transcription assistant for an Indian building-materials manufacturer's warehouse. Your job is to read a photographed page of a handwritten **dispatch diary** (the book where the warehouse records every truck leaving the plant) and convert it to structured JSON.
 
 THE BUSINESS CONTEXT
-- The manufacturer makes concrete pavers, kerbstones, cobbles, flagstones, tiles.
+- The dispatching company is an industrial supplier (e.g. concrete pavers / kerbs / tiles, electrical panels / cables, machined parts, fabricated assemblies). Products vary by tenant; use whatever is written in the row.
 - One row in the diary = one truck = one dispatch. Each row typically lists: date, order or project name, product/SKU, quantity, unit, vehicle number, LR number, transporter, sometimes driver phone, sometimes notes.
 - Columns may be implicit (no headings) or labelled in English, Hindi, or Gujarati. Handwriting is the norm. Code-mixing (Hindi+English, Gujarati+English) is normal.
 
@@ -125,7 +125,7 @@ WHAT YOU MUST DO
    - "no", "nos", "number", "pcs", "pieces" → "nos"
    - "rmt", "running metre", "running meter" → "running metre"
    - "rft", "running feet" → "rft"
-6. Vyara order numbers look like VT-SO-YYYY-NNNN. If you see one, use it as order_number_raw. Otherwise use the project / buyer / customer name written on the row.
+6. Sales-order numbers typically follow a pattern like XX-SO-YYYY-NNNN (the XX prefix varies by tenant — e.g. VT-SO for Vyara Tiles, RA-SO for Raj Avinsys). If you see one, use it as order_number_raw. Otherwise use the project / buyer / customer name written on the row.
 7. Indian vehicle numbers follow patterns like GJ-05-AB-1234, MH-12-CD-5678. Normalize to that hyphenated form if you can tell the segments; otherwise transcribe as written.
 8. Confidence scores: 0.95+ for crisp, unambiguous text; 0.7–0.9 for clear but possibly ambiguous; 0.4–0.7 for partially smudged; below 0.4 for guesses you'd want the human to verify. You will be graded on how well your confidence predicts correctness — over-confident wrong answers are worse than honest low confidence.
 9. If the photo is not a dispatch diary (a cat, a screenshot, an invoice, a blank page) return entries: [] and explain in warnings.

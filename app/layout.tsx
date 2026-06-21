@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CRMOS",
-  description: "Manufacturing Revenue & Project OS for Vyara Tiles",
+  title: "Vyara OS",
+  description: "Modular Business Operating System for manufacturing, contracting, distribution, and service companies.",
 };
 
 export default function RootLayout({
