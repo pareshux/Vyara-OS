@@ -34,8 +34,16 @@
 //                days; gap markers for DEL-007 on-time % and stock-
 //                at-risk since safety_stock isn't tracked)
 //
-// Slices 4–5 (planned) extend:
-//   - Field Operations + People
+// Slice 4 scope (Field + People):
+//   - Section 11: Today's field activity (on-duty / WFH / leave counts;
+//                visits done today; total km today; expense today)
+//   - Section 12: Team roster (live per-rep status: on duty since X /
+//                WFH / leave / no record today; visits done today; last
+//                check-in location)
+//   - Section 13: Rep scorecards (period-coupled — top 5 reps by
+//                visits-with-outcome, with km + expense in period)
+//
+// Slice 5 (planned) extends:
 //   - Drill-down read-paths + filter set
 //
 // Per Constitution #0: no direct cross-module writes. This file only
@@ -344,6 +352,75 @@ export type Operations = {
   gaps: Array<{ key: 'on_time_pct' | 'stock_at_risk'; reason: string; blueprint_id?: string }>
 }
 
+// ─── Section 11: Today's field activity ──────────────────────
+
+export type FieldToday = {
+  /** Today's IST date string (yyyy-mm-dd). */
+  date: string
+  /** Total field-eligible reps (role IN 'manager' / 'sales_engineer'). */
+  total_reps: number
+  /** On-duty today (status_for_day = 'on_duty'). */
+  on_duty_count: number
+  /** WFH today. */
+  wfh_count: number
+  /** On leave today. */
+  leave_count: number
+  /** Reps with no attendance record at all today. */
+  no_record_count: number
+  /** Visits with an outcome recorded today (across the whole team). */
+  visits_completed_today: number
+  /** Visits in any non-completed state today (planned / travel / arrived / in-progress). */
+  visits_open_today: number
+  /** Sum of total_km across today's attendance rows. */
+  total_km_today: number
+  /** Sum of expense.amount in non-rejected non-cancelled states for today's expense_date. */
+  total_expense_today: number
+}
+
+// ─── Section 12: Team roster ─────────────────────────────────
+
+export type RosterStatus = 'on_duty' | 'wfh' | 'leave' | 'holiday' | 'no_record'
+
+export type RosterEntry = {
+  user_id: string
+  name: string
+  role: string
+  status: RosterStatus
+  /** Check-in time for on_duty status (ISO string). */
+  check_in_at: string | null
+  /** Check-out time when the rep has ended their day. */
+  check_out_at: string | null
+  /** Visits done today (with outcome). */
+  visits_completed: number
+  /** Last check-in location label (free text on attendance row). */
+  last_location_label: string | null
+  /** Running km from attendance.total_km if computed (only set on check-out). */
+  total_km: number | null
+  /** Deep-link into the rep's day view. */
+  drill_href: string
+}
+
+// ─── Section 13: Rep scorecards (period) ─────────────────────
+
+export type RepScorecard = {
+  user_id: string
+  name: string
+  /** Visits with outcome recorded in period. */
+  visits_completed: number
+  /** Visits opened (any state) in period — denom for completion ratio. */
+  visits_opened: number
+  /** Completion ratio = visits_completed / visits_opened. Null when 0 opened. */
+  completion_pct: number | null
+  /** Total km across attendance rows in period. */
+  total_km: number
+  /** Total expense ₹ in period (approved / submitted / exported). */
+  total_expense: number
+  /** Days marked on_duty in period — context for visit/expense rates. */
+  on_duty_days: number
+  /** Deep-link into the rep's most-recent day view. */
+  drill_href: string
+}
+
 // ─── Top-level read-model ────────────────────────────────────
 
 export type OwnerOverview = {
@@ -360,6 +437,9 @@ export type OwnerOverview = {
   win_rate: WinRateCycle
   top_reps: TopRep[]
   operations: Operations
+  field_today: FieldToday
+  roster: RosterEntry[]
+  rep_scorecards: RepScorecard[]
   /** Quick counts used by the AI brief context — not rendered on the page directly. */
   facts: {
     overdue_invoice_count: number
@@ -394,6 +474,10 @@ export type OwnerOverview = {
     in_transit_dispatches: number
     delivered_in_period: number
     top_loss_reason: string | null
+    /** Slice 4 facts — field + people signals. */
+    on_duty_now_count: number
+    visits_completed_today: number
+    top_field_rep_label: string | null
   }
 }
 
@@ -466,6 +550,13 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     deliveredInPeriod,
     inTransitDispatches,
     lossReasonMaster,
+    fieldReps,
+    attendanceToday,
+    visitsToday,
+    expensesToday,
+    attendanceInPeriod,
+    visitsInPeriod,
+    expensesInPeriod,
   ] = await Promise.all([
     supabase.from('tenant').select('name').eq('id', tenantId).single(),
 
@@ -726,6 +817,61 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
       .select('id, label')
       .eq('tenant_id', tenantId)
       .is('deleted_at', null),
+
+    // Section 11+12+13: field-eligible reps (roles that go to the field).
+    // Includes managers — field managers run reviews & escalations on site.
+    supabase.from('user_profile')
+      .select('id, full_name, role')
+      .eq('tenant_id', tenantId)
+      .in('role', ['sales_engineer', 'manager']),
+
+    // Section 11+12: today's attendance rows for the whole team.
+    // We compute today as IST date — the SQL DATE column is timezone-naive
+    // so we use the same local date the rep would see.
+    supabase.from('field_attendance')
+      .select('user_id, status_for_day, check_in_at, check_out_at, total_km')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .eq('attendance_date', now.toISOString().slice(0, 10)),
+
+    // Section 11+12: today's visits across the team (used for completed +
+    // open counts + last-location signal on the roster).
+    supabase.from('field_visit')
+      .select('id, user_id, location_label, visited_at, visit_outcome_id, state')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .gte('visited_at', new Date(now.toISOString().slice(0, 10)).toISOString()),
+
+    // Section 11: today's expense rows (any non-cancelled/non-rejected).
+    supabase.from('expense')
+      .select('amount, status')
+      .eq('tenant_id', tenantId)
+      .eq('expense_date', now.toISOString().slice(0, 10))
+      .not('status', 'in', '("cancelled","rejected")'),
+
+    // Section 13: period attendance for scorecard km + on-duty days.
+    supabase.from('field_attendance')
+      .select('user_id, total_km, status_for_day, attendance_date')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .gte('attendance_date', current.start_date)
+      .lt('attendance_date', current.end_date),
+
+    // Section 13: period visits for scorecard visit counts.
+    supabase.from('field_visit')
+      .select('id, user_id, visit_outcome_id, visited_at')
+      .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
+      .gte('visited_at', current.start_at)
+      .lt('visited_at', current.end_at),
+
+    // Section 13: period expense for scorecard total expense per rep.
+    supabase.from('expense')
+      .select('user_id, amount, status, expense_date')
+      .eq('tenant_id', tenantId)
+      .gte('expense_date', current.start_date)
+      .lt('expense_date', current.end_date)
+      .not('status', 'in', '("cancelled","rejected")'),
   ])
 
   // ─── Section 1: Business Health rollups ─────────────────────
@@ -1209,6 +1355,164 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
       },
     ],
   }
+
+  // ─── Sections 11+12+13: Field + People rollups ─────────────
+  type RepRow = { id: string; full_name: string; role: string }
+  type AttendanceRow = {
+    user_id: string
+    status_for_day: string
+    check_in_at: string | null
+    check_out_at: string | null
+    total_km: number | null
+  }
+  type AttendancePeriodRow = AttendanceRow & { attendance_date: string }
+  type VisitRow = {
+    id: string
+    user_id: string
+    location_label: string | null
+    visited_at: string
+    visit_outcome_id: string | null
+    state?: string | null
+  }
+  type ExpenseRow = { amount: number | null; status: string }
+  type ExpensePeriodRow = ExpenseRow & { user_id: string; expense_date: string }
+
+  const reps = (fieldReps.data ?? []) as RepRow[]
+  const attTodayRows = (attendanceToday.data ?? []) as AttendanceRow[]
+  const visTodayRows = (visitsToday.data ?? []) as VisitRow[]
+  const expTodayRows = (expensesToday.data ?? []) as ExpenseRow[]
+  const attPeriodRows = (attendanceInPeriod.data ?? []) as AttendancePeriodRow[]
+  const visPeriodRows = (visitsInPeriod.data ?? []) as VisitRow[]
+  const expPeriodRows = (expensesInPeriod.data ?? []) as ExpensePeriodRow[]
+
+  const todayDateStr = now.toISOString().slice(0, 10)
+
+  // 11: Today's field activity rollup
+  const attTodayByUser = new Map<string, AttendanceRow>()
+  for (const a of attTodayRows) attTodayByUser.set(a.user_id, a)
+
+  let onDutyCount = 0, wfhCount = 0, leaveCount = 0
+  for (const a of attTodayRows) {
+    if (a.status_for_day === 'on_duty') onDutyCount += 1
+    else if (a.status_for_day === 'wfh') wfhCount += 1
+    else if (a.status_for_day === 'leave') leaveCount += 1
+  }
+  const noRecordCount = Math.max(0, reps.length - attTodayRows.length)
+
+  const visitsCompletedToday = visTodayRows.filter((v) => v.visit_outcome_id != null).length
+  const visitsOpenToday = visTodayRows.length - visitsCompletedToday
+  const totalKmToday = attTodayRows.reduce((s, a) => s + Number(a.total_km ?? 0), 0)
+  const totalExpenseToday = expTodayRows.reduce((s, e) => s + Number(e.amount ?? 0), 0)
+
+  const field_today: FieldToday = {
+    date: todayDateStr,
+    total_reps: reps.length,
+    on_duty_count: onDutyCount,
+    wfh_count: wfhCount,
+    leave_count: leaveCount,
+    no_record_count: noRecordCount,
+    visits_completed_today: visitsCompletedToday,
+    visits_open_today: visitsOpenToday,
+    total_km_today: totalKmToday,
+    total_expense_today: totalExpenseToday,
+  }
+
+  // 12: Team roster — one entry per field-eligible rep
+  const visitsTodayByUser = new Map<string, VisitRow[]>()
+  for (const v of visTodayRows) {
+    const list = visitsTodayByUser.get(v.user_id) ?? []
+    list.push(v)
+    visitsTodayByUser.set(v.user_id, list)
+  }
+
+  const roster: RosterEntry[] = reps
+    .map((r): RosterEntry => {
+      const att = attTodayByUser.get(r.id)
+      const userVisits = visitsTodayByUser.get(r.id) ?? []
+      // Latest visit by visited_at for location-label signal
+      const lastVisit = userVisits.length > 0
+        ? userVisits.reduce((a, b) => a.visited_at > b.visited_at ? a : b)
+        : null
+
+      let status: RosterStatus = 'no_record'
+      if (att) {
+        const sfd = att.status_for_day as 'on_duty' | 'wfh' | 'leave' | 'holiday'
+        status = sfd ?? 'no_record'
+      }
+      return {
+        user_id: r.id,
+        name: r.full_name,
+        role: r.role,
+        status,
+        check_in_at: att?.check_in_at ?? null,
+        check_out_at: att?.check_out_at ?? null,
+        visits_completed: userVisits.filter((v) => v.visit_outcome_id != null).length,
+        last_location_label: lastVisit?.location_label ?? null,
+        total_km: att?.total_km ?? null,
+        drill_href: `/field/team/${r.id}`,
+      }
+    })
+    // Sort: on_duty first (by check-in time), then wfh, then leave/holiday, then no_record
+    .sort((a, b) => {
+      const order: Record<RosterStatus, number> = {
+        on_duty: 0, wfh: 1, leave: 2, holiday: 3, no_record: 4,
+      }
+      const d = order[a.status] - order[b.status]
+      if (d !== 0) return d
+      // Within on_duty: earlier check-in first
+      if (a.status === 'on_duty' && b.status === 'on_duty') {
+        return (a.check_in_at ?? '').localeCompare(b.check_in_at ?? '')
+      }
+      return a.name.localeCompare(b.name)
+    })
+
+  // 13: Rep scorecards — aggregate period data per rep, top 5 by visits_completed
+  type ScorecardAcc = {
+    visits_completed: number
+    visits_opened: number
+    total_km: number
+    total_expense: number
+    on_duty_days: number
+  }
+  const scAcc = new Map<string, ScorecardAcc>()
+  const ensureSc = (uid: string): ScorecardAcc => {
+    let s = scAcc.get(uid)
+    if (!s) {
+      s = { visits_completed: 0, visits_opened: 0, total_km: 0, total_expense: 0, on_duty_days: 0 }
+      scAcc.set(uid, s)
+    }
+    return s
+  }
+  for (const v of visPeriodRows) {
+    const s = ensureSc(v.user_id)
+    s.visits_opened += 1
+    if (v.visit_outcome_id) s.visits_completed += 1
+  }
+  for (const a of attPeriodRows) {
+    const s = ensureSc(a.user_id)
+    s.total_km += Number(a.total_km ?? 0)
+    if (a.status_for_day === 'on_duty') s.on_duty_days += 1
+  }
+  for (const e of expPeriodRows) {
+    const s = ensureSc(e.user_id)
+    s.total_expense += Number(e.amount ?? 0)
+  }
+  const repNameById = new Map(reps.map((r) => [r.id, r.full_name]))
+  const rep_scorecards: RepScorecard[] = Array.from(scAcc.entries())
+    .filter(([uid]) => repNameById.has(uid))
+    .map(([uid, s]): RepScorecard => ({
+      user_id: uid,
+      name: repNameById.get(uid) ?? '—',
+      visits_completed: s.visits_completed,
+      visits_opened: s.visits_opened,
+      completion_pct: s.visits_opened > 0 ? (s.visits_completed / s.visits_opened) * 100 : null,
+      total_km: s.total_km,
+      total_expense: s.total_expense,
+      on_duty_days: s.on_duty_days,
+      drill_href: `/field/team/${uid}`,
+    }))
+    .sort((a, b) => b.visits_completed - a.visits_completed)
+    .slice(0, 5)
   const rankedOverdue = topOverdue
     .map((r) => ({ ...r, rank: Number(r.outstanding) * Math.max(1, Number(r.days_overdue)) }))
     .sort((a, b) => b.rank - a.rank)
@@ -1445,6 +1749,12 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     ? `${topRep.name} · ₹${topRep.closed_value.toLocaleString('en-IN')} from ${topRep.wins} win${topRep.wins === 1 ? '' : 's'}`
     : null
 
+  // ─── Slice 4 facts ──────────────────────────────────────────
+  const topFieldRep = rep_scorecards[0]
+  const topFieldRepLabel = topFieldRep
+    ? `${topFieldRep.name} · ${topFieldRep.visits_completed} visits · ${topFieldRep.total_km}km`
+    : null
+
   const facts: OwnerOverview['facts'] = {
     overdue_invoice_count: rankedOverdue.length,
     overdue_invoice_value: rankedOverdue.reduce((s, r) => s + Number(r.outstanding), 0),
@@ -1476,6 +1786,9 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     in_transit_dispatches: operations.in_transit_count,
     delivered_in_period: operations.delivered_count_period,
     top_loss_reason: top_loss_reasons[0]?.label ?? null,
+    on_duty_now_count: onDutyCount,
+    visits_completed_today: visitsCompletedToday,
+    top_field_rep_label: topFieldRepLabel,
   }
 
   return {
@@ -1492,6 +1805,9 @@ export async function getOwnerOverview(period: OwnerPeriod): Promise<OwnerOvervi
     win_rate,
     top_reps,
     operations,
+    field_today,
+    roster,
+    rep_scorecards,
     facts,
   }
 }

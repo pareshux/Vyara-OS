@@ -28,6 +28,9 @@ import { RevenueFunnel } from './revenue-funnel'
 import { WinRate } from './win-rate'
 import { TopReps } from './top-reps'
 import { Operations } from './operations'
+import { FieldToday } from './field-today'
+import { TeamRoster } from './team-roster'
+import { RepScorecards } from './rep-scorecards'
 import { Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -208,6 +211,45 @@ export default async function OwnerPage({
         <Operations ops={overview.operations} />
       </section>
 
+      {/* Section 11: Today's field activity — Slice 4 (Field + People) */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Today&rsquo;s field
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Point-in-time · who&rsquo;s on, how much activity today
+          </p>
+        </div>
+        <FieldToday today={overview.field_today} />
+      </section>
+
+      {/* Section 12: Team roster live */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Team roster
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            One row per field rep · click for the day view
+          </p>
+        </div>
+        <TeamRoster roster={overview.roster} />
+      </section>
+
+      {/* Section 13: Rep scorecards (period) */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Rep scorecards
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Top 5 by visits with outcome · period-coupled
+          </p>
+        </div>
+        <RepScorecards scorecards={overview.rep_scorecards} />
+      </section>
+
       {/* Section 2: Attention Centre — kept last so the owner ends on the
           ranked action list (the "what should I do next?" view). */}
       <section className="flex flex-col gap-3">
@@ -225,17 +267,17 @@ export default async function OwnerPage({
       {/* Footer — disclosure on what's not in this slice */}
       <Card className="bg-muted/30 border-dashed">
         <CardContent className="pt-4 text-sm text-muted-foreground flex flex-col gap-1">
-          <p className="font-medium text-foreground">Slices 1 + 2 + 3 of the Owner Dashboard.</p>
+          <p className="font-medium text-foreground">Slices 1 + 2 + 3 + 4 of the Owner Dashboard.</p>
           <p>
-            Slice 3 added revenue depth (pipeline funnel · win rate &amp; cycle ·
-            top reps · operations) — periodically-coupled where useful, with
-            honest gap markers for on-time delivery (DEL-007) and stock at risk
-            (no safety_stock field yet). Next slice adds Field Operations + People
-            rollups; the final slice adds drill-down filters + Quick Actions +
-            saved views. Five sections still show <span className="text-foreground">&ldquo;not tracked yet&rdquo;</span>
-            {' '}markers across the page — the underlying data (complaints, dispatch SLA,
-            generic firm credit limit, cash outflow, safety stock) is tracked in the Blueprint
-            (CS-001, DEL-007, REL-016, FIN-014) and slots in cleanly when those ship.
+            Slice 4 added field + people rollups (today&rsquo;s field activity · team
+            roster · rep scorecards) with honest gap markers for live GPS (FLD-023,
+            won&rsquo;t build &mdash; privacy + battery) and visit&rarr;closed-₹ attribution
+            (no FK from field_visit to quotation; saved for Slice 5). Final slice
+            adds drill-down filters + Quick Actions + saved views. Several
+            <span className="text-foreground"> &ldquo;not tracked yet&rdquo;</span> markers remain across the page &mdash;
+            the underlying data (complaints, dispatch SLA, generic firm credit limit, cash outflow,
+            safety stock, live GPS, visit attribution) is tracked in the Blueprint
+            (CS-001, DEL-007, REL-016, FIN-014, FLD-023) and slots in cleanly when those ship.
           </p>
         </CardContent>
       </Card>
