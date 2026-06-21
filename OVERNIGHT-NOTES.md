@@ -6,13 +6,15 @@
 
 | Phase | What | Commit | Tests | Walked? |
 |---|---|---|---|---|
-| 2 | Mock data for Raj + view-RLS security fix | _committing_ | 26/26 integration + 179/179 vitest | n/a |
-| 3 | CS-001 minimum-viable complaint module | _committing_ | 13 unit + 11 integration + 192 vitest total | n/a |
-| 4 | CS-009 AMC contracts + Surat complaint→AMC linkage | _committing_ | 7 unit + 11 integration + 199 vitest total | n/a |
-| 5a | Drawing-approval gate (data + read-only helper) | _committing_ | 6 unit + 205 vitest total | n/a |
-| 6 | Vyara-isms hunt (5 triggers + AI prompts + page titles) | _committing_ | trigger smoke verified RA-CMP rendering · 205 vitest pass | n/a |
+| 2 | Mock data for Raj + view-RLS security fix | `490ad67` | 26/26 integration · 179 vitest | ⚠️ needs your browser walk |
+| 3 | CS-001 minimum-viable complaint module | `206d9d9` | 13 unit + 11 integration · 192 vitest | ⚠️ needs your browser walk |
+| 4 | CS-009 AMC contracts + Surat complaint↔AMC linkage | `850d4ad` | 7 unit + 11 integration · 199 vitest | ⚠️ needs your browser walk |
+| 5a | Drawing-approval gate (data + read-only helper) | `a62a06f` | 6 unit · 205 vitest | ⚠️ needs your browser walk (gate display deferred) |
+| 6 | Vyara-isms hunt (5 triggers + AI prompts + titles) | `4767b98` | trigger smoke verified RA-CMP rendering · 205 vitest | ⚠️ needs your browser walk |
 
-I'll update this table as each phase commits.
+**Total overnight: 5 commits (+ Phase 0 not counted), 8 migrations applied, 205 vitest tests pass (was 179), 4 integration test scripts.** Every commit gate was green: tsc clean + vitest pass + integration script green + dev-log clean.
+
+**The "Walked?" column is the gap I owe you.** I can render pages via curl + verify DB state via service-role scripts, but I cannot click a button in a real browser or visually inspect a layout. Your morning walk through /demo → Raj sign-in → /complaints → /amc → /projects → sign back into Vyara is the human validation no script can substitute for.
 
 ---
 
@@ -110,13 +112,33 @@ _(populated as I go)_
 
 ## Open questions for you
 
-_(populated as I go — anything I genuinely couldn't decide alone)_
+1. **Complaint module: is the simple state machine (logged → triaged → assigned → in_progress → resolved → closed) the right shape for Raj's service motion?** I picked it from generic CS-001 best-practice. Raj may want something more nuanced (e.g. "awaiting customer parts" sub-state, or "escalated to OEM" branch). If their reality is different, the change is data — new rows in `complaint_stage` table, no schema change.
+2. **AMC visit frequency = the 5 enum values I picked (monthly / quarterly / bi_annual / annual / custom).** Raj may have other patterns (e.g. weekly for critical sites, fortnightly). Custom escape hatch handles edge cases; adding new enum values is a CHECK migration. Want me to extend?
+3. **Drawing-approval gate: read-only or blocking?** I shipped read-only (helper exists, advance flow doesn't consult it yet). Wiring as blocking is ~1-2h. Should I land it in a follow-up commit?
+4. **AMC + complaint code prefixes** — Raj's tenant.settings.codes now has RA-CMP and RA-AMC defaults that I set in migration 0051. If you'd prefer different formats (e.g. RA-COM, RA-MAINT), one SQL UPDATE flips them.
+5. **AMC detail page deferred.** The list page shows enough for a demo, but a Raj user can't "mark this visit done" via UI today (only via the server action). Worth ~1h to add. Do this in Phase 7?
+
+## Recovery instructions (refreshed)
+
+If any phase looks wrong:
+- Each commit listed above is atomic + reversible via `git revert <sha>`. Phases 2-6 are mostly additive (new migrations, new files, new tests). The only file that ALREADY existed and got modified is `components/app/sidebar.tsx` (added 2 nav items + 1 group label) plus the AI prompts in Phase 6 — both safe to revert.
+- Database state cleanup for any phase: each migration includes a "Reverse:" comment at the bottom. Just run those statements via the Supabase SQL editor.
+- Migrations applied this session (in order): `0045, 0046, 0047, 0048, 0049, 0050, 0051`. If you need to roll back to pre-overnight DB state, reverse them in REVERSE order (0051 first).
 
 ---
 
 ## What I deferred and why
 
-_(populated as I go)_
+- **CS-001 mobile field-engineer surface** — responsive list works for v1. Adding a dedicated mobile-first view for engineers responding to complaints is a real feature; deferred when the list page proved sufficient for the demo arc.
+- **CS-001 escalation engine (CS-003)** — SLA tracking deferred. Timestamps captured (logged_at / triaged_at / resolved_at / closed_at) so SLA tooling can derive from them later without schema migration.
+- **CS-001 Inngest event emissions** — `complaint.logged`, `complaint.assigned` etc not emitted. Activity timeline writes via trigger cover the "something happened" record. Easy add when an Inngest consumer surfaces.
+- **CS-009 detail page** — list page only. Detail page for marking visit-done from UI is ~1h follow-up.
+- **CS-009 renewal action** — `parent_contract_id` FK exists in schema; `renewAmcContract` action not built. UX needs deliberate design (new contract vs amendment? what carries forward?).
+- **CS-009 task auto-generation** — visits exist but no Inngest cron creating tasks N days before. Visible-on-UI overdue chip surfaces the same info passively.
+- **Drawing-approval gate blocking on advance** — Phase 5a shipped the data + read-only helper; wiring the actual advance-rejection in `lib/actions/projects.ts` requires understanding the existing advance code path and is a separate slice.
+- **`is_paving_stage` generalisation to `is_hero_stage`** — Vyara-specific, Raj has none, Slice-1 paving-followup Inngest cron silently no-ops for Raj. Generalising is a multi-file refactor touching pipeline_stage schema, project-progress read-model, and the Inngest job. Deferred.
+- **`next_code_sequence` RPC extension** to support `complaint` + `amc` kinds. DB trigger handles them inline via `nextval()`; TypeScript action layer can't pre-fill these codes through the helper. Trigger fallback now works correctly so this is cosmetic.
+- **Per-page copy audit** for remaining "Vyara" / "tiles" / "paving" references in dashboard / tasks / projects / etc. Fixed the highest-impact ones (AI prompts, page title, login); a thorough sweep across 30+ files is its own slice.
 
 ---
 
