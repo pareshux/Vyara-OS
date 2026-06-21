@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   LineChart,
   LifeBuoy,
+  CalendarClock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -102,8 +103,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Field',       href: '/field',       icon: MapPin,          group: 'field_ops',     feature: 'enable_field_sales' },
 
   // Customer Success — Blueprint capability §2.5. Built starting with
-  // CS-001 (complaints) in Raj demo Phase 3.
+  // CS-001 (complaints, Phase 3) + CS-009 (AMC contracts, Phase 4).
   { label: 'Complaints',  href: '/complaints',  icon: LifeBuoy,        group: 'customer_success' },
+  { label: 'AMC',         href: '/amc',         icon: CalendarClock,   group: 'customer_success' },
 
   // Finance — receivables, payables, claims (Blueprint §2.6).
   { label: 'Invoices',    href: '/invoices',    icon: FileText,        group: 'finance' },

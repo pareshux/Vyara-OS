@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | 2 | Mock data for Raj + view-RLS security fix | _committing_ | 26/26 integration + 179/179 vitest | n/a |
 | 3 | CS-001 minimum-viable complaint module | _committing_ | 13 unit + 11 integration + 192 vitest total | n/a |
-| 4 | CS-009 AMC contracts | _pending_ | _pending_ | n/a |
+| 4 | CS-009 AMC contracts + Surat complaint→AMC linkage | _committing_ | 7 unit + 11 integration + 199 vitest total | n/a |
 | 5a | Drawing-approval gate | _pending_ | _pending_ | n/a |
 | 6 | Vyara-isms hunt | _pending_ | _pending_ | n/a |
 
@@ -19,6 +19,17 @@ I'll update this table as each phase commits.
 ## Architectural decisions made overnight (every one is flippable)
 
 > Each entry: **decision · reason · cost-to-flip**.
+
+**Phase 4 (CS-009 AMC contracts):**
+- **State machine = simple text + CHECK** (draft / active / expired / renewed / cancelled), NOT a stage table · Reason: 5 states with linear-ish transitions; complaint_stage shape was overkill · Cost to flip: introduce amc_contract_stage table + FK (~2h refactor).
+- **Visit frequency = TEXT enum** (monthly / quarterly / bi_annual / annual / custom) with visits_per_year derived at create time · Reason: 5 frequencies cover real-world AMCs; custom escape hatch handles non-standard schedules · Cost to flip: drop enum + go fully custom with required visit-date input.
+- **Visit schedule auto-generated at contract activation (in the action, not Inngest cron)** · Reason: bounded computation, deterministic, idempotent — no need for a scheduled job · Cost to flip: move to Inngest if visit-generation logic grows complex (re-schedule on contract amendment, etc.).
+- **Renewal = NOT built in v1** (`parent_contract_id` FK exists for future renewals; no `renewContract` action). Reason: needs deliberate UX design (new contract vs amendment? when does old expire? how do mid-contract value changes interact?) · Cost to flip: add `renewAmcContract` action that inserts a new contract with parent_contract_id and advances old status to 'renewed' (~1h).
+- **Billing — no AMC-specific invoice schedule in v1** (contract carries `value` field; invoicing happens via the standard invoice flow). Reason: milestone billing is deferred to Phase 5b — same applies to AMC · Cost to flip: extend with `amc_billing_schedule` table when 5b lands.
+- **complaint.amc_contract_id FK added in 0050** (nullable). Surat complaint #1 (breakdown) linked to Surat AMC contract in the seed to demonstrate the AMC-tied-complaint flow.
+- **Task auto-generation for upcoming visits = deferred** · Reason: needs Inngest cron + N-day-warning config; for v1 the visit_schedule table + UI surfacing overdue visits suffices · Cost to flip: add an Inngest hourly job that creates tasks for visits scheduled in N days.
+- **/amc detail page = deferred** (only list page built) · Reason: list page with visit progress + overdue chip carries 80% of the value; detail page lands when "mark this visit done" needs to be a form action in the UI · Cost to flip: add `/amc/[id]/page.tsx` (~1h, mirrors complaint detail shape).
+- **`amc_contract_number` trigger hardcodes VT-AMC prefix** — fourth Vyara-ism in the same set (along with quotation/sales_order/invoice/complaint). Phase 6 will fix all five triggers together.
 
 **Phase 3 (CS-001 complaint module):**
 - **Severity model = system+tenant master (`severity_master`), NOT hardcoded enum** · Reason: cross-industry-by-configuration principle. Same pattern as task_type_master / activity_type_master · Cost to flip: drop the master + add enum CHECK on `complaint.severity` column (~30 min).
@@ -67,6 +78,8 @@ _(populated as I go)_
 | (existing `__tests__/slice2/`) — re-run after migrations 0046 + 0047 | 179 vitest tests · server actions · inngest handlers · unit helpers | 179/179 pass |
 | `__tests__/raj-phase3/actions/complaints.test.ts` (Phase 3) | createComplaint validation paths · advanceComplaintStage state guards (no-close-without-resolution, no-in-progress-without-assignee, same-stage rejection, unknown-stage rejection, missing-complaint rejection) · recordComplaintResolution validation · rejectComplaint reason-required · assignComplaint not-in-tenant rejection | 13/13 pass |
 | `scripts/test-raj-complaints.ts` (Phase 3) | Raj admin sign-in · 3 seeded complaints visible via RLS · cross-tenant isolation (0 Vyara complaints visible) · all 3 complaints have correct severity/stage/assignee shape · 11 stage_history rows present · severity_master + complaint_stage system seeds visible | 11/11 pass |
+| `__tests__/raj-phase4/actions/amc.test.ts` (Phase 4) | createAmcContract validation (title, firm, end_date > start_date, unknown frequency) · happy path returns visits_scheduled count · custom frequency filters to in-range dates · cancelAmcContract reason-required | 7/7 pass |
+| `scripts/test-raj-amc.ts` (Phase 4) | Raj admin sign-in · 2 AMC contracts visible (Surat monthly 12 visits + L&T quarterly 4 visits) · 16 total visit_schedule rows · cross-tenant isolation · Surat has 3 done visits / L&T all scheduled · complaint #1 linked to AMC #1 | 11/11 pass |
 
 ---
 
