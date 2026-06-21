@@ -23,7 +23,14 @@
 
 ## 2026-06-21
 
-### Owner Dashboard — INT-014 Slice 4 · Field + People (pending commit)
+### Honest Blueprint correction — INT-015 added; FLD-023 stays ❌ (pending commit)
+- **Tracks:** INT-015 (new, 💭 Considered)
+- **Capability:** Intelligence
+- **Tier:** Nice-have
+- **Status change:** new row 💭 added; rep-scorecards gap-marker text corrected to point at INT-015 instead of pretending it was "saved for Slice 5"
+- **Notes:** User asked whether the two gap markers on the Owner Dashboard rep scorecards (live GPS + visit attribution) were unbuilt or just deferred. Honest answer: (1) **FLD-023** live GPS is a documented `❌ Future / won't build` decision in §11.5 — privacy + battery + reps will turn it off; check-in stamps give ~90% of the value. Not a forgotten todo, an intentional Blueprint position. (2) **Visit → closed ₹ attribution was NOT in the Blueprint** at all. I described it as "saved for Slice 5" in my Slice 4 commit, which was sloppy — per the workflow rule in CLAUDE.md ("If no item exists for what you're about to build, stop and add it first"), I should have added it as a tracked Blueprint item before describing it as deferred. **Correction shipped:** new `INT-015` row added to §11.8 (Intelligence) with nice-have tier and 💭 Considered status; the rep-scorecards.tsx gap marker now references INT-015 explicitly and acknowledges the attribution rule (last-visit-before-win vs all-visits-credited vs time-decay) as an open design decision before any build. Read-model header comment updated for the same fix. **No feature code, no schema changes — purely a documentation honesty correction.** Build decision still open: do we lift INT-015 to 📋 + build in Slice 5, or keep it 💭 and finish drill-downs / filters / Quick Actions first?
+
+### Owner Dashboard — INT-014 Slice 4 · Field + People (227d24d)
 - **Tracks:** INT-014 (Slices 1+2+3+3.1+4 ✅)
 - **Capability:** Intelligence (cross-capability reads: Field Operations, Finance, Platform)
 - **Tier:** Should-have

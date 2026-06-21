@@ -6,9 +6,9 @@
  *
  * Honest gap: visit → win attribution is NOT computed here (no FK from
  * field_visit to quotation). Ranking by visits-with-outcome only. Adding a
- * "closed ₹ attributed to this rep's field visits" column would require
- * traversal via subject (lead.won_at, project terminal stage) — saved for
- * Slice 5 (drill-downs) or beyond.
+ * "closed ₹ attributed to this rep's field visits" column is tracked as
+ * Blueprint INT-015 (💭 Considered) — needs an attribution-rule decision
+ * before build (last-visit-before-win vs all-visits-credited).
  */
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
@@ -129,7 +129,8 @@ export function RepScorecards({ scorecards }: { scorecards: RepScorecard[] }) {
             />
             <GapItem
               title="Visit → closed ₹ attribution"
-              reason="No FK from field_visit to quotation. Ranking by visits-with-outcome only; closed-₹ attribution needs subject-traversal (saved for Slice 5)."
+              reason="Cross-reference field_visit subjects (lead.won_at, project terminal stage) against accepted quotations. Ranking is by visits-with-outcome only right now. Attribution rule is an open design call (last-visit-before-win vs all-visits-credited)."
+              blueprintId="INT-015"
             />
           </div>
         </CardContent>
