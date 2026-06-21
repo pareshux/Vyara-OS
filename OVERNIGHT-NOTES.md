@@ -9,7 +9,7 @@
 | 2 | Mock data for Raj + view-RLS security fix | _committing_ | 26/26 integration + 179/179 vitest | n/a |
 | 3 | CS-001 minimum-viable complaint module | _committing_ | 13 unit + 11 integration + 192 vitest total | n/a |
 | 4 | CS-009 AMC contracts + Surat complaint→AMC linkage | _committing_ | 7 unit + 11 integration + 199 vitest total | n/a |
-| 5a | Drawing-approval gate | _pending_ | _pending_ | n/a |
+| 5a | Drawing-approval gate (data + read-only helper) | _committing_ | 6 unit + 205 vitest total | n/a |
 | 6 | Vyara-isms hunt | _pending_ | _pending_ | n/a |
 
 I'll update this table as each phase commits.
@@ -19,6 +19,13 @@ I'll update this table as each phase commits.
 ## Architectural decisions made overnight (every one is flippable)
 
 > Each entry: **decision · reason · cost-to-flip**.
+
+**Phase 5a (drawing-approval gate):**
+- **Seeded gate_requirement rows for both Raj pipelines** (epc_project drawings_approved + panel_order drawings_approved). Both require `drawing_approval_pack` document; is_hard=true.
+- **Built read-only `lib/gates.ts` helper** (evaluateGatesForProject + evaluateGatesForStage) — returns list of {label, kind, required, satisfied} per stage. Pure read-only — no enforcement.
+- **Blocking enforcement on advance NOT wired** · Reason: the existing project advance-stage code lives in `lib/actions/projects.ts` and reads gate state differently than I've modelled it. Wiring blocking-on-advance requires understanding the existing UI affordance pattern + careful migration of the advance action to consult the new helper. Deferred to Phase 6 (Vyara-isms hunt) when I'll also be touching that code · Cost to flip: extend advanceProjectStage to call evaluateGatesForProject and reject if any is_hard gate is unsatisfied (~1-2h).
+- **Document upload UI for `drawing_approval_pack` type not wired** · Reason: attachment infrastructure exists (PLAT-013 / migration 0033) but project-detail page doesn't surface a "upload approval pack" affordance specifically · Cost to flip: add UI dropzone tagged with `metadata.type_key='drawing_approval_pack'` in the project detail page (~1h).
+- **Net deliverable Phase 5a:** data + helper + tests. Project advance can now READ the gate state cleanly. Showing it in the UI + blocking on it remain follow-up tasks.
 
 **Phase 4 (CS-009 AMC contracts):**
 - **State machine = simple text + CHECK** (draft / active / expired / renewed / cancelled), NOT a stage table · Reason: 5 states with linear-ish transitions; complaint_stage shape was overkill · Cost to flip: introduce amc_contract_stage table + FK (~2h refactor).
@@ -80,6 +87,7 @@ _(populated as I go)_
 | `scripts/test-raj-complaints.ts` (Phase 3) | Raj admin sign-in · 3 seeded complaints visible via RLS · cross-tenant isolation (0 Vyara complaints visible) · all 3 complaints have correct severity/stage/assignee shape · 11 stage_history rows present · severity_master + complaint_stage system seeds visible | 11/11 pass |
 | `__tests__/raj-phase4/actions/amc.test.ts` (Phase 4) | createAmcContract validation (title, firm, end_date > start_date, unknown frequency) · happy path returns visits_scheduled count · custom frequency filters to in-range dates · cancelAmcContract reason-required | 7/7 pass |
 | `scripts/test-raj-amc.ts` (Phase 4) | Raj admin sign-in · 2 AMC contracts visible (Surat monthly 12 visits + L&T quarterly 4 visits) · 16 total visit_schedule rows · cross-tenant isolation · Surat has 3 done visits / L&T all scheduled · complaint #1 linked to AMC #1 | 11/11 pass |
+| `__tests__/raj-phase5/gates.test.ts` (Phase 5a) | empty-gate stage returns [] · document gate satisfied when matching attachment present · unsatisfied when no attachment · field gate satisfied when project field populated · unsatisfied when field null · mixed doc+field gates evaluate independently | 6/6 pass |
 
 ---
 
