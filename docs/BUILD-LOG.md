@@ -21,6 +21,30 @@
 
 ## 2026-06-19
 
+## 2026-06-22
+
+### Constitution v2 → v3 amendment · cross-industry positioning · Raj demo plan locked (pending commit)
+- **Tracks:** governance (Constitution + CLAUDE.md + Blueprint Last-updated + memory)
+- **Capability:** Cross-cutting / governance
+- **Tier:** N/A (governance)
+- **Status change:** "Year-1 success = onboard a similar Tier-1/Tier-2 building-materials maker in 8 weeks" → "Year-1 success = onboard a customer in a different industry (Raj Avinsys, electrical EPC) in 8 weeks"
+- **Notes:** Two strategic decisions landed today, one drove the other.
+
+  **(1) The Constitution had been stale.** Blueprint v3 (`docs/PRODUCT-BLUEPRINT-v3.md` §0.1–§0.4) was already shaped horizontally — "modular Business Operating System for manufacturing, contracting, distribution, and service companies; industry behaviour from configuration + masters + activity types; 8 supported industries share one architecture." Constitution v2 still said "vertical SaaS for made-to-order building-materials manufacturers" with §5 explicitly excluding RMC / Steel / Furniture / Paint / Chemical and §10 deferring cross-industry expansion as "not a year-1 design constraint." Per CLAUDE.md's tiebreaker rule (*"Constitution wins on principles; Blueprint wins on capability partitioning"*) the two documents could co-exist, but only because nobody had tested the friction with a real cross-industry customer.
+
+  **(2) Pitching Raj Avinsys Pvt. Ltd. forced the recognition.** Raj is Gujarat's "premier electrical contracting company" (since 2004) running three motions: EPC project work (industrial customers — chemicals/pharma/energy/infra), panel manufacturing (MCC/PCC/PDB/APFC/PLC built-to-order), and AMC + breakdown maintenance ("73% retention" their headline metric). Honest research surfaced that the architecture *does* fit Raj — 6 of 8 capabilities map cleanly to their motions; the gaps are CS-001 complaints (unbuilt), CS-009 AMC contracts (unbuilt), drawing-approval gate (workflow extension), milestone-billing schedule (Finance extension), procurement tracking (Constitution §5 needed to broaden). User chose **Frame A** (cross-industry by design) over Frame B (one-off opportunistic): *"For us closing a customer based on their need and make the product adjust based on their requirement is a win."* That sentence IS the platform thesis stated plainly — recorded as a new feedback memory `feedback-cross-industry-by-configuration` so it doesn't drift.
+
+  **Amendment scope (surgical, not a rewrite):**
+  - `docs/CONSTITUTION.md` title bumped v2 → v3; top paragraph rewritten (positioning); year-1 success criterion rewritten (Raj named as first cross-industry target); v3 amendment note added at top documenting why + when; Principle #5 rewritten (in/out-of-scope language broadened — procurement IN for industries that depend on it; RMC-shape still requires deliberate cost decision; "Out-of-vertical" language replaced with "fundamentally different operational shapes"); Principle #10 rewritten (cross-industry expansion **is** a year-1 design constraint as of 2026-06-22; new abstractions must ask "does this work for an electrical-EPC tenant too?"); Current build section refreshed (Vyara Tiles build mature through Slice 4 + Sprint 1 + INT-014 Slices 1+2+3+3.1+4; INT-014 Slice 5 dropped on 2026-06-21; now in Raj demo build); Principles #0–#11 unchanged (always industry-neutral, only #5 and #10 had building-materials-specific language).
+  - `CLAUDE.md` preamble: top tagline rewritten to "modular Business Operating System"; year-1 metric rewritten with Raj named; doc reference bumped to (v3); the "Slice 1 + Slice 2 are complete..." stale paragraph removed and replaced with current state; Platform discipline test now asks "does this work for an electrical-EPC tenant too?"; Foundational audit Q7 references Constitution v3 + the Raj demo tenant as the live regression test; Current step section completely rewritten to record Raj demo plan (~3 weeks across 5 phases: provision tenant + masters → mock data → CS-001 → CS-009 → drawing-approval + milestone billing). Sprint 2 queue updated.
+  - `docs/PRODUCT-BLUEPRINT-v3.md` Last-updated line records the amendment + Raj plan; no §11 row changes (governance change, not a capability change).
+  - `docs/BUILD-LOG.md` this entry.
+  - `MEMORY.md` indexes new feedback memory `feedback-cross-industry-by-configuration`; `project-vyara-os.md` refreshed (positioning at top; build status reflecting current state); `project-current-state.md` snapshot reflects the amendment + Raj demo phasing.
+
+  **The Raj demo doubles as the Customer-#2 onboarding rehearsal.** Same code path a real second customer would take. The first time we flip to the Raj tenant, Vyara-isms in copy / AI prompts / seed data will surface; each surfaced item is a Customer-#2 readiness gap fixed before a real customer hits it. Predicted surface area (recorded in `project-current-state` for the next session): AI prompts referencing "manufacturing" / "Surat" / "tiles"; dashboard / empty-state copy; the Slice-1 `paving_stage` hero is fully Vyara-specific and likely needs to generalize to a per-tenant "hero stage"; dealer module needs feature-flag hidden for Raj (PLAT-004 already supports this); field_activity_type seeds need broadening.
+
+  **No code changes in this commit.** Docs-only. tsc / dev-server / runtime smoke unchanged. The Raj demo build begins as Phase 1 (provision tenant + Raj-shaped masters) in a separate commit after this one lands.
+
 ## 2026-06-21
 
 ### Owner Dashboard — INT-014 Slice 5 dropped after build-then-revert (pending commit)

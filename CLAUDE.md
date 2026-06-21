@@ -1,15 +1,15 @@
 # Vyara OS — Project Memory
 
-Vyara OS is **vertical SaaS for made-to-order building-materials manufacturers** (pavers, kerbs, tiles, precast, RCC products, cement bricks, marble cut-to-size). Target: **Tier 1 (₹100cr+) and Tier 2 (₹20–100cr)** manufacturers. **Vyara Tiles Limited is the launch customer (customer #1)** — not the only customer. **The product is not** a horizontal manufacturing OS, not a CRM, not a full ERP. It is the **Manufacturing Business OS** — one system to run the **commercial and operational** side (sales → specification → samples → quotes → orders → operational inventory → dispatch → collections → service), with accounting/production integrated, not rebuilt.
+Vyara OS is a **modular Business Operating System** for manufacturing, contracting, distribution, and service companies — one system to run the **commercial and operational** side (sales → specification / scoping → samples / drawings → quotes → orders → operational inventory → dispatch → installation / commissioning → collections → service → AMC), with accounting and production integrated, not rebuilt. **Building-materials-first launch: Vyara Tiles Limited is customer #1.** Cross-industry by **configuration, not code fork** — the eight supported industries (building materials, electrical contractors, industrial manufacturers, HVAC, engineering, distributors, fabricators, service businesses; see Blueprint §0.4) share one architecture. Target customers per industry: **Tier 1 (₹100cr+) and Tier 2 (₹20–100cr)**. **The product is not** a CRM, not a full ERP, not a tools-and-features grab-bag — it owns the commercial+operational layer and integrates the rest.
 
-**Year-1 success metric:** Vyara is delighted AND we can onboard a similar Tier-1 or Tier-2 manufacturer in **under 8 weeks**. The second clause is the only thing that proves the platform thesis.
+**Year-1 success metric:** Vyara Tiles is delighted AND we can onboard a customer in a **different industry** in **under 8 weeks**. **Raj Avinsys Pvt. Ltd.** (electrical EPC + panel manufacturing + AMC, Gujarat) is the first cross-industry target. Two industries on one architecture, ≤8 weeks per onboarding, is the only honest test of *modular Business OS* vs *vertical SaaS in disguise*. (Positioning shifted from "vertical SaaS for building-materials manufacturers" to "modular Business OS, cross-industry by configuration" on 2026-06-22 — Constitution v2 → v3 amendment.)
 
-**Slice 1 + Slice 2 are complete** (architect-specified commercial motion, order → dispatch → invoice → collection). Slice 2.5 (operational inventory) and Slice 3 (Dealer → portal → orders) are next candidates. Three other commercial motions — tenders, direct-contractor scheduling, dealer/distributor — are partially or not yet built; see vision blueprint.
+**Vyara Tiles build is mature.** Slices 1 + 2 + 2.5 + 3 + 3.5 + 4 all in `main`. Sprint 1 Platform foundations all shipped (PLAT-004 through PLAT-011). Owner Dashboard (INT-014) shipped Slices 1+2+3+3.1+4; Slice 5 dropped 2026-06-21 (subsumed by INT-009 conversational agent).
 
 ## Read these first — they govern everything
 
 - **@docs/PRODUCT-BLUEPRINT-v3.md — THE SOURCE OF TRUTH.** Eight locked capabilities + Status Tracker (§11) for every planned/in-progress/shipped item. Read this before any non-trivial work.
-- @docs/CONSTITUTION.md (v2) — vertical positioning, product principles (immutable), technical assumptions (revisable). On any conflict, the Constitution wins on principles; the Blueprint wins on capability partitioning.
+- @docs/CONSTITUTION.md (v3) — cross-industry positioning, product principles (immutable), technical assumptions (revisable). On any conflict, the Constitution wins on principles; the Blueprint wins on capability partitioning.
 - @docs/BUILD-LOG.md — chronological record of what shipped, when, against which Blueprint item.
 - @docs/design.md — UX/UI law (shadcn/ui, design tokens, device tiers). Set the design tokens as the theme **before** building any screen.
 - @docs/vyara-slice1-build-spec.md — Slice 1 spec. Status: complete.
@@ -52,7 +52,7 @@ This is a hard rule, not a suggestion. Every meaningful change touches the Bluep
 - Work tasks **one at a time**. After each: make sure the app runs, commit, update the Blueprint + Build Log, then continue.
 - Pause only for **genuinely blocking** decisions — at most **3 blocking decisions + 5 recommendations** per task, then proceed with a clearly stated assumption.
 - Don't over-design unknowns. Assume the architecture is ~80% right and build; let the rest emerge.
-- **Platform discipline test:** for every new abstraction or schema decision, ask "does this work for customer #2 in the vertical, or am I encoding a Vyara quirk?" Vyara-specific things are configured per tenant, never hardcoded.
+- **Platform discipline test:** for every new abstraction or schema decision, ask "does this work for an electrical-EPC tenant too, or am I encoding a Vyara-Tiles quirk?" Vyara-specific things are configured per tenant, never hardcoded. (Per Constitution v3, the test customer is no longer a hypothetical second tiles maker — it's Raj Avinsys, an explicitly different industry.)
 - **No new top-level modules.** If a need doesn't fit into one of the eight capabilities, the answer is to extend the capability, not create a new one. See Blueprint §0.2.
 
 ## Foundational audit — run BEFORE building any feature, page, or module
@@ -65,7 +65,7 @@ Before writing code for any new surface, surface findings on these seven questio
 4. **CRUD completeness** — for every entity touched, is there Create / Read / Update / Delete via UI? If something's missing, is it intentional (snapshots are immutable per Principle #8) or a gap that will bite later?
 5. **Action ↔ UI symmetry** — every server action should have a UI calling it; every UI surface should have a corresponding action. Asymmetry is how Slice 1 ended up with quote-creation that no UI invoked and notification-writes to nonexistent columns.
 6. **Cross-module coupling** — any write to another module's tables? Any hidden read assumption? Convert to event-driven if possible (Principle #0).
-7. **Customer-#2 readiness** — does this hardcode any Vyara-specific enum, label, or value? Per Constitution v2 year-1 success criterion, the answer must be no.
+7. **Customer-#2 readiness** — does this hardcode any Vyara-specific enum, label, or value? Per Constitution v3 year-1 success criterion (Raj Avinsys onboarding ≤8 weeks), the answer must be no. The Raj demo tenant is the live regression test for this.
 
 Format the findings as a short list ("here's what this depends on / here's what's missing / here's what I'd build vs defer"), let the user decide what's in/out, then build. This is the discipline that prevents the "wait, did we forget X?" loop.
 
@@ -98,22 +98,13 @@ Inngest jobs: `paving-stage-daily-check`, `order-on-quote-won`, `dispatch-on-ord
 
 ## Current step
 
-**Slices 1 + 2 + 2.5 + 3 + 3.5 + 4 complete.** Slice 4 (Field Operations — formerly "Field Sales") shipped check-in/out, planned visits with per-leg km, voice + photo AI, manager team view, and claim approval. Steps 1–6 + UX patches all in `main`.
+**Vyara Tiles build mature.** Slices 1 + 2 + 2.5 + 3 + 3.5 + 4 all in `main` (Lead→Project→Sample→Quote, Order→Dispatch→Invoice→Collection, Dealer + portal, masters + configuration, Field Operations). Sprint 1 Platform foundations all shipped (PLAT-004 through PLAT-011: feature flags, tenant settings, masters, sensitive masking, TS types, observability, code-prefix consumers, tenant provisioning CLI). Owner Dashboard (INT-014) shipped Slices 1+2+3+3.1+4; Slice 5 dropped 2026-06-21 (subsumed by INT-009 conversational agent). See `docs/PRODUCT-BLUEPRINT-v3.md` §11 (Status Tracker) for the per-item ledger.
 
-**Now in Sprint 1 — Platform foundations for Customer #2.** See `docs/PRODUCT-BLUEPRINT-v3.md` §11 (Status Tracker) for the per-item ledger. Sprint 1 deliverables in priority order:
+**Now in: Raj Avinsys cross-industry demo (Constitution v3's first cross-industry test).** Approach: provision `raj-avinsys` as a second tenant via the existing onboarding CLI; seed Raj-shaped masters (16-stage EPC pipeline, electrical activity-type vocabulary, industrial/consultant/OEM relationship types); seed mock data covering EPC + panel manufacturing + AMC motions; build the un-built capabilities Raj's motion requires (CS-001 complaint module, CS-009 AMC contracts, drawing-approval workflow gate, milestone-billing schedule); add a `/demo` landing page with two "Sign in as…" buttons for tenant switching. **Estimated ~3 weeks across slices.**
 
-- ✅ PLAT-004 — Feature flags (`203239d`)
-- ✅ PLAT-005 — Tenant config schema + code renderer (`56c8dde`)
-- ✅ PLAT-006 — task_type / activity_type masters (`d2c9115`)
-- 🚧 PLAT-007 — Sensitive-column mask helper (in progress)
-- 📋 PLAT-008 — TS types from DB
-- 📋 PLAT-009 — Sentry observability
-- 📋 PLAT-010 — Code-prefix configuration consumers (replace per-table triggers)
-- 📋 PLAT-011 — Tenant lifecycle + subdomain routing
+**The demo doubles as the Customer-#2 onboarding rehearsal** — same code path a real second customer would take. The first time we flip to the Raj tenant, Vyara-isms in copy / AI prompts / seed data will surface; each surfaced item is a Customer-#2 readiness gap fixed before a real customer hits it.
 
-After Sprint 1 closes, **Customer #2 onboarding** is the gate. Sprint 2 begins post-Customer-#2 with the queue under "Must-have post-C#2" in §11.
-
-The **customer-#2 onboarding test has not yet been attempted.** Currently estimated at **~2 months** post Sprint 1. The Platform foundations above are what makes 8 weeks honest.
+**Sprint 2 queue (post-Raj-demo, locked candidates):** CS-001 (complaint module — also a Raj-demo requirement, gets built now), CS-009 (AMC contracts — same), REV-006 (workflow engine wired or dropped), REL-007 (lead state model), FIN-005 (approval engine consumer wiring). INT-009 (conversational agent) is now positioned as the ONLY drill-down path on /owner since Slice 5 dropped.
 
 ## Slice 1 schema drift — RESOLVED
 
