@@ -23,6 +23,7 @@ import {
   MapPin,
   ShieldCheck,
   LineChart,
+  LifeBuoy,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -42,21 +43,22 @@ type FeatureKey =
 // Section order follows the Blueprint capability sequence (Relationship,
 // Revenue, Delivery, Field Operations, Finance) so the nav mirrors
 // the operating-model document the team reads.
-type GroupKey = 'home' | 'executive' | 'relationship' | 'revenue' | 'delivery' | 'field_ops' | 'finance' | 'utility'
+type GroupKey = 'home' | 'executive' | 'relationship' | 'revenue' | 'delivery' | 'field_ops' | 'customer_success' | 'finance' | 'utility'
 
 const GROUP_LABEL: Record<GroupKey, string | null> = {
-  home:         null,           // no header
-  executive:    'Executive',    // INT-014 — admin-only group
-  relationship: 'Relationship',
-  revenue:      'Revenue',
-  delivery:     'Delivery',
-  field_ops:    'Field Ops',
-  finance:      'Finance',
-  utility:      null,           // no header
+  home:             null,                 // no header
+  executive:        'Executive',          // INT-014 — admin-only group
+  relationship:     'Relationship',
+  revenue:          'Revenue',
+  delivery:         'Delivery',
+  field_ops:        'Field Ops',
+  customer_success: 'Customer Success',   // CS-001 + future CS-009
+  finance:          'Finance',
+  utility:          null,                 // no header
 }
 
 const GROUP_ORDER: GroupKey[] = [
-  'home', 'executive', 'relationship', 'revenue', 'delivery', 'field_ops', 'finance', 'utility',
+  'home', 'executive', 'relationship', 'revenue', 'delivery', 'field_ops', 'customer_success', 'finance', 'utility',
 ]
 
 type NavItem = {
@@ -98,6 +100,10 @@ const NAV_ITEMS: NavItem[] = [
   // Role-aware link resolver below routes managers to /field/team and
   // reps to /field — same nav item, different landing.
   { label: 'Field',       href: '/field',       icon: MapPin,          group: 'field_ops',     feature: 'enable_field_sales' },
+
+  // Customer Success — Blueprint capability §2.5. Built starting with
+  // CS-001 (complaints) in Raj demo Phase 3.
+  { label: 'Complaints',  href: '/complaints',  icon: LifeBuoy,        group: 'customer_success' },
 
   // Finance — receivables, payables, claims (Blueprint §2.6).
   { label: 'Invoices',    href: '/invoices',    icon: FileText,        group: 'finance' },
