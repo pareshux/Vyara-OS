@@ -52,3 +52,4 @@ supabase/.temp/
 # README recommends putting real configs outside the repo (e.g. /tmp/).
 scripts/*-config.*.json
 !scripts/*-config.example.json
+!scripts/*-config.*.example.json

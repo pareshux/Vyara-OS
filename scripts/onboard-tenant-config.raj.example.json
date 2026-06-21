@@ -1,0 +1,42 @@
+{
+  "tenant": {
+    "name": "Raj Avinsys Pvt. Ltd.",
+    "slug": "raj-avinsys",
+    "plan": "pilot",
+    "settings": {
+      "codes": {
+        "quotation":   "RA-QT-{yyyy}-{nnnn}",
+        "sales_order": "RA-SO-{yyyy}-{nnnn}",
+        "invoice":     "RA-INV-{yyyy}-{nnnn}",
+        "dispatch":    "RA-DC-{yyyy}-{nnnn}",
+        "lead":        "RA-LD-{yyyy}-{nnnn}",
+        "dealer":      "RA-DLR-{nnnn}"
+      },
+      "field": {
+        "auto_approve_threshold_rupees": 500,
+        "working_hours": {
+          "start_ist": 9,
+          "end_ist":   18
+        }
+      }
+    }
+  },
+  "admin": {
+    "email": "admin@rajavinsys.example",
+    "password": "CHANGE-ME-strong-pw-1234",
+    "full_name": "Raj Admin",
+    "phone": null
+  },
+  "features": {
+    "enable_field_sales":   true,
+    "enable_dealer_portal": false,
+    "enable_collections":   true,
+    "enable_tally_sync":    true,
+    "enable_ai_surfaces":   true,
+    "enable_inventory":     true,
+    "enable_warehouse":     true,
+    "enable_dispatches":    true,
+    "enable_finance":       true,
+    "enable_daily_digest":  true
+  }
+}

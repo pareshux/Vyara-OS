@@ -23,7 +23,42 @@
 
 ## 2026-06-22
 
-### Constitution v2 → v3 amendment · cross-industry positioning · Raj demo plan locked (pending commit)
+### Raj demo Phase 1 — tenant provisioned + pipelines seeded + /demo landing page (pending commit)
+- **Tracks:** governance (Raj demo build, not a Blueprint Status Tracker row — onboarding rehearsal); FLD-009 (new system visit_purpose codes); cross-industry-by-configuration principle test
+- **Capability:** Cross-cutting (Platform + Relationship + Revenue + Field Ops touched via seeds)
+- **Tier:** N/A (Raj demo, not a tracked Blueprint capability)
+- **Status change:** Phase 1 of 6 done; Phases 2–6 still planned
+- **Notes:** First cross-industry tenant successfully provisioned + seeded + signable-in. **Foundational audit findings** (Explore agent before code) shaped the design and were honest about what already existed:
+  - NO `pipeline_template` table — stages hang directly off `tenant_id + segment` TEXT. Vyara uses `segment='architect'` for its 6-stage flow; Raj uses `segment='epc_project'` (18 rows) + `segment='panel_order'` (12 rows). The "two pipeline templates" decision lands as two segment values, not a new table.
+  - All 3 relationship_types I had originally planned for Raj (industrial_buyer / epc_consultant / oem_partner) **already exist as system rows** in `relationship_type_master` from migration 0031 (`customer`, `consultant`, `partner`, `vendor`). **Zero new relationship_type seeds needed for Raj.** Cross-industry vocabulary turned out to already cover EPC.
+  - Of 6 originally-planned visit_purpose codes for Raj, only 2 (`drawing_review_meeting`, `fat_witness`) were genuinely new — the other 4 (commissioning, amc_visit, installation, handover-as-`handover`, breakdown as `breakdown_response`) were already in migration 0032's seed. New ones land as SYSTEM rows (tenant_id NULL) since they benefit any future EPC/electrical/HVAC tenant per the cross-industry principle.
+  - `is_paving_stage` flag is fully Vyara-specific (drives the Slice-1 paving-followup Inngest hero). Raj has no stage with `is_paving_stage=true` — Inngest job will silently no-op for Raj. Generalising to a per-tenant `is_hero_stage` with a tenant-configurable label is a Phase 6 decision (Vyara-isms hunt), not Phase 1.
+  - Existing system masters already cover Raj's needs for: relationship_type (12 system rows cover EPC vocabulary), task_type (17 system seeds), activity_type (24 system seeds), most visit_purpose. The platform claim *"configuration covers most industry variation"* held up empirically — first cross-industry test confirms it.
+
+  **Files shipped:**
+  - `supabase/migrations/0045_raj_demo_visit_purposes.sql` — 2 new SYSTEM visit_purpose rows (tenant_id NULL = visible to all tenants). Applied to remote via `supabase db push`.
+  - `scripts/onboard-tenant-config.raj.example.json` (committed) + `scripts/onboard-tenant-config.raj.json` (gitignored — holds the admin password). Codes prefix `RA-` (RA-QT/RA-SO/RA-INV/RA-DC/RA-LD); `enable_dealer_portal=false` (EPC sells direct to industrial customers, no dealer channel); admin email `admin@rajavinsys.example` / password `RajDemo@1234` (matches `/demo` page hardcode).
+  - `scripts/seed-raj-pipeline.ts` — Raj-specific pipeline stage seed. Looks up `raj-avinsys` tenant by slug (separation of concerns from `onboard-tenant.ts`); idempotent via delete-then-insert (PostgREST `.upsert()` couldn't infer the partial unique index on `(tenant_id, segment, stage_key) WHERE tenant_id IS NOT NULL AND deleted_at IS NULL` — partial-index inference is conservative). 30 rows inserted (18 EPC + 12 Panel).
+  - `app/demo/page.tsx` — public landing page (no auth required). Two cards (Vyara Tiles, Raj Avinsys) with inline credentials shown for transparency. Each card has a `<form action={demoSignIn}>` with hidden email/password inputs.
+  - `app/demo/actions.ts` — dedicated `demoSignIn(formData): Promise<void>` server action (existing `signIn` returns `{error}` for inline display which doesn't satisfy React's form-action-prop `Promise<void>` shape). Always redirects (success → /dashboard; failure → /demo?error=...).
+
+  **Runtime hiccups + fixes** (recorded for future onboarding):
+  - First run of `onboard-tenant.ts` blew up on `_comment_features` key inside the features block — the Zod schema's `.passthrough()` let the string value through and tried to UPSERT it as a `tenant_feature` row. Fixed by stripping `_comment*` keys from both example + raj configs. Hardening the script to filter `_`-prefixed keys at runtime is a deferred follow-up.
+  - First run of `seed-raj-pipeline.ts` failed with *"no unique or exclusion constraint matching the ON CONFLICT specification"* — PostgREST `.upsert()` couldn't infer the partial unique index. Switched to delete-then-insert (safe because all rows are tenant-scoped to Raj only).
+  - `tsx` doesn't auto-load `.env.local` — needs `--env-file=.env.local` flag. Worth adding to `scripts/README.md`.
+
+  **Verification (service-role + anon-key test script):**
+  - Raj admin signs in via public anon auth flow ✓
+  - 37 pipeline_stage rows visible to signed-in Raj admin (30 Raj-scoped + 7 system inheritances from older migrations)
+  - 18 EPC stages + 12 Panel stages confirmed
+  - New visit_purpose system codes visible to Raj ✓
+  - 10 feature flags applied (`enable_dealer_portal=false`, rest `true`) ✓
+
+  **Walked in browser:** user confirmed Vyara experience unchanged + Raj sign-in works. No Vyara-isms flagged yet (the surface is mostly empty for Raj until Phase 2 mock data lands; deeper hunt happens after data is seeded).
+
+  **Effort:** ~3 days estimate → ~3 hours actual. Most of the savings came from the audit revealing that existing system masters already cover Raj's vocabulary. **Phase 2 next (~3 days):** mock data — 5 firms (chemicals/pharma/energy/infra), 2 in-flight EPC projects at different stages, 1 panel order, quotations + 1 advance invoice. Walks the platform thesis with real-looking data.
+
+### Constitution v2 → v3 amendment · cross-industry positioning · Raj demo plan locked (ca5f945)
 - **Tracks:** governance (Constitution + CLAUDE.md + Blueprint Last-updated + memory)
 - **Capability:** Cross-cutting / governance
 - **Tier:** N/A (governance)
@@ -47,7 +82,7 @@
 
 ## 2026-06-21
 
-### Owner Dashboard — INT-014 Slice 5 dropped after build-then-revert (pending commit)
+### Owner Dashboard — INT-014 Slice 5 dropped after build-then-revert (f4e87d7)
 - **Tracks:** INT-014 (✅ final at Slices 1+2+3+3.1+4); INT-009 (drop sharpens its mandate)
 - **Capability:** Intelligence
 - **Tier:** Should-have (slice originally planned; now dropped)
