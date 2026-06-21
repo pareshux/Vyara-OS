@@ -43,8 +43,10 @@
 //   - Section 13: Rep scorecards (period-coupled — top 5 reps by
 //                visits-with-outcome, with km + expense in period)
 //
-// Slice 5 (planned) extends:
-//   - Drill-down read-paths + filter set
+// INT-014 is final at Slices 1–4. The originally-planned Slice 5 (drill-down
+// filters, saved views, Quick Actions) was dropped — the conversational
+// agent (INT-009) is the stronger drill-down path on an executive surface,
+// and the trimmed brief's action chips (Slice 3.1) cover Quick Actions.
 //
 // Per Constitution #0: no direct cross-module writes. This file only
 // reads. Per Constitution #7: nothing here references masked columns

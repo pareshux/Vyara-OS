@@ -2,11 +2,13 @@
  * /owner — Owner Dashboard (Blueprint INT-014).
  *
  * Admin-only executive surface. Sections 1 (Business Health) + 2 (Attention
- * Centre) + AI Owner Brief in Slice 1. Future slices (per Blueprint INT-014):
- *  - Slice 2 — Sections 3 + 4 (Revenue + Operations)
- *  - Slice 3 — Sections 5 + 6 (Finance + Relationships)
- *  - Slice 4 — Sections 7 + 8 (Field Operations + People)
- *  - Slice 5 — Drill-downs, filters, Quick Actions
+ * Centre) + AI Owner Brief in Slice 1. Slices 2 (Finance depth) + 3 (Revenue
+ * + Ops) + 4 (Field + People) have also shipped. INT-014 is now complete at
+ * Slices 1–4; the originally-planned Slice 5 (drill-down filters, saved views,
+ * Quick Actions) was dropped — the conversational agent (INT-009) is the
+ * stronger drill-down path on this surface (filters force operating the
+ * dashboard; chat lets the owner interrogate it). The trimmed brief's action
+ * chips (Slice 3.1) cover the Quick-Actions need.
  *
  * Architectural rule (mirrors customer-360, project-progress, field-day): the
  * page is a dumb consumer of one assembled object. New sections extend the
@@ -264,20 +266,20 @@ export default async function OwnerPage({
         <AttentionCentre items={overview.attention} />
       </section>
 
-      {/* Footer — disclosure on what's not in this slice */}
+      {/* Footer — disclosure on what's not on this surface */}
       <Card className="bg-muted/30 border-dashed">
         <CardContent className="pt-4 text-sm text-muted-foreground flex flex-col gap-1">
-          <p className="font-medium text-foreground">Slices 1 + 2 + 3 + 4 of the Owner Dashboard.</p>
+          <p className="font-medium text-foreground">Owner Dashboard &mdash; Slices 1 + 2 + 3 + 4 final.</p>
           <p>
-            Slice 4 added field + people rollups (today&rsquo;s field activity · team
-            roster · rep scorecards) with honest gap markers for live GPS (FLD-023,
-            won&rsquo;t build &mdash; privacy + battery) and visit&rarr;closed-₹ attribution
-            (no FK from field_visit to quotation; saved for Slice 5). Final slice
-            adds drill-down filters + Quick Actions + saved views. Several
+            The originally-planned Slice 5 (drill-down filters · saved views · Quick Actions) was
+            dropped &mdash; the conversational agent (INT-009) is the stronger drill-down path on a
+            twice-a-day executive surface (chat returns specific answers; filters force operating
+            the dashboard). The trimmed brief&rsquo;s action chips (Slice 3.1) cover the Quick-Actions
+            need. Several
             <span className="text-foreground"> &ldquo;not tracked yet&rdquo;</span> markers remain across the page &mdash;
             the underlying data (complaints, dispatch SLA, generic firm credit limit, cash outflow,
             safety stock, live GPS, visit attribution) is tracked in the Blueprint
-            (CS-001, DEL-007, REL-016, FIN-014, FLD-023) and slots in cleanly when those ship.
+            (CS-001, DEL-007, REL-016, FIN-014, FLD-023, INT-015) and slots in cleanly when those ship.
           </p>
         </CardContent>
       </Card>
