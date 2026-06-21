@@ -2,15 +2,26 @@
  * OwnerBriefCard — async server component that renders the AI Owner Brief.
  * Blueprint INT-014.
  *
+ * Slice 3.1 redesign — replaced the 3-column wall of opportunities / risks /
+ * recommendations with a tighter shape:
+ *   severity chip · headline · up to 3 action chips that drill into list pages.
+ *
+ * The chips ARE the surface the MD acts on. "Tell me more" lives in the
+ * conversational agent (INT-009).
+ *
  * Cached 6h in ai_extraction via getOwnerBrief. Soft-fails on AI errors
  * (renders a discreet "could not generate" message rather than blocking
  * the page).
  */
-import { Sparkles, AlertCircle, CheckCircle2, AlertTriangle, ArrowUp, ArrowDown, Lightbulb } from 'lucide-react'
+import Link from 'next/link'
+import {
+  Sparkles, AlertCircle, CheckCircle2, AlertTriangle, ArrowRight,
+} from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { getOwnerBrief } from '@/lib/actions/owner-brief'
-import type { OwnerBriefResult } from '@/lib/ai/prompts/owner-brief'
+import type { OwnerBriefResult, OwnerAction } from '@/lib/ai/prompts/owner-brief'
 
 const HEALTH_CONFIG: Record<
   OwnerBriefResult['health'],
@@ -40,6 +51,12 @@ const HEALTH_CONFIG: Record<
     iconClass: 'text-red-600',
     badgeClass: 'bg-red-50 text-red-700 border-red-200',
   },
+}
+
+/** Map (target, search) → URL. List pages that don't support `q` ignore it gracefully. */
+function actionHref(action: OwnerAction): string {
+  const base = `/${action.target}`
+  return action.search ? `${base}?q=${encodeURIComponent(action.search)}` : base
 }
 
 export async function OwnerBriefCard() {
@@ -73,14 +90,10 @@ export async function OwnerBriefCard() {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   })
 
-  const hasOpps = brief.top_opportunities.length > 0
-  const hasRisks = brief.top_risks.length > 0
-  const hasRecs = brief.recommendations.length > 0
-
   return (
     <Card className={cfg.cardClass}>
       <CardContent className="pt-4 flex flex-col gap-3">
-        {/* Header */}
+        {/* Header: severity icon + title + chip + freshness + headline */}
         <div className="flex items-start gap-3">
           <div className={`flex size-9 items-center justify-center rounded-lg shrink-0 ${cfg.iconBg}`}>
             <Icon className={`size-4 ${cfg.iconClass}`} />
@@ -95,37 +108,23 @@ export async function OwnerBriefCard() {
                 {cached ? 'cached' : 'fresh'} · {generatedLabel}
               </span>
             </div>
-            <p className="mt-1.5 text-sm text-foreground leading-snug">{brief.headline}</p>
+            <p className="mt-1.5 text-base text-foreground leading-snug font-medium">
+              {brief.headline}
+            </p>
           </div>
         </div>
 
-        {/* Three-column body — opportunities · risks · recommendations */}
-        {(hasOpps || hasRisks || hasRecs) && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
-            {hasOpps && (
-              <BriefList
-                icon={<ArrowUp className="size-3.5" />}
-                title="Opportunities"
-                items={brief.top_opportunities}
-                accentClass="text-green-700"
-              />
-            )}
-            {hasRisks && (
-              <BriefList
-                icon={<ArrowDown className="size-3.5" />}
-                title="Risks"
-                items={brief.top_risks}
-                accentClass="text-red-700"
-              />
-            )}
-            {hasRecs && (
-              <BriefList
-                icon={<Lightbulb className="size-3.5" />}
-                title="Recommendations"
-                items={brief.recommendations}
-                accentClass="text-amber-700"
-              />
-            )}
+        {/* Action chips row */}
+        {brief.actions.length > 0 && (
+          <div className="flex flex-col gap-1.5 ml-12">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+              What to do today →
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {brief.actions.map((a, i) => (
+                <ActionChip key={i} action={a} />
+              ))}
+            </div>
           </div>
         )}
       </CardContent>
@@ -133,24 +132,19 @@ export async function OwnerBriefCard() {
   )
 }
 
-function BriefList({
-  icon, title, items, accentClass,
-}: { icon: React.ReactNode; title: string; items: string[]; accentClass: string }) {
+function ActionChip({ action }: { action: OwnerAction }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className={`flex items-center gap-1.5 ${accentClass} text-xs font-medium uppercase tracking-wide`}>
-        {icon}
-        {title}
-      </div>
-      <ul className="flex flex-col gap-1.5">
-        {items.map((s, i) => (
-          <li key={i} className="flex items-start gap-1.5 text-sm text-foreground/90 leading-snug">
-            <span className="mt-1.5 size-1 rounded-full bg-foreground/40 shrink-0" />
-            <span>{s}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <Link
+      href={actionHref(action)}
+      className={cn(
+        'group inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5',
+        'text-xs font-medium text-foreground tabular-nums',
+        'transition-colors hover:bg-primary/5 hover:border-primary/40 hover:text-primary',
+      )}
+    >
+      <span className="truncate max-w-[18rem] md:max-w-none">{action.label}</span>
+      <ArrowRight className="size-3 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+    </Link>
   )
 }
 
@@ -158,22 +152,20 @@ export function OwnerBriefSkeleton() {
   return (
     <Card>
       <CardContent className="pt-4 flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <Skeleton className="size-9 rounded-lg" />
+        <div className="flex items-start gap-3">
+          <Skeleton className="size-9 rounded-lg shrink-0" />
           <div className="flex-1 flex flex-col gap-2">
             <Skeleton className="h-3 w-32" />
             <Skeleton className="h-4 w-3/4" />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="flex flex-col gap-2">
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-3 w-4/5" />
-              <Skeleton className="h-3 w-3/5" />
-            </div>
-          ))}
+        <div className="ml-12 flex flex-col gap-1.5">
+          <Skeleton className="h-3 w-24" />
+          <div className="flex gap-2">
+            <Skeleton className="h-7 w-44 rounded-full" />
+            <Skeleton className="h-7 w-52 rounded-full" />
+            <Skeleton className="h-7 w-40 rounded-full" />
+          </div>
         </div>
       </CardContent>
     </Card>

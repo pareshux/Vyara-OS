@@ -23,7 +23,14 @@
 
 ## 2026-06-21
 
-### Owner Dashboard — INT-014 Slice 3 · Revenue + Ops (pending commit)
+### Owner Dashboard — INT-014 Slice 3.1 · AI brief redesign (pending commit)
+- **Tracks:** INT-014 (Slices 1+2+3+3.1 ✅), INT-009 (lifted 💭 → 📋)
+- **Capability:** Intelligence
+- **Tier:** Should-have
+- **Status change:** brief schema redesign + INT-009 promoted from Considered to Planned
+- **Notes:** User feedback after walking Slice 3 in the browser: "AI insights right now is too text heavy, very hard to focus on anything." The screenshot showed why — the existing brief was 1 headline + 9 bullets averaging 27 words = ~250 words in 3 columns. Three options offered (3-chip, tighter sections, headline-only); user picked the 3-chip option. **Schema change** (`lib/ai/prompts/owner-brief.ts`): removed `top_opportunities[]`, `top_risks[]`, `recommendations[]`; added `actions[]` (max 3) where each action = `{ label, target, search }`. `target` is an enum (collections/quotes/projects/leads/tasks/approvals/firms) — the page the user will actually act on. `search` is optional substring the target page can pre-filter by (firm name or invoice number). Prompt v3 → v4 with explicit good/bad chip examples ("Call Surat Muni · ₹9.9L · 85d overdue" GOOD vs "Follow up on collections" BAD); system prompt rewritten to demand verb-first ≤10-word chips and forbid duplicating the headline in chip text. **Component swap** (`app/(app)/owner/owner-brief-card.tsx`): dropped the 3-column grid + the `BriefList` sub-component; new layout = severity-icon + title + chip + freshness on one row, headline (larger, weight-medium) below, then a "What to do today →" label + a flex-wrap row of `<ActionChip>` Link components. Each chip computes `/<target>?q=<search>` (pages that don't support `q` ignore it gracefully). Skeleton also updated to match new shape. **Cache invalidation:** the cache key already includes prompt version (`inline_text:owner_brief:<tenant>:owner_brief.v4`) so v3 cached briefs auto-invalidate on next read; no DB sweep needed. **INT-009 lifted from 💭 Considered to 📋 Planned** in §11 — the conversational agent is now scheduled as the natural "tell me more" companion to the trimmed brief. Pattern locked: tool-use agent wrapping read-models, NOT raw LLM-to-SQL; read-only v1; mandatory "I don't have that" path; cache by `(tenant, normalised_query)`. **Smoke test:** `npx tsc --noEmit` clean. `/owner` recompiled in 433ms (1805 modules — same as Slice 3, no module count change since one component shrunk and another didn't grow). 307 to /login expected for unauthenticated curl. **No migrations, no read-model changes** in this slice — purely AI-surface refactor.
+
+### Owner Dashboard — INT-014 Slice 3 · Revenue + Ops (887e1a2)
 - **Tracks:** INT-014 (Slices 1+2+3 ✅)
 - **Capability:** Intelligence (cross-capability reads: Revenue, Delivery, Platform)
 - **Tier:** Should-have
