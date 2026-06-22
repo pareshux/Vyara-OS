@@ -40,6 +40,7 @@ const ENTITY_TYPES = [
   'complaint',
   'dispatch',
   'sample_request',
+  'project',  // Phase 5b — drawing-approval pack + other project documents
 ] as const
 type EntityType = (typeof ENTITY_TYPES)[number]
 
@@ -113,6 +114,13 @@ async function canAccessParent(
       // Consumers ship later (FO-5, CS-001, DEL-005). Until then only
       // admin/manager — caught by isAdminish above.
       return false
+
+    case 'project':
+      // Phase 5b: any same-tenant user can attach to projects (drawing
+      // packs, approval letters, BOM, BOQ). RLS on the underlying project
+      // table already enforces tenant isolation. Per-role tightening
+      // (e.g. only owner/manager can attach approval-pack) can come later.
+      return true
   }
 }
 

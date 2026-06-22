@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { StageStepper } from '@/components/projects/stage-stepper'
 import { ScannableProgressHeader } from '@/components/projects/scannable-progress-header'
+import { ProjectGates } from '@/components/projects/project-gates'
 import { getProjectProgress } from '@/lib/read-models/project-progress'
 import { SpecificationsTab } from './specifications-tab'
 import { TasksTab } from './tasks-tab'
@@ -75,7 +76,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     supabase
       .from('project')
       .select(
-        `id, name, segment, city, estimated_value, created_at,
+        `id, tenant_id, name, segment, city, estimated_value, created_at,
          current_stage:current_stage_id(id, label, color, is_paving_stage),
          owner:owner_id(full_name),
          buyer_firm:buyer_firm_id(id, name),
@@ -257,6 +258,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           )}
         </CardContent>
       </Card>
+
+      {/* Stage gates (Phase 5b — drawing-approval pack + future gates) */}
+      <ProjectGates projectId={project.id} tenantId={project.tenant_id} />
+
 
       <Tabs defaultValue="overview">
         <TabsList variant="line" className="w-full justify-start border-b border-border rounded-none h-auto pb-0 gap-0">

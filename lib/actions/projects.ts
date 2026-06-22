@@ -158,13 +158,35 @@ export async function advanceStage(
 
   const { data: project, error: fetchError } = await supabase
     .from('project')
-    .select('current_stage_id, name')
+    .select('current_stage_id, name, order_value, estimated_value, won_quote_id, custom_fields')
     .eq('id', projectId)
     .single()
 
   if (fetchError || !project) return { error: 'Project not found' }
 
   const fromStageId = project.current_stage_id
+
+  // Phase 5b — gate check. Block stage advance when the TARGET stage
+  // has any unsatisfied hard gates. The chip on /projects/[id]
+  // (ProjectGates server component) already shows the user what's missing.
+  const { evaluateGatesForStage } = await import('@/lib/gates')
+  const gateResult = await evaluateGatesForStage(supabase, toStageId, {
+    project_id: projectId,
+    fields: {
+      order_value: project.order_value,
+      estimated_value: project.estimated_value,
+      won_quote_id: project.won_quote_id,
+      ...((project.custom_fields as Record<string, unknown>) ?? {}),
+    },
+  })
+  if (gateResult.ok) {
+    const unmet = gateResult.data.filter((g) => g.is_hard && !g.satisfied)
+    if (unmet.length > 0) {
+      return {
+        error: `Cannot advance — missing: ${unmet.map((g) => g.label).join(', ')}`,
+      }
+    }
+  }
 
   const { error: updateError } = await supabase
     .from('project')

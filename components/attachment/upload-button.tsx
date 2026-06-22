@@ -66,6 +66,7 @@ export function AttachmentUploadButton({
   // For photo / receipt kinds we open the back camera on mobile.
   preferCamera,
   onUploaded,
+  metadata,
 }: {
   tenantId: string
   entityType: string
@@ -77,6 +78,10 @@ export function AttachmentUploadButton({
   className?: string
   preferCamera?: boolean
   onUploaded?: () => void
+  /** Free-form metadata stored on the attachment row. Use for gate
+   *  tagging (e.g. {type_key: 'drawing_approval_pack'}) and other
+   *  consumer-specific hints. */
+  metadata?: Record<string, unknown>
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -115,6 +120,7 @@ export function AttachmentUploadButton({
         mimeType: file.type,
         sizeBytes: file.size,
         title: file.name,
+        metadata,
       })
 
       if (!result.ok) {
