@@ -14,6 +14,7 @@ import { listComplaints, type ComplaintListRow } from '@/lib/actions/complaints'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LifeBuoy, AlertCircle, CheckCircle2, Clock, UserCircle2 } from 'lucide-react'
+import { CreateComplaintSheet, type DropdownOption } from './create-complaint-sheet'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +23,17 @@ export default async function ComplaintsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const result = await listComplaints()
+  // Fetch dropdown data + list in parallel
+  const [result, { data: firms }, { data: types }, { data: severities }] = await Promise.all([
+    listComplaints(),
+    supabase.from('firm').select('id, name').order('name'),
+    supabase.from('complaint_type_master').select('code, label').eq('is_active', true).order('sort_order'),
+    supabase.from('severity_master').select('code, label, rank').eq('is_active', true).order('rank'),
+  ])
+
+  const firmOptions: DropdownOption[] = (firms ?? []).map((f) => ({ value: f.id as string, label: f.name as string }))
+  const typeOptions: DropdownOption[] = (types ?? []).map((t) => ({ value: t.code as string, label: t.label as string }))
+  const severityOptions: DropdownOption[] = (severities ?? []).map((s) => ({ value: s.code as string, label: s.label as string }))
   if (!result.ok) {
     return (
       <div className="p-6">
@@ -52,6 +63,7 @@ export default async function ComplaintsPage() {
             </p>
           </div>
         </div>
+        <CreateComplaintSheet firms={firmOptions} types={typeOptions} severities={severityOptions} />
       </div>
 
       {/* KPI strip */}

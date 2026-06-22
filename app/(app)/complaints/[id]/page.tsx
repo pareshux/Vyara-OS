@@ -17,6 +17,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LifeBuoy, AlertCircle, Clock, UserCircle2, Building2 } from 'lucide-react'
+import { AssigneePicker, type AssigneeOption } from './assignee-picker'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +66,18 @@ export default async function ComplaintDetailPage({
     .select('id, from_stage_id, to_stage_id, remark, created_at, from_stage:from_stage_id(label), to_stage:to_stage_id(label)')
     .eq('complaint_id', id)
     .order('created_at', { ascending: false })
+
+  // Assignee dropdown options — every active user in tenant who can be assigned
+  // a complaint (admins + managers + sales engineers all qualify).
+  const { data: userRows } = await supabase
+    .from('user_profile')
+    .select('id, full_name, role')
+    .eq('is_active', true)
+    .in('role', ['admin', 'manager', 'sales_engineer'])
+    .order('full_name')
+  const assigneeOptions: AssigneeOption[] = (userRows ?? []).map((u) => ({
+    id: u.id as string, full_name: u.full_name as string, role: u.role as string,
+  }))
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-6 max-w-5xl">
@@ -139,16 +152,14 @@ export default async function ComplaintDetailPage({
           )}
           <div>
             <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Assignee</div>
-            <div className="flex items-center gap-2">
-              {assignee ? (
-                <>
-                  <UserCircle2 className="size-4 text-muted-foreground" />
-                  <span className="font-medium">{assignee.full_name}</span>
-                </>
-              ) : (
-                <Badge variant="outline" className="text-orange-700 border-orange-300 text-xs">Unassigned</Badge>
-              )}
-            </div>
+            <AssigneePicker
+              complaintId={id}
+              currentAssigneeId={assignee?.id ?? null}
+              options={assigneeOptions}
+            />
+            {!assignee && (
+              <p className="text-xs text-muted-foreground mt-1">Pick an engineer to advance the complaint.</p>
+            )}
           </div>
           <div>
             <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Logged</div>
@@ -181,42 +192,67 @@ export default async function ComplaintDetailPage({
         </Card>
       )}
 
-      {/* Stage advance actions */}
+      {/* Next steps — workflow actions */}
       {stage?.is_open && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Advance state</h2>
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Next steps</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Move this complaint through its workflow. Only the actions available right now are shown.
+            </p>
+          </div>
           <Card>
-            <CardContent className="pt-6 flex flex-wrap gap-2">
+            <CardContent className="pt-6 flex flex-col gap-3">
               {stage.stage_key === 'logged' && (
-                <form action={async () => { 'use server'; await advanceComplaintStage({ complaint_id: id, to_stage_key: 'triaged' }) }}>
-                  <Button type="submit" variant="outline" size="sm">Mark triaged →</Button>
-                </form>
+                <NextStepRow
+                  caption="Triage — review the report, confirm severity and routing, decide whether to assign or reject."
+                  action={async () => { 'use server'; await advanceComplaintStage({ complaint_id: id, to_stage_key: 'triaged' }) }}
+                  label="Mark triaged"
+                  variant="outline"
+                />
               )}
               {(stage.stage_key === 'triaged' || stage.stage_key === 'logged') && assignee && (
-                <form action={async () => { 'use server'; await advanceComplaintStage({ complaint_id: id, to_stage_key: 'in_progress' }) }}>
-                  <Button type="submit" variant="outline" size="sm">Start work →</Button>
-                </form>
+                <NextStepRow
+                  caption={`Assignee is ${assignee.full_name}. Start work to put the complaint into in-progress and stop the SLA clock for triage.`}
+                  action={async () => { 'use server'; await advanceComplaintStage({ complaint_id: id, to_stage_key: 'in_progress' }) }}
+                  label="Start work"
+                  variant="outline"
+                />
+              )}
+              {(stage.stage_key === 'triaged' || stage.stage_key === 'logged') && !assignee && (
+                <p className="text-xs text-muted-foreground italic">Pick an assignee above to start work.</p>
               )}
               {stage.stage_key === 'in_progress' && c.resolution_notes && (
-                <form action={async () => { 'use server'; await advanceComplaintStage({ complaint_id: id, to_stage_key: 'resolved' }) }}>
-                  <Button type="submit" variant="outline" size="sm">Mark resolved →</Button>
-                </form>
+                <NextStepRow
+                  caption="Resolution notes are recorded. Marking resolved keeps the complaint open for short-window observation before final closure."
+                  action={async () => { 'use server'; await advanceComplaintStage({ complaint_id: id, to_stage_key: 'resolved' }) }}
+                  label="Mark resolved"
+                  variant="outline"
+                />
+              )}
+              {stage.stage_key === 'in_progress' && !c.resolution_notes && (
+                <p className="text-xs text-muted-foreground italic">
+                  Record resolution notes via the action API (recordComplaintResolution) before marking resolved. UI form lands in v2.
+                </p>
               )}
               {stage.stage_key === 'resolved' && (
-                <form action={async () => { 'use server'; await closeComplaint({ complaint_id: id }) }}>
-                  <Button type="submit" size="sm">Close complaint →</Button>
-                </form>
+                <NextStepRow
+                  caption="Customer confirmed the fix. Close to remove from the active queue and stop SLA tracking."
+                  action={async () => { 'use server'; await closeComplaint({ complaint_id: id }) }}
+                  label="Close complaint"
+                  variant="default"
+                />
               )}
-              <form action={async () => { 'use server'; await rejectComplaint({ complaint_id: id, remark: 'Marked rejected from UI' }) }}>
-                <Button type="submit" variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10">Reject</Button>
-              </form>
+              <div className="border-t border-border pt-3">
+                <NextStepRow
+                  caption="Not a valid complaint (duplicate, mis-filed, out of scope). Rejection is final."
+                  action={async () => { 'use server'; await rejectComplaint({ complaint_id: id, remark: 'Marked rejected from UI' }) }}
+                  label="Reject"
+                  variant="destructive-ghost"
+                />
+              </div>
             </CardContent>
           </Card>
-          {!c.resolution_notes && stage.stage_key === 'in_progress' && (
-            <p className="text-xs text-muted-foreground px-1">
-              ℹ Record resolution notes (via the actions API or detail-page form in v2) before marking resolved.
-            </p>
-          )}
         </section>
       )}
 
@@ -251,5 +287,26 @@ export default async function ComplaintDetailPage({
         </Card>
       </section>
     </div>
+  )
+}
+
+// ─── Next-step row helper ─────────────────────────────────────────
+
+function NextStepRow({
+  caption, action, label, variant,
+}: {
+  caption: string
+  action: () => Promise<void>
+  label: string
+  variant: 'outline' | 'default' | 'destructive-ghost'
+}) {
+  const btnProps = variant === 'destructive-ghost'
+    ? { variant: 'ghost' as const, className: 'text-destructive hover:bg-destructive/10' }
+    : { variant: variant as 'outline' | 'default' }
+  return (
+    <form action={action} className="flex items-center justify-between gap-3 flex-wrap">
+      <p className="text-sm text-muted-foreground flex-1 min-w-0">{caption}</p>
+      <Button type="submit" size="sm" {...btnProps}>{label} →</Button>
+    </form>
   )
 }
