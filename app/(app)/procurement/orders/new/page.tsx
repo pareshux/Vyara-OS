@@ -20,23 +20,39 @@ import {
   getPrForPoPrefill,
   getRfqForPoPrefill,
 } from '@/lib/actions/purchase-orders'
+import { getBlanketPo } from '@/lib/actions/blanket-pos'
 import { NewPurchaseOrderForm } from './form'
 import { ChevronLeft } from 'lucide-react'
 
 interface PageProps {
-  searchParams: Promise<{ from_pr?: string; from_rfq?: string; vendor?: string }>
+  searchParams: Promise<{ from_pr?: string; from_rfq?: string; vendor?: string; blanket?: string }>
 }
 
 export default async function NewPurchaseOrderPage({ searchParams }: PageProps) {
   const sp = await searchParams
-  const [vendors, warehouses, products, projects, prPrefill, rfqPrefill] = await Promise.all([
+  const [vendors, warehouses, products, projects, prPrefill, rfqPrefill, blanketData] = await Promise.all([
     listVendorsForPicker(),
     listWarehousesForPicker(),
     listProductsForPicker(),
     listProjectsForPicker(),
     sp.from_pr ? getPrForPoPrefill(sp.from_pr) : Promise.resolve(null),
     sp.from_rfq && sp.vendor ? getRfqForPoPrefill(sp.from_rfq, sp.vendor) : Promise.resolve(null),
+    sp.blanket ? getBlanketPo(sp.blanket) : Promise.resolve(null),
   ])
+
+  const blanketPrefill = blanketData
+    ? {
+        blanket_id: blanketData.blanket.id,
+        bpo_number: blanketData.blanket.bpo_number,
+        vendor_id: blanketData.blanket.vendor_id,
+        vendor_name: blanketData.blanket.vendor_name,
+        description: blanketData.blanket.description,
+        hsn_code: null as string | null,
+        unit: blanketData.blanket.unit,
+        rate: blanketData.blanket.rate,
+        qty_remaining: blanketData.blanket.qty_remaining,
+      }
+    : null
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-5 max-w-5xl">
@@ -51,13 +67,16 @@ export default async function NewPurchaseOrderPage({ searchParams }: PageProps) 
           New purchase order
           {prPrefill && <span className="ml-2 text-sm text-muted-foreground font-mono">· from {prPrefill.pr_number}</span>}
           {rfqPrefill && <span className="ml-2 text-sm text-muted-foreground font-mono">· from {rfqPrefill.rfq_number}</span>}
+          {blanketPrefill && <span className="ml-2 text-sm text-muted-foreground font-mono">· release from {blanketPrefill.bpo_number}</span>}
         </h1>
         <p className="text-sm text-muted-foreground">
           {prPrefill
             ? <>Lines pre-filled from the requisition. On save, the PR flips to <span className="font-mono">po_raised</span> with this PO linked back.</>
             : rfqPrefill
               ? <>Lines pre-filled from the CS — vendor selections + rates locked. On save, the RFQ flips to <span className="font-mono">po_raised</span>.</>
-              : 'Saves as a draft. Submit for approval when ready.'}
+              : blanketPrefill
+                ? <>Release order against blanket. Vendor + rate locked from blanket; only quantity needs filling. <span className="font-mono">{blanketPrefill.qty_remaining.toLocaleString('en-IN')} {blanketPrefill.unit}</span> remaining on the blanket.</>
+                : 'Saves as a draft. Submit for approval when ready.'}
         </p>
       </div>
 
@@ -82,6 +101,7 @@ export default async function NewPurchaseOrderPage({ searchParams }: PageProps) 
           projects={projects}
           prPrefill={prPrefill}
           rfqPrefill={rfqPrefill}
+          blanketPrefill={blanketPrefill}
         />
       )}
     </div>

@@ -244,6 +244,15 @@ export async function createPurchaseOrder(params: {
   from_pr_id?: string | null
   /** When supplied, RFQ.status flips to po_raised + linked_po_id set; PO row stamps source_rfq_id. */
   from_rfq_id?: string | null
+  /** When supplied, this PO is a release order against the blanket; drawdown gets recomputed after insert. */
+  blanket_po_id?: string | null
+  /** Imports-lite columns (P6 lite): bill of entry + customs duty + CIF FX rate. */
+  bill_of_entry_no?: string | null
+  bill_of_entry_date?: string | null
+  customs_duty?: number | null
+  cif_inr_rate?: number | null
+  port_of_loading?: string | null
+  port_of_discharge?: string | null
 }): Promise<{ ok: true; id: string; po_number: string } | { ok: false; error: string }> {
   const actor = await getActor()
   if (!actor) return { ok: false, error: 'Not authenticated' }
@@ -385,6 +394,13 @@ export async function createPurchaseOrder(params: {
       notes: params.notes?.trim() || null,
       source_pr_id: params.from_pr_id ?? null,
       source_rfq_id: params.from_rfq_id ?? null,
+      blanket_po_id: params.blanket_po_id ?? null,
+      bill_of_entry_no: params.bill_of_entry_no?.trim() || null,
+      bill_of_entry_date: params.bill_of_entry_date || null,
+      customs_duty: params.customs_duty ?? null,
+      cif_inr_rate: params.cif_inr_rate ?? null,
+      port_of_loading: params.port_of_loading?.trim() || null,
+      port_of_discharge: params.port_of_discharge?.trim() || null,
       created_by: actor.userId,
       updated_by: actor.userId,
     })
@@ -451,6 +467,39 @@ export async function createPurchaseOrder(params: {
       .eq('tenant_id', actor.tenantId)
     revalidatePath(`/procurement/rfqs/${params.from_rfq_id}`)
     revalidatePath('/procurement/rfqs')
+  }
+
+  // Blanket-PO drawdown recompute: when this PO references a blanket, sum
+  // up all referencing POs (including this one) and update qty_released +
+  // status. Cheap; called only when blanket_po_id is set.
+  if (params.blanket_po_id) {
+    const { data: childPos } = await actor.supabase
+      .from('purchase_order')
+      .select('status, lines:purchase_order_line ( quantity )')
+      .eq('tenant_id', actor.tenantId)
+      .eq('blanket_po_id', params.blanket_po_id)
+      .is('deleted_at', null)
+    let drawn = 0
+    for (const p of childPos ?? []) {
+      const cp = p as { status: string; lines: { quantity: number }[] }
+      if (cp.status === 'cancelled') continue
+      for (const l of cp.lines ?? []) drawn += Number(l.quantity || 0)
+    }
+    const { data: blanket } = await actor.supabase
+      .from('blanket_po')
+      .select('qty_cap')
+      .eq('id', params.blanket_po_id)
+      .eq('tenant_id', actor.tenantId)
+      .single()
+    const cap = Number((blanket as { qty_cap: number } | null)?.qty_cap ?? 0)
+    const newStatus = drawn >= cap ? 'exhausted' : 'active'
+    await actor.supabase
+      .from('blanket_po')
+      .update({ qty_released: drawn, status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', params.blanket_po_id)
+      .eq('tenant_id', actor.tenantId)
+    revalidatePath(`/procurement/blanket-pos/${params.blanket_po_id}`)
+    revalidatePath('/procurement/blanket-pos')
   }
 
   revalidatePath('/procurement')

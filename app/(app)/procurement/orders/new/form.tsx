@@ -68,6 +68,18 @@ type RfqPrefill = {
   }>
 }
 
+type BlanketPrefill = {
+  blanket_id: string
+  bpo_number: string
+  vendor_id: string
+  vendor_name: string
+  description: string
+  hsn_code: string | null
+  unit: string
+  rate: number
+  qty_remaining: number
+}
+
 interface Props {
   vendors: VendorPick[]
   warehouses: WarehousePick[]
@@ -75,6 +87,7 @@ interface Props {
   projects: ProjectPick[]
   prPrefill?: PrPrefill | null
   rfqPrefill?: RfqPrefill | null
+  blanketPrefill?: BlanketPrefill | null
 }
 
 type LineDraft = {
@@ -129,13 +142,13 @@ function formatINR(n: number): string {
   return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 }
 
-export function NewPurchaseOrderForm({ vendors, warehouses, products, projects, prPrefill = null, rfqPrefill = null }: Props) {
+export function NewPurchaseOrderForm({ vendors, warehouses, products, projects, prPrefill = null, rfqPrefill = null, blanketPrefill = null }: Props) {
   const router = useRouter()
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
-  // Header state — prefill from PR or RFQ when given
-  const [vendorId, setVendorId] = useState<string>(rfqPrefill?.vendor_id ?? prPrefill?.preferred_vendor_id ?? '')
+  // Header state — prefill from PR / RFQ / blanket when given
+  const [vendorId, setVendorId] = useState<string>(blanketPrefill?.vendor_id ?? rfqPrefill?.vendor_id ?? prPrefill?.preferred_vendor_id ?? '')
   const [warehouseId, setWarehouseId] = useState<string>(warehouses[0]?.id ?? '')
   const [projectId, setProjectId] = useState<string>(rfqPrefill?.project_id ?? prPrefill?.project_id ?? '')
   const [poDate, setPoDate] = useState<string>(new Date().toISOString().slice(0, 10))
@@ -183,6 +196,20 @@ export function NewPurchaseOrderForm({ vendors, warehouses, products, projects, 
         discount_pct: '0',
         gst_rate_pct: '18',
       }))
+    }
+    if (blanketPrefill) {
+      // Release order: pre-fill one line with the blanket's locked rate.
+      return [{
+        key: Math.random().toString(36).slice(2),
+        product_id: null,
+        description: blanketPrefill.description,
+        hsn_code: blanketPrefill.hsn_code ?? '',
+        unit: blanketPrefill.unit,
+        quantity: '',
+        rate: String(blanketPrefill.rate),
+        discount_pct: '0',
+        gst_rate_pct: '18',
+      }]
     }
     return [newLine()]
   })
@@ -283,6 +310,7 @@ export function NewPurchaseOrderForm({ vendors, warehouses, products, projects, 
         notes: notes.trim() || undefined,
         from_pr_id: prPrefill?.pr_id ?? null,
         from_rfq_id: rfqPrefill?.rfq_id ?? null,
+        blanket_po_id: blanketPrefill?.blanket_id ?? null,
         lines: lines.map((l) => ({
           product_id: l.product_id,
           description: l.description.trim(),

@@ -23,6 +23,43 @@
 
 ## 2026-06-23
 
+### Procurement P6 lite — Vendor scorecards + Blanket POs + Job work / ITC-04 + Imports-lite (pending commit)
+- **Tracks:** DEL-024 (new, ✅), DEL-022 (✅ Partial — multi-line release deferred), DEL-021 (✅), DEL-023 (✅ Lite — full LC + import-PO flow deferred)
+- **Capability:** Delivery (procurement) + Relationship (vendor performance)
+- **Tier:** Nice-have (021/022/023) · Should-have (024)
+- **Status change:** All 4 rows flipped — DEL-021 + DEL-022 + DEL-023 from 💭 P6 to ✅; DEL-024 added as ✅. **Procurement module COMPLETE** as of this commit.
+- **Notes:** Final phase of the autonomous bulk-build. The procurement module is now end-to-end walkable: **PR → RFQ → CS → PO (or release from blanket) → GRN → Vendor Bill (3-way matched) → Payment (with TDS) → AP ageing + MSME + GSTR-2B + ITC-04 + Vendor scorecards.**
+
+  **(1) Vendor scorecards (DEL-024)** — migration 0071 ships `vendor_scorecard_v` PG view (`security_invoker=true` per the 0047 cross-tenant fix). One row per vendor × Indian FY where any procurement activity exists; aggregates over PO + GRN + GRN line + vendor_bill: po_count + value, grn_on_time_pct, qty acceptance_pct, mismatched_count, outstanding. Both percentage metrics nullable so UI renders `—` for "not measurable" rather than misleading 100%. `lib/read-models/vendor-scorecard.ts` reads the view + computes A/B/C/unrated grades (A = on-time ≥ 90% AND acceptance ≥ 98% AND zero mismatched; B = on-time ≥ 70% AND acceptance ≥ 95%; C = anything below with activity; unrated when no measurable signal). Indian-FY current-year detection auto-defaults to FY26-27. `/procurement/vendors/scorecards` page with FY toggle (current + 2 prior) + 4-KPI strip + grade rollup + per-vendor sortable table with rank trophies for top 3 + MSME badge + grade pill + thresholded colors on percentages. Service-role verify confirmed 10 vendor rows with realistic metrics (Pack Industries grades A; L&T grades B at 87.5% acceptance; vendors with POs but no GRNs correctly unrated).
+
+  **(2) Blanket POs (DEL-022)** — `blanket_po` schema (annual qty_cap + rate; value_cap STORED; 5-state lifecycle: draft/active/exhausted/expired/cancelled; `qty_released` drawdown; sequence + render_tenant_code-aware trigger + tenant code templates VT-BPO-* / RA-BPO-*). `purchase_order.blanket_po_id` FK added (indexed). `lib/actions/blanket-pos.ts` ships 7 actions including `recomputeBlanketReleased` (sums non-cancelled child PO line quantities + auto-flips status to exhausted / back to active based on threshold). `createPurchaseOrder` extended with `blanket_po_id` param + auto-recompute hook fires after PO insert. UI: list with 5-status filter + per-row stacked-bar drawdown visualization. `/procurement/blanket-pos/new` form with FY-default validity. `/procurement/blanket-pos/[id]` detail with status pill + "Release PO from blanket" sky CTA when active + qty_remaining > 0 + 3-stat drawdown card + locked-rate + value-cap chips + release-POs table. "Release PO from blanket" routes to `/procurement/orders/new?blanket=<id>`; new PO page reads the param via `getBlanketPo`, defaults vendor + locked rate + description from blanket, passes `blanket_po_id` so drawdown auto-updates on save. Sample data (0072): Vyara cement blanket (10,000 bags @ ₹360) + Raj Polycab cable blanket (15,000 mtr @ ₹825) + Raj Schneider MCCB blanket (500 nos @ ₹18,500 with **120 already drawn** — exercises partial-drawdown UI).
+
+  **(3) Job work + ITC-04 (DEL-021)** — `job_work_challan` schema with 4-state lifecycle + sequence + render_tenant_code trigger + tenant code templates VT-JWC-* / RA-JWC-*. `lib/actions/job-work.ts` ships 6 actions: createJobWorkChallan (**snapshots vendor GSTIN at challan time** so ITC-04 stays correct even if vendor master changes later), recordJobWorkReturn (atomic partial-return; flips status per remaining qty), cancelJobWorkChallan, list/get/picker, plus form wrapper. UI: list with 4-status filter + 4-KPI strip + `<QuarterlyItc04Button>` FY+Q1-Q4 dialog. `/procurement/job-work/new` with vendor picker showing GSTIN inline + process_nature dropdown (machining / cutting / coating / galvanising / powder_coating / assembly / welding / polishing / heat_treatment / plating / other) + 1-year inputs / 3-year capital reminder. `/procurement/job-work/[id]` detail with 4-stat movement (Sent / Received / Scrap / Pending) + dual-color progress bar + record-return inline form + overdue banner. ITC-04 CSV export at `/api/procurement/job-work/export-itc04?fy=&q=` per ITC-04 form Table 4 + 5A/B intent: GSTIN (URP fallback for unregistered job workers) / Challan No / Date / Process / HSN / Description / UQC / Qty Sent / Rate / Value / Qty Returned / Scrap / Return Date / Status / Days Since Challan. Sample data (0072): Vyara pigment grinding partly received with scrap + Raj panel powder coating sent + Raj busbar cutting fully received.
+
+  **(4) Imports-lite (DEL-023)** — `purchase_order` extended with 6 columns: `bill_of_entry_no`, `bill_of_entry_date`, `customs_duty`, `cif_inr_rate`, `port_of_loading`, `port_of_discharge`. `createPurchaseOrder` accepts + persists. Captures the document-trail data the CHA produces; dedicated import-mode UI + BoE-instead-of-GRN flow + IGST-on-customs computation + LC management + FX gain/loss tracking land when a tenant asks. No sample import PO seeded (would require backdating a real BoE workflow which doesn't belong in "lite").
+
+  **Architectural calls recorded:**
+  - **Scorecard via pure view, not matview.** Auto-fresh as POs / GRNs / bills are posted; matview + refresh trigger only when polling frequency demands it.
+  - **Blanket drawdown counts all non-cancelled child POs** — including drafts. A draft "reserves" share against the blanket. Cancellation handled by recompute when `cancelPurchaseOrder` next runs; the cancel action doesn't yet trigger recompute (known gap; recorded in `(deferred)` section).
+  - **Job-work GSTIN snapshot at challan time.** ITC-04 must reflect vendor state when the challan was issued; vendor master mutations afterwards don't retroactively change returns.
+  - **ITC-04 v1 reports by challan_date only.** A Q1 challan with a Q2 return shows in both quarters per GSTN rules (sends + returns reported on their respective dates). Two-section CSV (sends + returns separately) deferred to a follow-up.
+  - **Imports-lite captures fields, not workflow.** Schema captures everything the CHA produces; rendering on PO detail + import-mode form + LC integration land with first import customer.
+
+  **Verification:**
+  - `npx tsc --noEmit` clean.
+  - `npx next build` succeeds; all 8 new routes compiled (`/procurement/vendors/scorecards`, `/blanket-pos`, `/blanket-pos/new`, `/blanket-pos/[id]`, `/job-work`, `/job-work/new`, `/job-work/[id]`, `/api/procurement/job-work/export-itc04`).
+  - Migrations 0071 + 0072 applied to remote; service-role verify confirms vendor_scorecard_v returns 10 rows with realistic metrics + all sample blanket POs + job-work challans seeded as expected.
+
+  **Deferred:**
+  - Vendor scorecard widget on Owner Dashboard (INT-014 follow-up).
+  - Multi-line blanket release orders.
+  - Cancelled-PO blanket-drawdown recompute (cancel action should call `recomputeBlanketReleased` when blanket_po_id is set; known gap).
+  - ITC-04 two-section CSV (sends + returns separately).
+  - Job-work approval workflow (PLAT-014 wiring).
+  - Imports: dedicated import-mode PO form section, BoE-instead-of-GRN ingestion, IGST-on-customs computation, LC + bank guarantee management, FX gain/loss tracking, customs broker workflow.
+
+  **Procurement module COMPLETE** as of this commit. The autonomous bulk-build that started with P1α this morning has shipped all 6 phases. User end-to-end walk-through ready.
+
 ### Procurement P4β + P4γ — PR→PO conversion + RFQ + Comparative Statement (pending commit)
 - **Tracks:** DEL-015 (PR→PO conversion → ✅ full); DEL-020 (RFQ + CS → ✅)
 - **Capability:** Delivery (procurement)

@@ -26,6 +26,9 @@ import {
   Undo2,
   Banknote,
   ClipboardList,
+  Award,
+  FileSignature,
+  Wrench,
 } from 'lucide-react'
 
 function formatMoneyShort(n: number): string {
@@ -220,7 +223,22 @@ export default async function ProcurementPage() {
                 <span className="flex-1 text-foreground">GSTR-2B reconciliation</span>
                 <span className="text-[10px] text-emerald-700">Live ✓</span>
               </Link>
-              <GapRow icon={CircleAlert} label="GSTN auto-pull · vendor scorecards · imports" tag="P5γ + P6 · queued" />
+              <Link href="/procurement/vendors/scorecards" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
+                <Award className="size-3.5 text-amber-600 shrink-0" />
+                <span className="flex-1 text-foreground">Vendor scorecards</span>
+                <span className="text-[10px] text-emerald-700">Live ✓</span>
+              </Link>
+              <Link href="/procurement/blanket-pos" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
+                <FileSignature className="size-3.5 text-sky-600 shrink-0" />
+                <span className="flex-1 text-foreground">Blanket POs (rate contracts)</span>
+                <span className="text-[10px] text-emerald-700">Live ✓</span>
+              </Link>
+              <Link href="/procurement/job-work" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
+                <Wrench className="size-3.5 text-violet-600 shrink-0" />
+                <span className="flex-1 text-foreground">Job work + ITC-04</span>
+                <span className="text-[10px] text-emerald-700">Live ✓</span>
+              </Link>
+              <GapRow icon={CircleAlert} label="GSTN auto-pull · imports BoE workflow · LC management" tag="future · queued" />
             </div>
           </CardContent>
         </Card>
