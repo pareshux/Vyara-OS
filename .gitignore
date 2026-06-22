@@ -47,6 +47,9 @@ supabase/.temp/
 # scratch
 /tmp/
 
+# generated PDFs from docs/raj-* (regenerable via scripts/build-raj-pdfs.mjs)
+docs/build/
+
 # real tenant configs may contain admin passwords — never commit
 # (the *.example.json template stays tracked). Belt-and-braces:
 # README recommends putting real configs outside the repo (e.g. /tmp/).
