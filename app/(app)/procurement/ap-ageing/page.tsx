@@ -78,11 +78,21 @@ export default async function ApAgeingPage({ searchParams }: PageProps) {
       </div>
 
       {/* Header */}
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight">AP ageing</h1>
-        <p className="text-sm text-muted-foreground">
-          What you owe vendors, by how long it&apos;s been overdue. MSME 45-day rule (MSMED Act 2006) tracked separately.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">AP ageing</h1>
+          <p className="text-sm text-muted-foreground">
+            What you owe vendors, by how long it&apos;s been overdue. MSME 45-day rule (MSMED Act 2006) tracked separately.
+          </p>
+        </div>
+        {data.totals.msme_breach_count > 0 && (
+          <a
+            href="/api/procurement/ap-ageing/export-msme1"
+            className="inline-flex items-center gap-1.5 rounded-md border border-rose-300 bg-rose-50 text-rose-800 px-3 py-1.5 text-sm font-medium hover:bg-rose-100 transition-colors"
+          >
+            <AlertTriangle className="size-4" /> Export MSME-1 ({data.totals.msme_breach_count})
+          </a>
+        )}
       </div>
 
       {/* KPI strip */}

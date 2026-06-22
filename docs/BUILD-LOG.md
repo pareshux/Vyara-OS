@@ -23,6 +23,58 @@
 
 ## 2026-06-23
 
+### Procurement P3β — Voucher PDF + NEFT CSV + Reversal + MSME-1 CSV (pending commit)
+- **Tracks:** FIN-022 ✅ (per-bank dialects → P3γ); FIN-020 ✅ (PDF format → P3γ if asked); FIN-021 still ✅ Partial pending Form 16A + 26Q
+- **Capability:** Finance (procurement output formats)
+- **Tier:** Must-have post-C#2
+- **Status change:** FIN-022 ✅ Partial → ✅; FIN-020 ✅ Partial → ✅
+- **Notes:** P3α captured the payment + TDS data. P3β ships the output formats — the things accountants actually print, attach, and file. Plus the cheque-bounce / NEFT-failure flow that was sitting as a known gap.
+
+  **(1) Posted-payment reversal** (migration 0066 + reverseVendorPayment action):
+  - Schema: vendor_payment.status CHECK extended to admit `'reversed'`. New columns reversed_at / reversed_by / reversal_reason. Partial index `vp_reversed_idx` on the reversed set.
+  - Action: `reverseVendorPayment(paymentId, reason)`. Mirrors postVendorPayment in reverse with the same atomic 3-step pattern:
+    1. Flip status posted → reversed (with rollback target on failure).
+    2. For each allocation: read current bill state, `bill.amount_paid -= allocated_amount`, recompute outstanding, flip status to `paid` (if other payments fully cover), `partly_paid` (some remaining), or `approved` (all reversed).
+    3. Best-effort rollback on intermediate failure.
+  - Concurrent payments handled: reading current bill state (not the snapshot from when this payment was drafted) means a bill that's been further-paid by other payments stays correct after reversal.
+  - UI: workflow-actions.tsx extended — posted state now shows "Reverse payment" button → confirmation dialog with reason category dropdown (cheque_bounce / neft_failed / vendor_refund / accounting_correction / other) + optional free-text note. Reversed banner on payment detail header with the reason string + date.
+  - Payments list filter extended with `'reversed'` state.
+
+  **(2) Payment voucher PDF** (`app/(print)/procurement/payments/[id]/voucher/page.tsx`):
+  - Mirrors the PO PDF + quote BOQ print pattern: standalone HTML body under the `(print)` route group, CSS-in-style, "Print / Save PDF" floating button hidden in @media print, A4-friendly width.
+  - Voucher includes: company header + vendor address block + beneficiary-bank block (from vendor.bank_name/ifsc/account_no with "Not on file" fallback) + payment meta row (date / mode / reference no / currency) + allocations table + TDS breakdown card (with "deposit by 7th of next month" reminder + Form 16A mention) + money summary (gross / red TDS deduction / emerald net-paid grand total) + bank-account-used block + signature blocks (Accounts + Authorised).
+  - Reversed banner renders at the top when status='reversed' — "This voucher is retained for audit only".
+  - "Print voucher" link on payment detail header (border-only button), opens in new tab. Gated on status not in (draft, cancelled).
+
+  **(3) NEFT bank-file CSV export** (`/api/procurement/payments/export-neft?from=&to=`):
+  - Route handler at `app/api/procurement/payments/export-neft/route.ts`. Returns `text/csv` with `Content-Disposition: attachment`.
+  - Action helper `getNeftBatch({ from_date, to_date })` in `lib/actions/vendor-payments.ts` — pulls posted NEFT + RTGS payments in the date range, joins vendor for bank details. Reversed payments excluded.
+  - CSV format: generic Indian-bank columns (Sl/Beneficiary/Bank/IFSC/A-c/Amount/Mode/Reference/Value Date/Remarks). Proper CSV escaping (quotes/commas/newlines).
+  - UI: `<NeftExportButton>` client component on `/procurement/payments` header — dropdown menu with from/to date pickers (defaults: last 30 days), Download button triggers `window.location.href` navigation which downloads as attachment.
+  - Per-bank dialects (HDFC, ICICI, SBI specific orderings) deferred — schema captures all required fields; only the column-order string differs. P3γ adds a tenant.settings.payment.bank_format selector.
+
+  **(4) MSME-1 half-yearly CSV export** (`/api/procurement/ap-ageing/export-msme1`):
+  - Route handler at `app/api/procurement/ap-ageing/export-msme1/route.ts`.
+  - Action helper `getMsme1Batch()` — hits vendor_bill_ageing_v filtered to msme_flag='breach', joins vendor master for PAN + msme_udyam_no.
+  - CSV columns match the MSME-1 form intent: Vendor Name / PAN / MSME UDYAM No / Our Bill No / Vendor Invoice No / Invoice Date / Goods Received Date / Due Date / Amount Outstanding / Days Since Receipt / Reason for Delay. Reason column intentionally blank — that's the accountant's input at filing time. Three header comment lines explain the export rules.
+  - UI: "Export MSME-1 (N)" rose-tinted CTA on `/procurement/ap-ageing` header, only renders when totals.msme_breach_count > 0 (no point exporting an empty list).
+
+  **Architectural calls recorded:**
+  - **Pure-page voucher PDF.** Mirrors PO PDF + BOQ approach — HTML with print CSS, not a PDF-generation library. Browser handles the actual PDF via Cmd-P / save-as-PDF. Zero dependencies; vendor can be sent the link or the PDF attachment, both work.
+  - **API route handlers for CSV downloads, not server actions.** Server actions return data; route handlers return Response objects with Content-Type + Content-Disposition. Standard Next.js pattern for file downloads.
+  - **Per-bank NEFT dialects deferred.** Schema captures everything needed (gross, net, reference, beneficiary bank, IFSC). Adding HDFC/ICICI/SBI variants is templated output, not new data. Faster to ship the generic format first.
+  - **Form 16A and 26Q deferred to P3γ.** Both need FY-period aggregation logic (year-to-date TDS per vendor + cumulative ₹50L threshold checks for §194Q). Conceptually clean but its own slice — bundling here would have busted the phased-builds discipline.
+  - **Reverse-payment reason categorisation.** Five fixed categories + free-text. Categories let us surface "reversed payments by reason" in reporting later; free-text captures the bank-statement / RBI-reference details.
+
+  **Verification:**
+  - `tsc --noEmit` clean.
+  - 6 routes verified: voucher (307→login as expected for the print page since `(print)` layout has its own auth check), 2 CSV endpoints (401 unauth-as-expected — these don't redirect since they're API endpoints), 3 app pages (307 to /login).
+  - Migration 0066 applied.
+
+  **Deferred:**
+  - **P3γ:** Form 16A per vendor per FY PDF, Quarterly 26Q TDS return CSV, per-bank NEFT dialect strings (HDFC/ICICI/SBI), `procurement.ap_master` Tally adapter (PLAT-028 — schema still ready, just no adapter code).
+  - **Future:** Multi-step payment release approval (PLAT-014 wiring for >₹X bands), bank statement import + auto-reconcile, 26AS portal match.
+
 ### Procurement P3α — Vendor payments + TDS engine (pending commit)
 - **Tracks:** FIN-021 ✅ Partial (16A + 26Q → P3β); FIN-022 ✅ Partial (NEFT bank file + voucher PDF → P3β)
 - **Capability:** Finance (AP payment + TDS)

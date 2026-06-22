@@ -7,7 +7,7 @@ import { getVendorPayment } from '@/lib/actions/vendor-payments'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PaymentWorkflowActions } from './workflow-actions'
-import { ChevronLeft, ExternalLink, Building2, Calculator, Banknote, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ExternalLink, Building2, Calculator, Banknote, AlertTriangle, Printer } from 'lucide-react'
 
 function formatINR(n: number): string {
   return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
@@ -79,7 +79,19 @@ export default async function PaymentDetailPage({ params }: PageProps) {
               </div>
             </div>
 
-            <PaymentWorkflowActions paymentId={payment.id} status={payment.status} />
+            <div className="flex items-center gap-2 flex-wrap">
+              {payment.status !== 'draft' && payment.status !== 'cancelled' && (
+                <Link
+                  href={`/procurement/payments/${payment.id}/voucher`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted/40 transition-colors"
+                >
+                  <Printer className="size-4" /> Print voucher
+                </Link>
+              )}
+              <PaymentWorkflowActions paymentId={payment.id} status={payment.status} />
+            </div>
           </div>
 
           {/* Money tiles */}
@@ -143,6 +155,13 @@ export default async function PaymentDetailPage({ params }: PageProps) {
       {payment.cancelled_at && payment.cancellation_reason && (
         <div className="rounded-md border border-rose-200 bg-rose-50/50 text-rose-900 px-3 py-2 text-xs">
           Cancelled on {formatDate(payment.cancelled_at)} · reason: {payment.cancellation_reason}
+        </div>
+      )}
+
+      {payment.status === 'reversed' && payment.reversed_at && (
+        <div className="rounded-md border border-rose-200 bg-rose-50/50 text-rose-900 px-3 py-2 text-xs">
+          <strong>Payment reversed</strong> on {formatDate(payment.reversed_at)} · reason: {payment.reversal_reason ?? '—'}.
+          Bills covered by this voucher were restored to outstanding; the voucher is retained for audit only.
         </div>
       )}
 

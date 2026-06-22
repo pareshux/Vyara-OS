@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { listVendorPayments, type PaymentSummary } from '@/lib/actions/vendor-payments'
 import { Badge } from '@/components/ui/badge'
 import { ChevronLeft, ChevronRight, Banknote } from 'lucide-react'
+import { NeftExportButton } from './neft-export-button'
 
 function formatMoneyShort(n: number): string {
   if (n >= 1_00_00_000) return `₹${(n / 1_00_00_000).toFixed(2)} cr`
@@ -20,6 +21,7 @@ const STATUS_FILTERS = [
   { value: 'all',       label: 'All' },
   { value: 'draft',     label: 'Drafts' },
   { value: 'posted',    label: 'Posted' },
+  { value: 'reversed',  label: 'Reversed' },
   { value: 'cancelled', label: 'Cancelled' },
 ] as const
 
@@ -35,7 +37,8 @@ const MODE_FILTERS = [
 const STATUS_TINT: Record<string, string> = {
   draft:     'bg-muted text-muted-foreground border-border',
   posted:    'bg-emerald-50 text-emerald-800 border-emerald-200',
-  cancelled: 'bg-rose-50 text-rose-800 border-rose-200',
+  reversed:  'bg-rose-50 text-rose-800 border-rose-200',
+  cancelled: 'bg-muted text-muted-foreground border-border',
 }
 
 const MODE_TINT: Record<string, string> = {
@@ -96,12 +99,15 @@ export default async function VendorPaymentsPage({ searchParams }: PageProps) {
             {payments.length} record{payments.length === 1 ? '' : 's'} · {formatMoneyShort(postedThisMonthValue)} net paid this month
           </p>
         </div>
-        <Link
-          href="/procurement/payments/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Banknote className="size-4" /> New payment
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <NeftExportButton />
+          <Link
+            href="/procurement/payments/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Banknote className="size-4" /> New payment
+          </Link>
+        </div>
       </div>
 
       {/* KPI strip */}

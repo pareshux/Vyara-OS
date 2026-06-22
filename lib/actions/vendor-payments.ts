@@ -31,7 +31,7 @@ import {
   type TdsSection,
 } from '@/lib/procurement/tds-engine'
 
-export type PaymentStatus = 'draft' | 'posted' | 'cancelled'
+export type PaymentStatus = 'draft' | 'posted' | 'reversed' | 'cancelled'
 export type PaymentMode = 'neft' | 'rtgs' | 'cheque' | 'upi' | 'cash' | 'bg_adjustment' | 'on_account'
 
 export type PaymentAllocationInput = {
@@ -86,6 +86,8 @@ export type PaymentDetail = {
   posted_at: string | null
   cancelled_at: string | null
   cancellation_reason: string | null
+  reversed_at: string | null
+  reversal_reason: string | null
   notes: string | null
   created_at: string
   allocations: PaymentAllocation[]
@@ -358,6 +360,111 @@ export async function postVendorPayment(
 }
 
 /* ═══════════════════════════════════════════════════════════
+   REVERSE — undo a posted payment (cheque bounce / NEFT failure)
+   Atomic 3-step (mirrors postVendorPayment in reverse).
+   ═══════════════════════════════════════════════════════════ */
+
+export async function reverseVendorPayment(
+  paymentId: string,
+  reason: string,
+): Promise<{ ok: true; bills_affected: number } | { ok: false; error: string }> {
+  const actor = await getActor()
+  if (!actor) return { ok: false, error: 'Not authenticated' }
+  if (!isAdminish(actor.role)) return { ok: false, error: 'Permission denied' }
+  if (!reason.trim()) return { ok: false, error: 'Reversal reason is required' }
+
+  const { data: payment } = await actor.supabase
+    .from('vendor_payment')
+    .select('id, status, vendor_id, allocations:vendor_payment_allocation(id, bill_id, allocated_amount)')
+    .eq('id', paymentId)
+    .eq('tenant_id', actor.tenantId)
+    .maybeSingle()
+  if (!payment) return { ok: false, error: 'Payment not found' }
+  if (payment.status !== 'posted') {
+    return { ok: false, error: `Only posted payments can be reversed (current: ${payment.status as string})` }
+  }
+
+  const allocs = ((payment.allocations as Array<{ id: string; bill_id: string; allocated_amount: number }> | null) ?? [])
+  if (allocs.length === 0) return { ok: false, error: 'Payment has no allocations' }
+
+  const now = new Date().toISOString()
+
+  // 1) Flip status posted → reversed (rollback target if downstream fails)
+  const { error: flipErr } = await actor.supabase
+    .from('vendor_payment')
+    .update({
+      status: 'reversed',
+      reversed_at: now,
+      reversed_by: actor.userId,
+      reversal_reason: reason.trim(),
+      updated_at: now,
+      updated_by: actor.userId,
+    })
+    .eq('id', paymentId)
+  if (flipErr) return { ok: false, error: flipErr.message }
+
+  async function rollback(why: string) {
+    await actor!.supabase
+      .from('vendor_payment')
+      .update({
+        status: 'posted',
+        reversed_at: null,
+        reversed_by: null,
+        reversal_reason: `[rollback after: ${why}]`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', paymentId)
+  }
+
+  // 2) Decrement bill.amount_paid + recompute status per allocation.
+  //    Concurrent payments handled: read current state, not draft snapshot.
+  for (const a of allocs) {
+    const { data: bill } = await actor.supabase
+      .from('vendor_bill')
+      .select('id, total, amount_paid')
+      .eq('id', a.bill_id)
+      .maybeSingle()
+    if (!bill) {
+      await rollback(`bill ${a.bill_id} not found`)
+      return { ok: false, error: `Bill ${a.bill_id} not found at reverse time` }
+    }
+
+    const newPaid = r2(Math.max(0, Number(bill.amount_paid || 0) - Number(a.allocated_amount)))
+    const newOutstanding = r2(Math.max(0, Number(bill.total || 0) - newPaid))
+    let nextStatus: string
+    if (newPaid === 0) {
+      nextStatus = 'approved'        // back to fully-unpaid state
+    } else if (newOutstanding <= 0.01) {
+      nextStatus = 'paid'             // still fully paid by other payments
+    } else {
+      nextStatus = 'partly_paid'
+    }
+
+    const { error: updErr } = await actor.supabase
+      .from('vendor_bill')
+      .update({
+        amount_paid: newPaid,
+        amount_outstanding: newOutstanding,
+        status: nextStatus,
+        updated_at: now,
+        updated_by: actor.userId,
+      })
+      .eq('id', a.bill_id)
+    if (updErr) {
+      await rollback(`bill update failed: ${updErr.message}`)
+      return { ok: false, error: `Failed to update bill ${a.bill_id}: ${updErr.message}` }
+    }
+  }
+
+  revalidatePath('/procurement/payments')
+  revalidatePath(`/procurement/payments/${paymentId}`)
+  revalidatePath('/procurement/bills')
+  revalidatePath('/procurement/ap-ageing')
+
+  return { ok: true, bills_affected: allocs.length }
+}
+
+/* ═══════════════════════════════════════════════════════════
    CANCEL — draft-only
    ═══════════════════════════════════════════════════════════ */
 
@@ -477,7 +584,9 @@ export async function getVendorPayment(paymentId: string): Promise<PaymentDetail
       id, payment_number, vendor_id, payment_date, payment_mode,
       bank_account_used, reference_no,
       gross_amount, tds_section, tds_pct, tds_amount, net_amount,
-      status, posted_at, cancelled_at, cancellation_reason, notes, created_at,
+      status, posted_at, cancelled_at, cancellation_reason,
+      reversed_at, reversal_reason,
+      notes, created_at,
       vendor:vendor_id ( id, name, gstin, pan, msme_status ),
       allocations:vendor_payment_allocation (
         id, bill_id, allocated_amount,
@@ -527,10 +636,121 @@ export async function getVendorPayment(paymentId: string): Promise<PaymentDetail
     posted_at: (r.posted_at as string | null) ?? null,
     cancelled_at: (r.cancelled_at as string | null) ?? null,
     cancellation_reason: (r.cancellation_reason as string | null) ?? null,
+    reversed_at: (r.reversed_at as string | null) ?? null,
+    reversal_reason: (r.reversal_reason as string | null) ?? null,
     notes: (r.notes as string | null) ?? null,
     created_at: r.created_at as string,
     allocations,
   }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   NEFT bank-file export — used by route handler
+   ═══════════════════════════════════════════════════════════ */
+
+export type NeftRow = {
+  payment_number: string
+  payment_date: string
+  beneficiary_name: string
+  bank_name: string | null
+  ifsc: string | null
+  account_no: string | null
+  amount: number
+  reference_no: string | null
+  remarks: string
+}
+
+export async function getNeftBatch(params: {
+  from_date: string
+  to_date: string
+}): Promise<NeftRow[]> {
+  const actor = await getActor()
+  if (!actor) return []
+
+  const { data } = await actor.supabase
+    .from('vendor_payment')
+    .select(`
+      payment_number, payment_date, payment_mode, net_amount, reference_no,
+      vendor:vendor_id ( name, bank_name, bank_ifsc, bank_account_no )
+    `)
+    .eq('tenant_id', actor.tenantId)
+    .eq('status', 'posted')
+    .in('payment_mode', ['neft', 'rtgs'])
+    .gte('payment_date', params.from_date)
+    .lte('payment_date', params.to_date)
+    .order('payment_date', { ascending: true })
+
+  if (!data) return []
+  return data.map((r) => {
+    const vendor = pickOne<{ name: string; bank_name: string | null; bank_ifsc: string | null; bank_account_no: string | null }>(r.vendor)
+    return {
+      payment_number: r.payment_number as string,
+      payment_date: r.payment_date as string,
+      beneficiary_name: vendor?.name ?? '',
+      bank_name: vendor?.bank_name ?? null,
+      ifsc: vendor?.bank_ifsc ?? null,
+      account_no: vendor?.bank_account_no ?? null,
+      amount: Number(r.net_amount ?? 0),
+      reference_no: (r.reference_no as string | null) ?? null,
+      remarks: `Vendor payment ${r.payment_number} via ${r.payment_mode}`,
+    }
+  })
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MSME-1 half-yearly export — bills past the 45-day rule
+   ═══════════════════════════════════════════════════════════ */
+
+export type Msme1Row = {
+  vendor_name: string
+  vendor_pan: string | null
+  msme_udyam_no: string | null
+  bill_number: string
+  vendor_invoice_no: string
+  vendor_invoice_date: string
+  received_at: string | null
+  due_date: string | null
+  amount_outstanding: number
+  days_since_receipt: number
+}
+
+export async function getMsme1Batch(): Promise<Msme1Row[]> {
+  const actor = await getActor()
+  if (!actor) return []
+
+  // Hit the ageing view for the computed msme_flag + days
+  const { data: ageing } = await actor.supabase
+    .from('vendor_bill_ageing_v')
+    .select('vendor_id, bill_number, vendor_invoice_no, vendor_invoice_date, received_at, due_date, amount_outstanding, days_since_receipt, msme_flag')
+    .eq('msme_flag', 'breach')
+    .order('days_since_receipt', { ascending: false })
+
+  if (!ageing || ageing.length === 0) return []
+
+  // Pull vendor masters for PAN + UDYAM
+  const vendorIds = Array.from(new Set(ageing.map((r) => r.vendor_id as string)))
+  const { data: vendors } = await actor.supabase
+    .from('vendor')
+    .select('id, name, pan, msme_udyam_no')
+    .in('id', vendorIds)
+
+  const vendorMap = new Map((vendors ?? []).map((v) => [v.id as string, v]))
+
+  return ageing.map((r) => {
+    const v = vendorMap.get(r.vendor_id as string)
+    return {
+      vendor_name: (v?.name as string) ?? '',
+      vendor_pan: (v?.pan as string | null) ?? null,
+      msme_udyam_no: (v?.msme_udyam_no as string | null) ?? null,
+      bill_number: r.bill_number as string,
+      vendor_invoice_no: r.vendor_invoice_no as string,
+      vendor_invoice_date: r.vendor_invoice_date as string,
+      received_at: (r.received_at as string | null) ?? null,
+      due_date: (r.due_date as string | null) ?? null,
+      amount_outstanding: Number(r.amount_outstanding ?? 0),
+      days_since_receipt: Number(r.days_since_receipt ?? 0),
+    }
+  })
 }
 
 /* ─── Form lookups ─────────────────────────────────────────── */
