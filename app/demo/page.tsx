@@ -70,7 +70,7 @@ export default async function DemoLandingPage({
             Sign in as either tenant
           </h1>
           <p className="text-sm md:text-base text-muted-foreground max-w-2xl">
-            Vyara OS is a modular Business Operating System — same architecture, configured per industry.
+            CRMOS is a modular Business Operating System — same architecture, configured per industry.
             Pick a tenant to see the same screens with different masters, pipelines, vocabulary, and seed data.
           </p>
           {error && (

@@ -79,7 +79,7 @@ export default async function TallySyncPage({
         <div>
           <h1 className="text-lg font-semibold">Tally reconciliation</h1>
           <p className="text-sm text-muted-foreground">
-            Two-way sync + drift detection between Vyara OS and Tally.
+            Two-way sync + drift detection between CRMOS and Tally.
             {deferred && (
               <span className="ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs bg-amber-50 text-amber-700">
                 <Link2Off className="size-3" /> Deferred — TALLY_URL not configured
