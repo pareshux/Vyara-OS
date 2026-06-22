@@ -150,6 +150,12 @@ export type VendorBillDetail = {
   cancellation_reason: string | null
   notes: string | null
   created_at: string
+  // P5 additions
+  irn_no: string | null
+  irn_validated_at: string | null
+  gstr_2b_status: 'pending' | 'matched' | 'mismatched' | 'not_in_2b' | 'reversed' | null
+  gstr_2b_period: string | null
+  itc_eligible: boolean | null
   lines: VendorBillLine[]
 }
 
@@ -690,6 +696,7 @@ export async function getVendorBill(billId: string): Promise<VendorBillDetail | 
       vendor_address_snapshot, bill_to_snapshot,
       approval_request_id, submitted_at, approved_at,
       cancelled_at, cancellation_reason, notes, created_at,
+      irn_no, irn_validated_at, gstr_2b_status, gstr_2b_period, itc_eligible,
       vendor:vendor_id ( id, name, gstin, msme_status ),
       po:po_id ( id, po_number ),
       grn:grn_id ( id, grn_number ),
@@ -783,6 +790,11 @@ export async function getVendorBill(billId: string): Promise<VendorBillDetail | 
     cancellation_reason: (r.cancellation_reason as string | null) ?? null,
     notes: (r.notes as string | null) ?? null,
     created_at: r.created_at as string,
+    irn_no: (r.irn_no as string | null) ?? null,
+    irn_validated_at: (r.irn_validated_at as string | null) ?? null,
+    gstr_2b_status: (r.gstr_2b_status as VendorBillDetail['gstr_2b_status']) ?? null,
+    gstr_2b_period: (r.gstr_2b_period as string | null) ?? null,
+    itc_eligible: (r.itc_eligible as boolean | null) ?? null,
     lines,
   }
 }

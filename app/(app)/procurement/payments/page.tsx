@@ -6,6 +6,7 @@ import { listVendorPayments, type PaymentSummary } from '@/lib/actions/vendor-pa
 import { Badge } from '@/components/ui/badge'
 import { ChevronLeft, ChevronRight, Banknote } from 'lucide-react'
 import { NeftExportButton } from './neft-export-button'
+import { Quarterly26QButton } from './quarterly-26q-button'
 
 function formatMoneyShort(n: number): string {
   if (n >= 1_00_00_000) return `₹${(n / 1_00_00_000).toFixed(2)} cr`
@@ -100,6 +101,7 @@ export default async function VendorPaymentsPage({ searchParams }: PageProps) {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Quarterly26QButton />
           <NeftExportButton />
           <Link
             href="/procurement/payments/new"

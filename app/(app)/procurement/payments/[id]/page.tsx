@@ -90,6 +90,16 @@ export default async function PaymentDetailPage({ params }: PageProps) {
                   <Printer className="size-4" /> Print voucher
                 </Link>
               )}
+              {payment.status === 'posted' && payment.tds_amount > 0 && (
+                <Link
+                  href={`/procurement/payments/${payment.id}/form-16a`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 text-rose-800 px-3 py-1.5 text-sm font-medium hover:bg-rose-100 transition-colors"
+                >
+                  <Printer className="size-4" /> Form 16A
+                </Link>
+              )}
               <PaymentWorkflowActions paymentId={payment.id} status={payment.status} />
             </div>
           </div>

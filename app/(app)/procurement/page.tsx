@@ -215,8 +215,12 @@ export default async function ProcurementPage() {
                 <span className="flex-1 text-foreground">Payment + TDS</span>
                 <span className="text-[10px] text-emerald-700">Live ✓</span>
               </Link>
-              <GapRow icon={CircleAlert} label="NEFT bank file + Form 16A + MSME-1" tag="P3β · follow-on" />
-              <GapRow icon={CircleAlert} label="GSTR-2B reconciliation" tag="FIN-023 · P5" />
+              <Link href="/procurement/gstr-2b" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
+                <CircleAlert className="size-3.5 text-amber-600 shrink-0" />
+                <span className="flex-1 text-foreground">GSTR-2B reconciliation</span>
+                <span className="text-[10px] text-emerald-700">Live ✓</span>
+              </Link>
+              <GapRow icon={CircleAlert} label="GSTN auto-pull · vendor scorecards · imports" tag="P5γ + P6 · queued" />
             </div>
           </CardContent>
         </Card>

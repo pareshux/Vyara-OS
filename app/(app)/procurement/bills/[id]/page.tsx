@@ -9,7 +9,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ApprovalCard } from '@/components/approval/approval-card'
 import { BillWorkflowActions } from './workflow-actions'
-import { ChevronLeft, ExternalLink, Building2, Receipt, FileSignature, AlertTriangle, CheckCircle2, Eye, Banknote } from 'lucide-react'
+import { ChevronLeft, ExternalLink, Building2, Receipt, FileSignature, AlertTriangle, CheckCircle2, Eye, Banknote, FileCheck2 } from 'lucide-react'
+import { IrnForm } from './irn-form'
 
 function formatINR(n: number) {
   return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
@@ -173,6 +174,37 @@ export default async function VendorBillDetailPage({ params }: PageProps) {
               </span>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* IRN + GSTR-2B status card */}
+      <Card>
+        <CardContent className="flex flex-col gap-3">
+          <div className="text-sm font-medium inline-flex items-center gap-1.5">
+            <FileCheck2 className="size-3.5" /> E-invoice IRN + GSTR-2B reconciliation
+          </div>
+          <IrnForm billId={bill.id} existingIrn={bill.irn_no} existingValidatedAt={bill.irn_validated_at} />
+          <div className="pt-2 border-t border-border text-xs flex items-center gap-3 flex-wrap">
+            <span className="text-muted-foreground">GSTR-2B:</span>
+            {bill.gstr_2b_status === 'matched' && (
+              <span className="inline-flex items-center gap-1 text-emerald-700">
+                <CheckCircle2 className="size-3" /> Matched in {bill.gstr_2b_period} · ITC eligible
+              </span>
+            )}
+            {bill.gstr_2b_status === 'not_in_2b' && (
+              <span className="inline-flex items-center gap-1 text-rose-700">
+                <AlertTriangle className="size-3" /> Booked but not in {bill.gstr_2b_period} · ITC blocked · chase vendor
+              </span>
+            )}
+            {bill.gstr_2b_status === 'mismatched' && (
+              <span className="inline-flex items-center gap-1 text-amber-700">
+                <AlertTriangle className="size-3" /> Amount mismatch with {bill.gstr_2b_period}
+              </span>
+            )}
+            {(!bill.gstr_2b_status || bill.gstr_2b_status === 'pending') && (
+              <span className="text-muted-foreground">Pending — upload the period&apos;s 2B at <Link href="/procurement/gstr-2b" className="text-primary hover:underline">/procurement/gstr-2b</Link></span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
