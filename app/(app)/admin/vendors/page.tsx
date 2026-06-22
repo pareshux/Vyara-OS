@@ -30,7 +30,11 @@ export default async function VendorsPage() {
 
   const { data: vendors } = await supabase
     .from('vendor')
-    .select('id, code, name, vendor_type, gstin, contact_name, phone, email, is_active, notes')
+    .select(`
+      id, code, name, vendor_type, gstin, pan, msme_status, msme_udyam_no,
+      bank_account_no, bank_ifsc, bank_name, payment_terms_days, address,
+      contact_name, phone, email, is_active, notes
+    `)
     .is('deleted_at', null)
     .order('vendor_type')
     .order('name')
@@ -124,6 +128,14 @@ export default async function VendorsPage() {
                         name={v.name}
                         vendor_type={v.vendor_type as 'supplier' | 'contractor' | 'service' | 'other'}
                         gstin={v.gstin ?? ''}
+                        pan={(v as { pan: string | null }).pan ?? ''}
+                        msme_status={((v as { msme_status: string | null }).msme_status ?? '') as 'not_msme' | 'micro' | 'small' | 'medium' | ''}
+                        msme_udyam_no={(v as { msme_udyam_no: string | null }).msme_udyam_no ?? ''}
+                        bank_account_no={(v as { bank_account_no: string | null }).bank_account_no ?? ''}
+                        bank_ifsc={(v as { bank_ifsc: string | null }).bank_ifsc ?? ''}
+                        bank_name={(v as { bank_name: string | null }).bank_name ?? ''}
+                        payment_terms_days={(v as { payment_terms_days: number | null }).payment_terms_days ?? 30}
+                        address={(v as { address: string | null }).address ?? ''}
                         contact_name={v.contact_name ?? ''}
                         phone={v.phone ?? ''}
                         email={v.email ?? ''}

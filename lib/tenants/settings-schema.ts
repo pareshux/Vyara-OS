@@ -64,12 +64,14 @@ const FieldSettingsSchema = z
 
 const CodeTemplatesSchema = z
   .object({
-    quotation:   codeTemplate('quotation').default('VT-QT-{yyyy}-{nnnn}'),
-    sales_order: codeTemplate('sales_order').default('VT-SO-{yyyy}-{nnnn}'),
-    invoice:     codeTemplate('invoice').default('VT-INV-{yyyy}-{nnnn}'),
-    dispatch:    codeTemplate('dispatch').default('VT-DC-{yyyy}-{nnnn}'),
-    lead:        codeTemplate('lead').default('VT-LD-{yyyy}-{nnnn}'),
-    dealer:      codeTemplate('dealer').default('VT-DLR-{nnnn}'),
+    quotation:          codeTemplate('quotation').default('VT-QT-{yyyy}-{nnnn}'),
+    sales_order:        codeTemplate('sales_order').default('VT-SO-{yyyy}-{nnnn}'),
+    invoice:            codeTemplate('invoice').default('VT-INV-{yyyy}-{nnnn}'),
+    dispatch:           codeTemplate('dispatch').default('VT-DC-{yyyy}-{nnnn}'),
+    lead:               codeTemplate('lead').default('VT-LD-{yyyy}-{nnnn}'),
+    dealer:             codeTemplate('dealer').default('VT-DLR-{nnnn}'),
+    purchase_order:     codeTemplate('purchase_order').default('VT-PO-{yyyy}-{nnnn}'),
+    goods_receipt_note: codeTemplate('goods_receipt_note').default('VT-GRN-{yyyy}-{nnnn}'),
   })
   .passthrough()
 
