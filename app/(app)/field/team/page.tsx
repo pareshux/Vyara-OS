@@ -263,7 +263,8 @@ export default async function TeamPage({
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Rep</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Status</th>
                 <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Visits</th>
-                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground md:table-cell whitespace-nowrap">Hours</th>
+                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground md:table-cell whitespace-nowrap">Check in</th>
+                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground md:table-cell whitespace-nowrap">Check out</th>
                 <th className="hidden px-3 py-2 text-right font-medium text-muted-foreground md:table-cell whitespace-nowrap">Distance</th>
                 <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground lg:table-cell whitespace-nowrap">Active</th>
                 <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground lg:table-cell whitespace-nowrap">Where</th>
@@ -275,12 +276,25 @@ export default async function TeamPage({
                 const att = r.attendance
                 const isOnDuty = !!att?.check_in_at && !att?.check_out_at
                 const drillHref = `/field/team/${r.user_id}?date=${date}`
+                // Visual highlight when rep has NO attendance record for today
+                const notLoggedIn = !att && isToday
+                const rowClass = notLoggedIn
+                  ? 'border-b border-border last:border-0 bg-rose-50/40 hover:bg-rose-50/70'
+                  : 'border-b border-border last:border-0 hover:bg-muted/30'
                 return (
-                  <tr key={r.user_id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                  <tr key={r.user_id} className={rowClass}>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <Link href={drillHref} className="flex items-center gap-2.5 text-foreground hover:text-primary">
-                        <div className="flex size-8 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-muted-foreground shrink-0">
-                          {initials(r.full_name)}
+                        <div className="relative shrink-0">
+                          <div className={`flex size-8 items-center justify-center rounded-full text-[11px] font-medium ${notLoggedIn ? 'bg-rose-100 text-rose-700' : 'bg-muted text-muted-foreground'}`}>
+                            {initials(r.full_name)}
+                          </div>
+                          {/* Status dot — bottom-right of avatar */}
+                          {notLoggedIn ? (
+                            <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-rose-500 ring-2 ring-card" title="Not logged in" />
+                          ) : isOnDuty ? (
+                            <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-emerald-500 ring-2 ring-card" title="On duty" />
+                          ) : null}
                         </div>
                         <div>
                           <p className="text-sm font-medium leading-tight">{r.full_name}</p>
@@ -316,14 +330,10 @@ export default async function TeamPage({
                       )}
                     </td>
                     <td className="hidden px-3 py-2 tabular-nums md:table-cell whitespace-nowrap">
-                      {att?.check_in_at ? (
-                        <span>
-                          {formatTime(att.check_in_at)}
-                          {att.check_out_at && <span className="text-muted-foreground"> → {formatTime(att.check_out_at)}</span>}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground/50">—</span>
-                      )}
+                      {att?.check_in_at ? formatTime(att.check_in_at) : <span className="text-muted-foreground/50">—</span>}
+                    </td>
+                    <td className="hidden px-3 py-2 tabular-nums md:table-cell whitespace-nowrap">
+                      {att?.check_out_at ? formatTime(att.check_out_at) : <span className="text-muted-foreground/50">—</span>}
                     </td>
                     <td className="hidden px-3 py-2 text-right tabular-nums md:table-cell whitespace-nowrap">
                       {att?.total_km != null ? (

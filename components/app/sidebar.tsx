@@ -25,6 +25,7 @@ import {
   LineChart,
   LifeBuoy,
   CalendarClock,
+  BarChart3,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -101,6 +102,7 @@ const NAV_ITEMS: NavItem[] = [
   // Role-aware link resolver below routes managers to /field/team and
   // reps to /field — same nav item, different landing.
   { label: 'Field',       href: '/field',       icon: MapPin,          group: 'field_ops',     feature: 'enable_field_sales' },
+  { label: 'Attendance',  href: '/field/team/attendance', icon: BarChart3, group: 'field_ops', feature: 'enable_field_sales', roles: ['admin', 'manager'] },
 
   // Customer Success — Blueprint capability §2.5. Built starting with
   // CS-001 (complaints, Phase 3) + CS-009 (AMC contracts, Phase 4).

@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Users, ChevronRight, FileDown, AlertCircle } from 'lucide-react'
 import { getTeamAttendance, type AttendancePeriod } from '@/lib/read-models/team-attendance'
+import { ListFilter } from '@/components/app/list-filter'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,7 @@ function fmtINR(n: number): string {
 export default async function AttendanceReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; start?: string; end?: string }>
+  searchParams: Promise<{ period?: string; start?: string; end?: string; q?: string; role?: string }>
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -52,9 +53,33 @@ export default async function AttendanceReportPage({
       </div>
     )
   }
-  const { period: range, reps, totals } = result.data
+  const { period: range, reps: allReps, totals: rawTotals } = result.data
 
-  const exportHref = `/field/team/attendance/export?period=${period}${sp.start ? `&start=${sp.start}` : ''}${sp.end ? `&end=${sp.end}` : ''}`
+  // Server-side filter — search by name (case-insensitive substring) + role select
+  const qLower = (sp.q ?? '').trim().toLowerCase()
+  const roleFilter = sp.role && sp.role !== '__all__' ? sp.role : null
+  const reps = allReps.filter((r) => {
+    if (qLower && !r.full_name.toLowerCase().includes(qLower)) return false
+    if (roleFilter && r.role !== roleFilter) return false
+    return true
+  })
+  // Recompute totals from the filtered set so the strip + filters agree
+  const totals = (qLower || roleFilter)
+    ? reps.reduce((acc, r) => ({
+        days_on_duty: acc.days_on_duty + r.days_on_duty,
+        days_wfh: acc.days_wfh + r.days_wfh,
+        days_leave: acc.days_leave + r.days_leave,
+        total_hours: acc.total_hours + r.total_hours,
+        total_km: acc.total_km + r.total_km,
+        reimbursement_amount: acc.reimbursement_amount + r.reimbursement_amount,
+      }), { days_on_duty: 0, days_wfh: 0, days_leave: 0, total_hours: 0, total_km: 0, reimbursement_amount: 0 })
+    : rawTotals
+
+  const exportHref = `/field/team/attendance/export?period=${period}` +
+    (sp.start ? `&start=${sp.start}` : '') +
+    (sp.end ? `&end=${sp.end}` : '') +
+    (sp.q ? `&q=${encodeURIComponent(sp.q)}` : '') +
+    (sp.role ? `&role=${encodeURIComponent(sp.role)}` : '')
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-4 max-w-6xl">
@@ -110,6 +135,20 @@ export default async function AttendanceReportPage({
           </Link>
         </div>
       </div>
+
+      {/* Filters — search + role */}
+      <ListFilter
+        searchKey="q"
+        searchPlaceholder="Search reps…"
+        selects={[
+          { key: 'role', label: 'Role', placeholder: 'All roles', options: [
+            { value: 'admin',          label: 'Admin' },
+            { value: 'manager',        label: 'Manager' },
+            { value: 'sales_engineer', label: 'Sales engineer' },
+          ]},
+        ]}
+        keepParams={['period', 'start', 'end']}
+      />
 
       {/* Totals strip */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">

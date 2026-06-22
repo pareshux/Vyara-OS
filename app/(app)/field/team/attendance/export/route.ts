@@ -23,7 +23,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: result.error }, { status: 403 })
   }
 
-  const csv = repsToCsv(result.data.reps)
+  // Apply the same q + role filters the page does, so the CSV matches
+  // exactly what the user is looking at when they click Export.
+  const qLower = (sp.get('q') ?? '').trim().toLowerCase()
+  const role = sp.get('role')
+  const roleFilter = role && role !== '__all__' ? role : null
+  const filtered = result.data.reps.filter((r) => {
+    if (qLower && !r.full_name.toLowerCase().includes(qLower)) return false
+    if (roleFilter && r.role !== roleFilter) return false
+    return true
+  })
+
+  const csv = repsToCsv(filtered)
   const filename = `field-team-attendance-${period}-${result.data.period.start_date}-to-${result.data.period.end_date}.csv`
 
   return new NextResponse(csv, {
