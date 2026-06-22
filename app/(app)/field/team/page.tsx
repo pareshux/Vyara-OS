@@ -101,7 +101,7 @@ export default async function TeamPage({
 
   if ('error' in snapshotResult) {
     return (
-      <div className="p-4 md:p-6 max-w-3xl">
+      <div className="p-4 md:p-6 max-w-6xl">
         <Card><CardContent className="py-5 text-sm text-destructive">{snapshotResult.error}</CardContent></Card>
       </div>
     )
@@ -154,7 +154,7 @@ export default async function TeamPage({
   const noCheckIn = reps.filter((r) => !r.attendance).length
 
   return (
-    <div className="p-4 md:p-6 flex flex-col gap-4 max-w-3xl">
+    <div className="p-4 md:p-6 flex flex-col gap-4 max-w-6xl">
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
         <Link href="/field" className="hover:text-foreground">Field</Link>
         <ChevronRight className="size-3.5" />
@@ -253,13 +253,13 @@ export default async function TeamPage({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Rep</th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
-                <th className="px-3 py-2 text-left font-medium text-muted-foreground">Visits</th>
-                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground md:table-cell">Hours</th>
-                <th className="hidden px-3 py-2 text-right font-medium text-muted-foreground md:table-cell">Distance</th>
-                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground lg:table-cell">Last activity</th>
-                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground lg:table-cell">Where</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Rep</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Status</th>
+                <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Visits</th>
+                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground md:table-cell whitespace-nowrap">Hours</th>
+                <th className="hidden px-3 py-2 text-right font-medium text-muted-foreground md:table-cell whitespace-nowrap">Distance</th>
+                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground lg:table-cell whitespace-nowrap">Active</th>
+                <th className="hidden px-3 py-2 text-left font-medium text-muted-foreground lg:table-cell whitespace-nowrap">Where</th>
               </tr>
             </thead>
             <tbody>
@@ -270,19 +270,19 @@ export default async function TeamPage({
                 const drillHref = `/field/team/${r.user_id}?date=${date}`
                 return (
                   <tr key={r.user_id} className="border-b border-border last:border-0 hover:bg-muted/30">
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <Link href={drillHref} className="flex items-center gap-2.5 text-foreground hover:text-primary">
                         <div className="flex size-8 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-muted-foreground shrink-0">
                           {initials(r.full_name)}
                         </div>
-                        <div className="min-w-0">
+                        <div>
                           <p className="text-sm font-medium leading-tight">{r.full_name}</p>
                           <p className="text-[10px] uppercase text-muted-foreground tracking-wide">{r.role.replace('_', ' ')}</p>
                         </div>
                       </Link>
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
                         <StatusPill rep={r} isToday={isToday} />
                         {stale && (
                           <Badge variant="outline" className="text-[10px] uppercase border-0 bg-amber-50 text-amber-700">
@@ -291,7 +291,7 @@ export default async function TeamPage({
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2 tabular-nums">
+                    <td className="px-3 py-2 tabular-nums whitespace-nowrap">
                       {att && (att.check_in_at || att.status_for_day !== 'on_duty') ? (
                         <span>
                           <span className="text-foreground font-medium">{r.visits_today}</span>
@@ -308,7 +308,7 @@ export default async function TeamPage({
                         <span className="text-muted-foreground/50">—</span>
                       )}
                     </td>
-                    <td className="hidden px-3 py-2 tabular-nums md:table-cell">
+                    <td className="hidden px-3 py-2 tabular-nums md:table-cell whitespace-nowrap">
                       {att?.check_in_at ? (
                         <span>
                           {formatTime(att.check_in_at)}
@@ -318,7 +318,7 @@ export default async function TeamPage({
                         <span className="text-muted-foreground/50">—</span>
                       )}
                     </td>
-                    <td className="hidden px-3 py-2 text-right tabular-nums md:table-cell">
+                    <td className="hidden px-3 py-2 text-right tabular-nums md:table-cell whitespace-nowrap">
                       {att?.total_km != null ? (
                         <span>{att.total_km.toLocaleString('en-IN')} km</span>
                       ) : att?.running_km != null ? (
@@ -330,12 +330,12 @@ export default async function TeamPage({
                         <div className="text-[10px] text-muted-foreground tabular-nums">{rs(att.reimbursement_amount)}</div>
                       )}
                     </td>
-                    <td className="hidden px-3 py-2 text-muted-foreground tabular-nums lg:table-cell">
+                    <td className="hidden px-3 py-2 text-muted-foreground tabular-nums lg:table-cell whitespace-nowrap">
                       {r.last_activity_at && isOnDuty ? formatRelative(r.last_activity_at)
-                        : !att && isToday ? <span className="italic">not checked in</span>
+                        : !att && isToday ? <span className="italic">not in</span>
                         : <span className="text-muted-foreground/50">—</span>}
                     </td>
-                    <td className="hidden px-3 py-2 lg:table-cell">
+                    <td className="hidden px-3 py-2 lg:table-cell whitespace-nowrap">
                       {r.latest_location ? (
                         <LocationMapButton
                           lat={r.latest_location.lat}
