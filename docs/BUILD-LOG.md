@@ -23,6 +23,73 @@
 
 ## 2026-06-23
 
+### Procurement P2α — Vendor Bill core + 3-way match engine (pending commit)
+- **Tracks:** DEL-018 ✅ Partial (P2β AP ageing + P3 payment are the only remainders)
+- **Capability:** Delivery (procurement) + Finance (vendor invoice booking)
+- **Tier:** Must-have post-C#2
+- **Status change:** 📋 P2 → ✅ Partial
+- **Notes:** First Finance-side procurement slice. Closes the loop from PO → GRN → invoice booking via a server-side 3-way match engine that catches the three things vendors actually drift on: over-billing, rate creep, and tax-rate/HSN slippage.
+
+  **3-way match engine** (`lib/procurement/match-engine.ts` — pure functions, no DB writes):
+  - Lives outside `lib/actions/*` because Next.js requires every export in a `'use server'` module to be `async`. The match logic is sync.
+  - Per-line check precedence (worst-wins):
+    1. **qty_over** — bill qty > (po_line.qty_received − po_line.qty_billed). Cap respects prior bills.
+    2. **rate_mismatch** — strict equality vs po_line.rate. PO amendment is the right path for genuine rate changes.
+    3. **gst_mismatch** — bill.gst_rate_pct must equal po_line.gst_rate_pct.
+    4. **hsn_mismatch** — only when both sides have a value (warn-not-fail when either is missing).
+    5. **unlinked** — bill line has no po_line_id (direct billing not blocked, but flags for human review).
+    6. **matched** — clean.
+  - Bill-level aggregate (`aggregateBillMatch`): hard mismatches → 'mismatched'; any unlinked → 'under_review'; all matched → 'matched'.
+  - Diagnostic strings stored verbatim on `vendor_bill_line.match_notes` so the UI can render them without recomputing.
+
+  **Server actions** (`lib/actions/vendor-bills.ts`):
+  - `createVendorBill` — validates vendor matches PO vendor, validates per-line qty/rate inputs, pulls PO line snapshots (qty_received, qty_billed, rate, hsn, gst), runs the match engine, computes GST split, inserts header + lines atomically with soft-delete rollback on line failure. Computes `due_date` from `received_at + vendor.payment_terms_days` (drives MSME 45-day in P2β). Optional `submit_immediately=true` chains to submit.
+  - `submitVendorBill` — raises approval via PLAT-014. Sub-₹50k auto-approves and calls `applyApprovedBillEffects` which increments po_line.qty_billed for each line.
+  - `cancelVendorBill` — draft-only. Approved bills require the RTV + credit-note flow.
+  - `syncBillFromApproval` — read-time reconciliation (mirrors purchase-orders.ts / expenses.ts pattern); applies qty_billed effects when an external approval lands.
+  - `listVendorBills` + `getVendorBill` — with status + match_status filters + nested PO line context for diagnostic display.
+  - `getPoForBilling` + `listPosForBilling` — form pickers. Eligible POs are partly_received/received with `qty_billable = qty_received − qty_billed > 0` on at least one line.
+
+  **UI**:
+  - `/procurement/bills` — list with 4-card KPI strip (outstanding total, overdue count + value, mismatched count, drafts) + 7-status filter row + 4-match filter row. Per-row chips: status pill + match-status pill with icon (✓ / ⚠ / 👁) + due date in rose when overdue.
+  - `/procurement/bills/new` — two modes:
+    - Picker (no `?po=`): lists POs with billable headroom, shows status + billable qty per option.
+    - Pre-bound (`?po=X`): lines auto-fill from PO snapshot (qty defaults to qty_billable, rate/HSN/GST default to PO values). User edits to reflect what the vendor invoice actually says. **Live mismatch preview** at the bottom: as the user types, a yellow callout lists exact warnings the 3-way match will flag — qty over by X, rate +₹Y/unit, GST drift Z% — so the user can fix the typo or proceed knowingly.
+  - `/procurement/bills/[id]` — detail. Header has status pill + match-status pill + money tiles (Total / Paid / Outstanding / Due with rose overdue indicator). **8-column line table**: description, bill qty, bill rate, PO rate (with rate delta in amber when mismatched), HSN (with PO HSN below in amber when mismatched), GST%, total, match badge + diagnostic note. Vendor + PO + GRN linkage block. Inline `<ApprovalCard>` from PLAT-014 when pending. MSME 45-day reminder when vendor is MSME and received_at is set. Round-off field rendered when non-zero (Indian vendor invoices commonly round to nearest rupee).
+  - `<BillWorkflowActions>` client island: draft-only Submit + Cancel buttons. Submitting a 'mismatched' bill triggers an extra confirm dialog ("3-way match flagged issues — review or submit anyway?") — never blocks, since real-world reality requires booking invoices even when they disagree with the PO.
+  - PO detail extended: "Book vendor bill" CTA (sky-blue, gated on partly_received/received + unbilled qty) sits next to the existing "Receive goods" emerald CTA. New "Vendor bills" section lists bills against the PO with status + match-status + vendor invoice number.
+  - Procurement landing's coming-next card swaps "Vendor bills + 3-way match" gap marker for a Live ✓ link. AP ageing/MSME demoted to a P2β marker. Payment/TDS as P3 marker.
+
+  **Schema** (migration 0061):
+  - `vendor_bill` (29 cols) — bill_number (auto VT-VB-*), vendor_invoice_no + _at (the legal tax invoice; UNIQUE per vendor_id + tenant), po_id + grn_id (optional, both nullable so direct bills can be added later), bill_date + received_at + due_date, status (6 states), match_status (4 states), money rollups + amount_paid + amount_outstanding (P3 wires these — kept as columns now so the ageing read works as soon as P3 lands), approval_request_id, address snapshots.
+  - `vendor_bill_line` — po_line_id optional (sets the 3-way match path), full GST line model, match_status + match_notes per line.
+  - `purchase_order_line.qty_billed` — cumulative-billed tracker. NOT updated on draft bills; incremented on approve via `applyApprovedBillEffects`. Partial billing is supported: qty_received can be 100 while qty_billed is 50 (vendor split into two invoices).
+  - 6 indexes for the hot paths: vendor_idx, po_idx, status_idx (tenant + status + bill_date DESC), match_idx, due_idx (only on outstanding bills), approval_idx.
+  - Sequence + render_tenant_code-aware trigger, next_code_sequence whitelist + Zod CodeTemplatesSchema extended.
+  - Approval policies seeded for entity_type='vendor_bill' with same bands as PO (₹50k-₹5L manager / ₹5L-₹25L manager+admin / ₹25L+ admin) — idempotent.
+
+  **Sample data** (migration 0062):
+  - **Vyara `VT-VB-2026-0001`** — clean match against VT-PO-2026-0004 (5000 cartons × ₹22 = ₹1.10L taxable + 18% IGST = ₹1.30L). Status `approved`, match `matched`. po_line.qty_billed = 5000 (full).
+  - **Raj `RA-VB-2026-0001`** — rate mismatch against RA-PO-2026-0005 (line 1: VFD 30HP × 1 unit). PO rate ₹1,75,000/unit; vendor invoiced at ₹1,85,000/unit (+₹10,000/unit = 5.7% over). Bill match_status='mismatched', line match_status='rate_mismatch' with the diagnostic string. Status `submitted` with a pending approval_request against the mid-band policy.
+
+  **Architectural calls recorded:**
+  - **Match engine in a separate module.** Forced by Next.js' `'use server'` constraint (every export must be async). Cleaner anyway — pure logic shouldn't sit in an actions file.
+  - **Match runs on create, NOT on every edit/save.** Match status is captured in DB on create + on submit; the detail page renders the stored result. Avoids drift between user perception and DB state.
+  - **Bill-level mismatch never blocks submit.** Real-world reality: even when the invoice disagrees with the PO (different rate, different HSN), accounts has to book it for tax/GST filing. The approver sees the diagnostics on detail; the rate-mismatch path is the *value* of the platform.
+  - **qty_billed lives on po_line (not derived).** Stored cumulatively rather than derived at read time. Eliminates a sum-over-bills query on every PO read; updated on approve only.
+  - **No `vendor_bill_grn` join table yet.** v1 single-GRN bills only (vendor_bill.grn_id is nullable). Multi-GRN bills happen in real life (vendor consolidates 2 GRNs into 1 invoice) — when a customer asks, extend with a join table.
+
+  **Verification:**
+  - `tsc --noEmit` clean.
+  - 4 routes (`/procurement/bills`, `/bills/new`, `/bills/[id]`, PO detail re-render) all compile + 307 to /login.
+  - Migrations 0061 + 0062 applied; NOTICE confirms both sample bills.
+  - **Pre-fix smoke caught the `'use server'` async-export error** (server returned 500 on every route under vendor-bills.ts). Refactored match-engine to its own file in `lib/procurement/match-engine.ts`; routes back to 307. Worth flagging — this is the second time the use-server constraint has bitten ('use server' files can only export async functions, type re-exports OK).
+
+  **Deferred:**
+  - **P2β:** AP ageing dashboard (mirror of /collections — ageing buckets, top-debtor-equivalent for vendors with overdue bills, MSME-flag highlighting). MSME 45-day rule report (FIN-020). Cash-out side of Owner Dashboard.
+  - **P2γ:** `procurement.ap_master` feature flag implementation (Tally adapter + native-mode toggle). Schema is ready (PLAT-028 row exists); only the adapter code + Tally sync stub is missing.
+  - **P3:** payment scheduling, TDS auto-classification (194Q/194C/194J/194I), NEFT/RTGS export, Form 16A, MSME-1 half-yearly filing.
+
 ### Procurement P1γ — Return to Vendor + PO PDF + product-linked sample (pending commit)
 - **Tracks:** DEL-017 ✅ (flipped from "✅ RTV → P1γ" to fully ✅); DEL-016 extended with PDF render
 - **Capability:** Delivery (procurement) + Platform (`stock_movement.movement_type` CHECK extended)

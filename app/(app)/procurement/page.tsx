@@ -168,8 +168,13 @@ export default async function ProcurementPage() {
                 <span className="flex-1 text-foreground">Returns to vendor (RTV)</span>
                 <span className="text-[10px] text-emerald-700">Live ✓</span>
               </Link>
-              <GapRow icon={Receipt} label="Vendor bills + 3-way match" tag="DEL-019 · P2" />
-              <GapRow icon={CircleAlert} label="MSME 45-day compliance" tag="FIN-020 · P2" />
+              <Link href="/procurement/bills" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
+                <Receipt className="size-3.5 text-sky-600 shrink-0" />
+                <span className="flex-1 text-foreground">Vendor bills + 3-way match</span>
+                <span className="text-[10px] text-emerald-700">Live ✓</span>
+              </Link>
+              <GapRow icon={CircleAlert} label="AP ageing + MSME 45-day" tag="DEL-019 / FIN-020 · P2β" />
+              <GapRow icon={CircleAlert} label="Payment + TDS" tag="FIN-021 / FIN-022 · P3" />
             </div>
           </CardContent>
         </Card>

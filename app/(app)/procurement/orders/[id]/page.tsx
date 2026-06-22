@@ -12,11 +12,12 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getPurchaseOrder } from '@/lib/actions/purchase-orders'
 import { listGoodsReceiptNotes } from '@/lib/actions/goods-receipt-notes'
+import { listVendorBills } from '@/lib/actions/vendor-bills'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ApprovalCard } from '@/components/approval/approval-card'
 import { POWorkflowActions } from './workflow-actions'
-import { ChevronLeft, ExternalLink, Building2, MapPin, FileText, Receipt, AlertTriangle, PackagePlus, PackageOpen, Printer } from 'lucide-react'
+import { ChevronLeft, ExternalLink, Building2, MapPin, FileText, Receipt, AlertTriangle, PackagePlus, PackageOpen, Printer, FileSpreadsheet } from 'lucide-react'
 
 function formatINR(n: number): string {
   return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
@@ -44,15 +45,20 @@ interface PageProps {
 
 export default async function PurchaseOrderDetailPage({ params }: PageProps) {
   const { id } = await params
-  const [po, grns] = await Promise.all([
+  const [po, grns, bills] = await Promise.all([
     getPurchaseOrder(id),
     listGoodsReceiptNotes({ po_id: id, status: 'all', limit: 50 }),
+    listVendorBills({ po_id: id, limit: 50 }),
   ])
   if (!po) notFound()
 
   const receivable = ['approved', 'sent', 'partly_received'].includes(po.status)
   const hasUnfulfilled = po.lines.some((l) => Number(l.qty_received || 0) < Number(l.quantity || 0))
   const showReceiveCta = receivable && hasUnfulfilled
+
+  const billable = ['partly_received', 'received'].includes(po.status)
+  const hasUnbilled = po.lines.some((l) => Number(l.qty_received || 0) > Number((l as { qty_billed?: number }).qty_billed || 0))
+  const showBillCta = billable && hasUnbilled
 
   const interstate = po.lines.some((l) => l.is_interstate)
   const cgstTotal = po.lines.reduce((s, l) => s + Number(l.cgst_amount || 0), 0)
@@ -94,6 +100,14 @@ export default async function PurchaseOrderDetailPage({ params }: PageProps) {
                   className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-emerald-700 transition-colors"
                 >
                   <PackagePlus className="size-4" /> Receive goods
+                </Link>
+              )}
+              {showBillCta && (
+                <Link
+                  href={`/procurement/bills/new?po=${po.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-sky-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-sky-700 transition-colors"
+                >
+                  <FileSpreadsheet className="size-4" /> Book vendor bill
                 </Link>
               )}
               <Link
@@ -250,6 +264,47 @@ export default async function PurchaseOrderDetailPage({ params }: PageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Vendor bills against this PO */}
+      {bills.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium inline-flex items-center gap-1.5">
+                <FileSpreadsheet className="size-3.5" /> Vendor bills ({bills.length})
+              </div>
+              <Link href={`/procurement/bills?po=${po.id}`} className="text-xs text-muted-foreground hover:text-foreground">View in bills list →</Link>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {bills.map((b) => {
+                const statusTint = b.status === 'paid' ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : b.status === 'cancelled' ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : b.status === 'submitted' ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : b.status === 'approved' || b.status === 'partly_paid' ? 'bg-sky-50 text-sky-800 border-sky-200'
+                  : 'bg-muted text-muted-foreground border-border'
+                const matchTint = b.match_status === 'matched' ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : b.match_status === 'mismatched' ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : b.match_status === 'under_review' ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : 'bg-muted text-muted-foreground border-border'
+                return (
+                  <Link
+                    key={b.id}
+                    href={`/procurement/bills/${b.id}`}
+                    className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="font-mono text-xs">{b.bill_number}</span>
+                    <Badge variant="outline" className={`${statusTint} text-[10px] font-medium`}>{b.status.replace(/_/g, ' ')}</Badge>
+                    <Badge variant="outline" className={`${matchTint} text-[10px]`}>3-way · {b.match_status.replace(/_/g, ' ')}</Badge>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">vendor inv {b.vendor_invoice_no}</span>
+                    <span className="text-xs flex-1 text-right text-foreground font-medium tabular-nums">₹{formatINR(b.total)}</span>
+                    <ExternalLink className="size-3 text-muted-foreground" />
+                  </Link>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Goods receipts (GRNs) against this PO */}
       {grns.length > 0 && (
