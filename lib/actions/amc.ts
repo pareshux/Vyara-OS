@@ -150,12 +150,22 @@ export async function createAmcContract(input: CreateAmcInput): Promise<Result<{
 
 export async function markAmcVisitDone(input: {
   visit_id: string
-  notes?: string
+  /** Required: what was actually done on this visit. Replaces the old
+   *  one-click "mark done" with no detail. */
+  notes: string
+  /** Customer-side sign-off contact (their plant engineer / maintenance
+   *  lead). Optional but strongly recommended for audit trail. */
+  confirmed_by_contact_id?: string | null
+  /** Optional link to a fuller field_visit row if logged separately. */
   field_visit_id?: string | null
 }): Promise<Result> {
   const auth = await requireProfile()
   if (!auth.ok) return auth
   const { supabase, profile } = auth
+
+  if (!input.notes.trim()) {
+    return { ok: false, error: 'Service notes are required — what was done on this visit?' }
+  }
 
   const { error } = await supabase
     .from('amc_visit_schedule')
@@ -163,7 +173,8 @@ export async function markAmcVisitDone(input: {
       status: 'done',
       done_at: new Date().toISOString(),
       done_by: profile.id,
-      notes: input.notes ?? null,
+      notes: input.notes.trim(),
+      confirmed_by_contact_id: input.confirmed_by_contact_id ?? null,
       field_visit_id: input.field_visit_id ?? null,
       updated_at: new Date().toISOString(),
     })

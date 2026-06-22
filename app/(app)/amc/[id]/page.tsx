@@ -8,12 +8,13 @@
 
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { markAmcVisitDone, cancelAmcContract } from '@/lib/actions/amc'
+import { cancelAmcContract } from '@/lib/actions/amc'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { CalendarClock, CheckCircle2, AlertTriangle, Clock, Building2, X } from 'lucide-react'
+import { CalendarClock, CheckCircle2, AlertTriangle, Clock, Building2, UserCircle2, X } from 'lucide-react'
+import { AmcVisitDoneSheet, type ContactOption } from './visit-done-sheet'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,9 +73,29 @@ export default async function AmcDetailPage({ params }: { params: Promise<{ id: 
 
   const { data: visits } = await supabase
     .from('amc_visit_schedule')
-    .select('id, visit_number, scheduled_date, status, done_at, done_by, notes, done_by_user:done_by(full_name)')
+    .select(`
+      id, visit_number, scheduled_date, status, done_at, done_by, notes,
+      done_by_user:done_by(full_name),
+      confirmed_by_contact_id, confirmed_by:confirmed_by_contact_id(full_name, role_title)
+    `)
     .eq('amc_contract_id', id)
     .order('visit_number')
+
+  // Customer contacts for the sign-off dropdown
+  const contactOptions: ContactOption[] = []
+  if (firm) {
+    const { data: contacts } = await supabase
+      .from('contact')
+      .select('id, full_name, role_title')
+      .eq('firm_id', firm.id)
+      .is('deleted_at', null)
+      .order('full_name')
+    contacts?.forEach((c) => contactOptions.push({
+      id: c.id as string,
+      full_name: c.full_name as string,
+      role_title: (c.role_title as string | null) ?? null,
+    }))
+  }
 
   // AMC-linked complaints (Phase 4 added the FK)
   const { data: linkedComplaints } = await supabase
@@ -176,9 +197,10 @@ export default async function AmcDetailPage({ params }: { params: Promise<{ id: 
                 {visits.map((v) => {
                   const overdue = v.status === 'scheduled' && v.scheduled_date < today
                   const doneBy = pick(v.done_by_user as { full_name: string } | { full_name: string }[] | null)
+                  const confirmedBy = pick(v.confirmed_by as { full_name: string; role_title: string | null } | { full_name: string; role_title: string | null }[] | null)
                   return (
-                    <li key={v.id} className="py-3 flex items-center gap-3 flex-wrap">
-                      <span className="text-xs text-muted-foreground tabular-nums w-12">#{v.visit_number}</span>
+                    <li key={v.id} className="py-3 flex items-start gap-3 flex-wrap">
+                      <span className="text-xs text-muted-foreground tabular-nums w-12 pt-0.5">#{v.visit_number}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium tabular-nums">{new Date(v.scheduled_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
@@ -193,20 +215,41 @@ export default async function AmcDetailPage({ params }: { params: Promise<{ id: 
                             </Badge>
                           )}
                         </div>
-                        {v.notes && <p className="text-xs text-muted-foreground mt-0.5">{v.notes}</p>}
-                        {v.done_at && doneBy && (
-                          <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
-                            ✓ Done {new Date(v.done_at).toLocaleDateString('en-IN')} by {doneBy.full_name}
-                          </p>
+
+                        {/* Completed-visit detail block */}
+                        {v.status === 'done' && (
+                          <div className="mt-2 rounded-md border border-border bg-emerald-50/30 px-3 py-2 flex flex-col gap-1.5">
+                            {v.notes && (
+                              <p className="text-sm whitespace-pre-wrap leading-relaxed">{v.notes}</p>
+                            )}
+                            <div className="flex items-center gap-4 flex-wrap text-[11px] text-muted-foreground tabular-nums">
+                              {v.done_at && doneBy && (
+                                <span className="inline-flex items-center gap-1">
+                                  <CheckCircle2 className="size-3 text-emerald-600" />
+                                  Done {new Date(v.done_at).toLocaleDateString('en-IN')} by <span className="text-foreground font-medium">{doneBy.full_name}</span>
+                                </span>
+                              )}
+                              {confirmedBy && (
+                                <span className="inline-flex items-center gap-1">
+                                  <UserCircle2 className="size-3" />
+                                  Confirmed by <span className="text-foreground font-medium">{confirmedBy.full_name}</span>
+                                  {confirmedBy.role_title && <span> ({confirmedBy.role_title})</span>}
+                                </span>
+                              )}
+                              {!confirmedBy && (
+                                <span className="italic">No customer sign-off captured</span>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
                       {v.status === 'scheduled' && isActive && (
-                        <form action={async () => { 'use server'; await markAmcVisitDone({ visit_id: v.id as string }) }}>
-                          <Button type="submit" size="sm" variant="outline">
-                            <CheckCircle2 className="size-3.5 mr-1" />
-                            Mark done
-                          </Button>
-                        </form>
+                        <AmcVisitDoneSheet
+                          visitId={v.id as string}
+                          visitNumber={v.visit_number as number}
+                          scheduledDate={v.scheduled_date as string}
+                          contacts={contactOptions}
+                        />
                       )}
                     </li>
                   )
