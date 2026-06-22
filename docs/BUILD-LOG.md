@@ -23,6 +23,62 @@
 
 ## 2026-06-23
 
+### Procurement P2β — AP ageing dashboard + MSME 45-day compliance (pending commit)
+- **Tracks:** DEL-019 ✅ Partial (vendor dunning → P3); FIN-020 ✅ Partial (MSME-1 filing format → follow-on)
+- **Capability:** Finance (AP) + Delivery (procurement)
+- **Tier:** Must-have post-C#2
+- **Status change:** 📋 P2β → ✅ Partial (both rows)
+- **Notes:** Cash-out twin of /collections. Now you can see what you owe vendors, by bucket, with the MSME 45-day signal surfaced as a legal-compliance ribbon. Mirrors the existing AR pattern (invoice_ageing_v + /collections + /owner Slice 2 ageing card) so the platform stays internally consistent.
+
+  **View** (migration 0063 — `vendor_bill_ageing_v`):
+  - Same shape as `invoice_ageing_v` (0006) — filtered to `status IN (approved, partly_paid)` + `amount_outstanding > 0`.
+  - Computes `days_overdue` (GREATEST(0, today − due_date)) + `days_since_receipt` (today − received_at).
+  - **`msme_flag`** derived per row:
+    - `not_applicable` — vendor.msme_status is NULL or 'not_msme'
+    - `unknown` — vendor is MSME but received_at NULL (rare; happens for direct bills)
+    - `ok` — days_since_receipt < 30
+    - `warning` — days_since_receipt 30-44 (approaching the legal limit)
+    - `breach` — days_since_receipt ≥ 46 (legally past due; 3× bank-rate interest applies under MSMED Act 2006)
+  - 5-bucket `ageing_bucket`: `current` / `1-30` / `31-60` / `61-90` / `90+` matching the existing collections + Owner Dashboard buckets.
+  - `security_invoker = true` set explicitly to prevent the cross-tenant leak class that 0047 patched. Tested via the verify script — service-role queries vendor_bill directly (not the view) so the view's RLS doesn't bite the seeder.
+
+  **Read-model** (`lib/read-models/ap-ageing.ts`):
+  - One query to vendor_bill_ageing_v + an optional second query for the all-buckets aggregate when a bucket filter is active (so the bucket strip stays informative — mirrors the /collections + /owner pattern).
+  - Aggregates in memory: totals object (outstanding / overdue / overdue_count / bill_count / msme_breach_count + value / msme_warning_count + value), per-bucket rollup with stacked-bar percentages, top-10 vendor map keyed by vendor_id with oldest_bill citation, MSME compliance sorted by days_since_receipt DESC so the worst surfaces first.
+
+  **Page** (`/procurement/ap-ageing`):
+  - 4-KPI strip: Outstanding / Overdue (rose when > 0) / MSME breach count / MSME approaching count (amber when > 0).
+  - **Stacked-bar ageing** + 5 clickable bucket tiles (URL `?bucket=current|1-30|31-60|61-90|90+`). Each tile shows bucket label + dot + ₹ short-form value + count + % share. Active tile gets primary border + bg/5 tint. Clicking the active tile clears the filter.
+  - **MSME compliance card** — only renders when there's anything to show. Rose-tinted "Breach" section first (each row: vendor name + bill_number + vendor invoice + received date + "X days since supply · Y days past 45-day limit" + outstanding ₹). Amber-tinted "Approaching" section second (same shape but with "Y days to limit"). Footer references the FIN-020 follow-on for the MSME-1 filing format.
+  - **Top vendors card** — rows show vendor name + count + oldest-bill citation + days-overdue chip + outstanding ₹. Optional MSME badge inline. Each row links to `?vendor=X` for that vendor's bills only.
+  - **Bills list** at the bottom showing the filtered bucket. Status / MSME flag / bucket pills inline.
+
+  **Sample bills** (migration 0063 DO block):
+  - Vyara `VT-VB-2026-0003` — Surat Pigments (MSME small, 30d terms) — received 50d ago / due 20d ago / outstanding ₹1.00L → **MSME BREACH** + bucket 1-30.
+  - Vyara `VT-VB-2026-0004` — Ambuja Cement (non-MSME, 45d) — received 70d ago / due 25d ago / outstanding ₹2.48L → bucket 1-30.
+  - Raj `RA-VB-2026-0005` — Surya Copper (MSME small, 30d) — received 35d ago / due 5d ago / outstanding ₹65k → **MSME WARNING** + bucket 1-30.
+  - Raj `RA-VB-2026-0006` — Schneider (non-MSME, 45d) — received 100d ago / due 55d ago / outstanding ₹4.19L → bucket 31-60.
+  - Raj `RA-VB-2026-0007` — Crompton (non-MSME, 90d) — received 160d ago / due 70d ago / outstanding ₹12.10L (₹3L on-account paid, status `partly_paid`) → bucket 61-90.
+
+  Combined with the P2α bills, every ageing bucket is exercised + both MSME states are demoable.
+
+  **Architectural calls recorded:**
+  - **Direct bills (po_id NULL) for sample backdate.** Linking each backdated bill to a real PO would require backdating GRNs + extending PO line dates, which would muddy the existing P1α/P1β/P1γ demo paths. AP ageing cares about ₹ + days + MSME, not match status; `under_review` match (every line unlinked) is correct for direct billing.
+  - **Bucket strip uses full universe even when filtered.** Clicking 1-30 doesn't hide the other buckets — same pattern as /collections + /owner Slice 2. Helps user navigate without losing context.
+  - **MSME-1 filing format deferred.** The signal is what's needed daily; the report format lands when the first tenant approaches the biannual Apr/Oct cycle.
+  - **Vendor-side dunning queued to P3.** Standard Indian B2B has vendors doing the reminding (chasing us for payment); we don't auto-dun ourselves on payables. The /collections AR pattern is "we chase customers" — there isn't a symmetric "we chase ourselves" workflow. P3 will revisit if a tenant asks (e.g. internal "approval-then-payment" cron flagging stuck bills).
+
+  **Verification:**
+  - `tsc --noEmit` clean.
+  - `/procurement/ap-ageing` + `/procurement/ap-ageing?bucket=31-60` compile + 307 to /login for unauth (auth gate).
+  - Verify script extended with vendor_bill query + per-bill bucket computation; output confirms all 5 seeded bills land in correct buckets (1-30, 31-60, 61-90) + correct MSME states.
+
+  **Deferred:**
+  - **MSME-1 filing format** (CSV / PDF export per the half-yearly form 1 prescribed format) — follow-on to FIN-020.
+  - **Vendor dunning queue** — P3 if a tenant asks; not standard Indian B2B norm.
+  - **Cash forecast** (rolling outstanding + due-by-week) — could land on /owner cash-out section in a future Owner Dashboard slice (separate from procurement).
+  - **`procurement.ap_master` Tally adapter** (PLAT-028) — schema is ready since P2α; adapter code is the P2γ piece.
+
 ### Procurement P2α — Vendor Bill core + 3-way match engine (pending commit)
 - **Tracks:** DEL-018 ✅ Partial (P2β AP ageing + P3 payment are the only remainders)
 - **Capability:** Delivery (procurement) + Finance (vendor invoice booking)
