@@ -72,6 +72,7 @@ const CodeTemplatesSchema = z
     dealer:             codeTemplate('dealer').default('VT-DLR-{nnnn}'),
     purchase_order:     codeTemplate('purchase_order').default('VT-PO-{yyyy}-{nnnn}'),
     goods_receipt_note: codeTemplate('goods_receipt_note').default('VT-GRN-{yyyy}-{nnnn}'),
+    return_to_vendor:   codeTemplate('return_to_vendor').default('VT-RTV-{yyyy}-{nnnn}'),
   })
   .passthrough()
 

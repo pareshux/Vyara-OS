@@ -16,7 +16,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ApprovalCard } from '@/components/approval/approval-card'
 import { POWorkflowActions } from './workflow-actions'
-import { ChevronLeft, ExternalLink, Building2, MapPin, FileText, Receipt, AlertTriangle, PackagePlus, PackageOpen } from 'lucide-react'
+import { ChevronLeft, ExternalLink, Building2, MapPin, FileText, Receipt, AlertTriangle, PackagePlus, PackageOpen, Printer } from 'lucide-react'
 
 function formatINR(n: number): string {
   return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
@@ -96,6 +96,14 @@ export default async function PurchaseOrderDetailPage({ params }: PageProps) {
                   <PackagePlus className="size-4" /> Receive goods
                 </Link>
               )}
+              <Link
+                href={`/procurement/orders/${po.id}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted/40 transition-colors"
+              >
+                <Printer className="size-4" /> Print PDF
+              </Link>
               <POWorkflowActions
                 poId={po.id}
                 status={po.status}

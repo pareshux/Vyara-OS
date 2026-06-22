@@ -22,6 +22,7 @@ import {
   ArrowRight,
   CircleAlert,
   ListChecks,
+  Undo2,
 } from 'lucide-react'
 
 function formatMoneyShort(n: number): string {
@@ -160,6 +161,11 @@ export default async function ProcurementPage() {
               <Link href="/procurement/grns" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
                 <PackageOpen className="size-3.5 text-emerald-600 shrink-0" />
                 <span className="flex-1 text-foreground">Goods receipts (GRN)</span>
+                <span className="text-[10px] text-emerald-700">Live ✓</span>
+              </Link>
+              <Link href="/procurement/returns" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
+                <Undo2 className="size-3.5 text-rose-600 shrink-0" />
+                <span className="flex-1 text-foreground">Returns to vendor (RTV)</span>
                 <span className="text-[10px] text-emerald-700">Live ✓</span>
               </Link>
               <GapRow icon={Receipt} label="Vendor bills + 3-way match" tag="DEL-019 · P2" />

@@ -23,6 +23,70 @@
 
 ## 2026-06-23
 
+### Procurement P1γ — Return to Vendor + PO PDF + product-linked sample (pending commit)
+- **Tracks:** DEL-017 ✅ (flipped from "✅ RTV → P1γ" to fully ✅); DEL-016 extended with PDF render
+- **Capability:** Delivery (procurement) + Platform (`stock_movement.movement_type` CHECK extended)
+- **Tier:** Must-have post-C#2
+- **Status change:** DEL-017 ✅ Partial → ✅ full
+- **Notes:** Third slice of the procurement module. Closes out DEL-017 by adding the reverse-receipt path (RTV), gives the PO a print-friendly PDF render, and seeds one product-linked PO per tenant so the stock_movement path is finally walkable end-to-end (P1β samples were all ad-hoc text lines, so receipts correctly wrote no stock).
+
+  **RTV state machine** (`lib/actions/return-to-vendor.ts`):
+  - `createReturnToVendor` — opens an RTV against a posted GRN. Per-line qty_returned is capped at (qty_accepted on the GRN line) − (sum of qty_returned across **posted** RTVs for the same GRN line); the cap is recomputed at write time so two concurrent RTV creators don't double-spend the same accepted qty. Per-line reason is required.
+  - `postReturnToVendor` — the atomic 4-step REVERSE of GRN post:
+    1. Flip RTV status → posted (with rollback helper).
+    2. For each line: `po_line.qty_received -= qty_returned`, guarded at zero.
+    3. Refresh all PO lines, recompute parent PO status — all fulfilled → still `received`, any received > 0 → `partly_received`, all zero → back to `sent`.
+    4. Write `stock_movement` rows with `movement_type='return_to_vendor'`, `reason_code='rtv'`, `related_entity_type='return_to_vendor'`, `related_entity_id=rtv.id` for each line where product_id is set. Ad-hoc product-null lines skip stock impact.
+    Same best-effort rollback pattern as GRN post and complaints.ts.
+  - `cancelReturnToVendor` — draft-only.
+  - `recordVendorCreditNote` — posts the vendor's credit-note number + date onto a posted RTV. Captures the buyer's debit-note → vendor's credit-note round trip in one place; the credit note will feed into 3-way reconciliation when vendor bills land in P2.
+  - `listReturnsToVendor`, `getReturnToVendor`, `getGrnForReturn`.
+
+  **RTV UI:**
+  - `/procurement/grns/[id]/return` — server shell + client form. Defaults qty_returned to 0 (user opts in per line), per-line reason mandatory when qty > 0. Shows for each line: accepted, already-returned, returnable, remaining-after.
+  - `/procurement/returns` — list with status filter + emerald "credit note ✓" badge when the round trip is recorded.
+  - `/procurement/returns/[id]` — detail with header card + linked GRN + PO + warehouse, lines table with GRN-accepted context + returned qty in rose, draft-only Post/Cancel buttons via `<RtvWorkflowActions>`, and a `<RecordCreditNoteForm>` shown only when status='posted' AND credit_note_no IS NULL.
+  - GRN detail extended: "Return to vendor" CTA (rose accent, gated on `posted` GRN with accepted-minus-prior-returns > 0) + a Returns section listing RTVs against the GRN.
+
+  **PO PDF** (`app/(print)/procurement/orders/[id]/pdf/page.tsx`):
+  - Lives under the existing `(print)` route group (re-uses the auth layout); mirrors `app/(print)/quotes/[id]/boq/page.tsx` pattern.
+  - Imports the existing `<PrintButton>` from the quote BOQ to avoid duplicating the trivial client component.
+  - Renders address blocks from PO snapshots (`vendor_address_snapshot`, `bill_to_snapshot`, `ship_to_snapshot`) so the document is stable across master mutations.
+  - Meta strip: PO date / expected delivery / payment terms / currency.
+  - Lines table with HSN/SAC, qty/rate, taxable, GST%, total. Header columns adapt to interstate vs intrastate detection.
+  - Totals card with IGST OR CGST+SGST split based on `lines.some(is_interstate)`.
+  - Terms section enumerates from PO header fields (payment days, delivery, warranty, LD, retention, other) plus standard Indian B2B clauses (e-way bill mention, rejection pickup window, computer-generated disclaimer).
+  - Signature blocks for buyer + vendor acknowledgement.
+  - PO detail header gets a "Print PDF" button (border-only style to not compete with the existing emerald Receive button) opening the print route in a new tab.
+
+  **Schema** (migration 0059):
+  - `return_to_vendor` table (header — grn_id + po_id + vendor_id + warehouse_id, optional vendor_credit_note_no/_at, reason, notes, 3-state status: draft/posted/cancelled).
+  - `return_to_vendor_line` table (rtv_id + grn_line_id + po_line_id, qty_returned > 0 enforced via CHECK, reason, remarks).
+  - `stock_movement.movement_type` CHECK extended via DROP CONSTRAINT + ADD CONSTRAINT to admit `'return_to_vendor'`. Preserves all existing 10 movement types.
+  - New `return_to_vendor_seq` + `set_return_to_vendor_number()` trigger reading `render_tenant_code` (0051 helper) with VT-RTV-* fallback.
+  - `next_code_sequence()` RPC whitelist extended with `'return_to_vendor'`.
+  - Per-tenant code templates seeded: Vyara `VT-RTV-{yyyy}-{nnnn}`, Raj `RA-RTV-{yyyy}-{nnnn}`. `CodeTemplatesSchema` Zod in `lib/tenants/settings-schema.ts` extended.
+
+  **Product-linked sample data** (migration 0060):
+  - `VT-PO-2026-0006` — Vyara, V-CEM-01 as supplier, 200 sqft × ₹180 of INTLK-300-GRY pavers, intra-state (CGST+SGST), ₹42,480 total (auto-approve).
+  - `RA-PO-2026-0007` — Raj, V-CBL-01 (Polycab), 10 rmt × ₹2,200 of CBL-LT-150 cable, intra-state, ₹25,960 total (auto-approve).
+  - Both draft. User can walk: submit → auto-approve → send → receive → watch `/inventory` and the per-warehouse stock balance shift on GRN post (the first product-linked GRN flow on the platform).
+
+  **Architectural decisions recorded:**
+  - **RTV is a separate entity, not a negative-qty GRN.** Matches Indian accounting paradigm where the buyer issues a debit note (RTV) and the vendor responds with a credit note. Easier audit, easier downstream reconciliation in P2.
+  - **stock_movement.movement_type='return_to_vendor'** is added as a first-class type rather than reusing `adjustment_minus` with a reason code. Adjustment_minus means "we counted wrong / damage write-off"; RTV means "we sent it back to the vendor". Distinct semantic; worth the schema cost.
+  - **PO PDF re-uses the (print) layout** instead of building a new route group. The (print) layout already gates on auth; no need to duplicate.
+  - **PrintButton imported across print pages** rather than abstracting a shared component. The component is 12 lines and importing it directly is cheaper than refactoring; we'll lift to `components/print/print-button.tsx` if a 3rd print page is added.
+
+  **Verification:**
+  - `npx tsc --noEmit` clean.
+  - All 4 new routes compile and 307 to `/login` for unauth as expected.
+  - Migrations 0059 + 0060 applied to remote; NOTICE confirms seed.
+
+  **What's still queued (none of these block P2):**
+  - **AiSensy WhatsApp send for PO** — UI affordance exists implicitly (the PDF link), but the WA template + send path lands when other vendor-comms features land.
+  - **RTV → vendor bill reconciliation** — the credit_note_no field is captured; matching against vendor invoices happens in P2 (DEL-018 / FIN-019).
+
 ### Procurement P1β — Goods Receipt Note end-to-end (pending commit)
 - **Tracks:** DEL-017 (✅ — RTV the only remainder, lifted to P1γ)
 - **Capability:** Delivery (procurement) + Platform (stock-movement integration via polymorphic FK)

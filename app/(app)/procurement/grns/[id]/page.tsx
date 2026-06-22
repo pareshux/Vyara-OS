@@ -7,10 +7,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getGoodsReceiptNote } from '@/lib/actions/goods-receipt-notes'
+import { listReturnsToVendor } from '@/lib/actions/return-to-vendor'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { GrnWorkflowActions } from './workflow-actions'
-import { ChevronLeft, ExternalLink, Truck, FileSignature, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ExternalLink, Truck, FileSignature, AlertTriangle, Undo2 } from 'lucide-react'
 
 const STATUS_TINT: Record<string, string> = {
   draft:     'bg-muted text-muted-foreground border-border',
@@ -45,11 +46,18 @@ interface PageProps {
 
 export default async function GrnDetailPage({ params }: PageProps) {
   const { id } = await params
-  const grn = await getGoodsReceiptNote(id)
+  const [grn, rtvs] = await Promise.all([
+    getGoodsReceiptNote(id),
+    listReturnsToVendor({ grn_id: id, status: 'all', limit: 50 }),
+  ])
   if (!grn) notFound()
 
   const totalAccepted = grn.lines.reduce((s, l) => s + Number(l.qty_accepted || 0), 0)
   const totalRejected = grn.lines.reduce((s, l) => s + Number(l.qty_rejected || 0), 0)
+  const totalReturned = rtvs
+    .filter((r) => r.status === 'posted')
+    .reduce((s, r) => s + Number(r.qty_returned_total || 0), 0)
+  const canReturn = grn.status === 'posted' && totalAccepted - totalReturned > 0
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-5 max-w-5xl">
@@ -82,7 +90,17 @@ export default async function GrnDetailPage({ params }: PageProps) {
               </div>
             </div>
 
-            <GrnWorkflowActions grnId={grn.id} status={grn.status} />
+            <div className="flex items-center gap-2 flex-wrap">
+              {canReturn && (
+                <Link
+                  href={`/procurement/grns/${grn.id}/return`}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-rose-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-rose-700 transition-colors"
+                >
+                  <Undo2 className="size-4" /> Return to vendor
+                </Link>
+              )}
+              <GrnWorkflowActions grnId={grn.id} status={grn.status} />
+            </div>
           </div>
 
           {/* Vendor + PO + Warehouse */}
@@ -191,6 +209,38 @@ export default async function GrnDetailPage({ params }: PageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Returns against this GRN */}
+      {rtvs.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <div className="text-sm font-medium inline-flex items-center gap-1.5">
+              <Undo2 className="size-3.5" /> Returns ({rtvs.length})
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {rtvs.map((r) => {
+                const tint = r.status === 'posted'
+                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : 'bg-muted text-muted-foreground border-border'
+                return (
+                  <Link
+                    key={r.id}
+                    href={`/procurement/returns/${r.id}`}
+                    className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="font-mono text-xs">{r.rtv_number}</span>
+                    <Badge variant="outline" className={`${tint} text-[10px] font-medium`}>{r.status}</Badge>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">{formatDate(r.rtv_date)}</span>
+                    <span className="text-xs flex-1 text-muted-foreground">{r.line_count} line{r.line_count === 1 ? '' : 's'} · {r.qty_returned_total} returned</span>
+                    {r.vendor_credit_note_no && <span className="text-[10px] text-emerald-700">credit note ✓</span>}
+                    <ExternalLink className="size-3 text-muted-foreground" />
+                  </Link>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="text-[11px] text-muted-foreground">
         Created {formatDate(grn.created_at)}
