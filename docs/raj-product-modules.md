@@ -8,7 +8,7 @@ A complete reference to every module in the product, organised by business capab
 Raj Avinsys Pvt. Ltd. · Gujarat
 
 **Prepared by**
-Paresh Khatri · designsbyparesh@gmail.com
+Paresh Khatri · contact@mindboxtech.agency
 
 **Version**
 v1.0 · 22 June 2026
@@ -1202,7 +1202,7 @@ That's the platform thesis.
 ## Contact
 
 **Paresh Khatri**
-designsbyparesh@gmail.com
+contact@mindboxtech.agency
 
 Prepared for Raj Avinsys Pvt. Ltd. · June 2026
 

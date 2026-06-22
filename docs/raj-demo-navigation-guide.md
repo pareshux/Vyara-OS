@@ -9,7 +9,7 @@ Raj Avinsys Pvt. Ltd. · Gujarat
 EPC · Panel Manufacturing · AMC
 
 **Prepared by**
-Paresh Khatri · designsbyparesh@gmail.com
+Paresh Khatri · contact@mindboxtech.agency
 
 **Version**
 v1.0 · 22 June 2026
@@ -1061,7 +1061,7 @@ That conversation is what comes next.
 ## Contact
 
 **Paresh Khatri**
-designsbyparesh@gmail.com
+contact@mindboxtech.agency
 
 Built for Raj Avinsys Pvt. Ltd. · June 2026
 
