@@ -33,9 +33,21 @@ export default async function DashboardPage() {
 
   const { data: profile } = await supabase
     .from('user_profile')
-    .select('full_name, tenant_id, role')
+    .select('full_name, tenant_id, role, department')
     .eq('id', user.id)
     .single()
+
+  // Department-aware landing: each persona starts on their primary
+  // workspace. This is the demo-friendly path — a procurement manager
+  // shouldn't land on the generic dashboard when their job is at
+  // /procurement. Management department + null department fall through
+  // to the standard /dashboard view (the multi-purpose home).
+  const dept = profile?.department
+  if (dept === 'projects') redirect('/projects')
+  if (dept === 'field_sales') redirect('/field')
+  if (dept === 'procurement') redirect('/procurement')
+  if (dept === 'accounts') redirect('/procurement/bills')
+  if (dept === 'service') redirect('/complaints')
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
   const canManageDigest = profile?.role === 'admin' || profile?.role === 'manager'

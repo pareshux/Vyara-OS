@@ -225,17 +225,17 @@ export function NewPrForm({ projects, products, vendors }: Props) {
                   </div>
 
                   <div className="grid md:grid-cols-12 gap-2">
-                    <div className="md:col-span-4 flex flex-col gap-1">
+                    <div className="md:col-span-4 flex flex-col gap-1 min-w-0">
                       <Label className="text-xs">Product (optional)</Label>
                       <Select value={l.product_id ?? '__none__'} onValueChange={(v) => pickProduct(idx, v)}>
-                        <SelectTrigger><SelectValue placeholder="Ad-hoc — no product link" /></SelectTrigger>
+                        <SelectTrigger className="w-full"><SelectValue placeholder="Ad-hoc — no product link" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">Ad-hoc (no product link)</SelectItem>
                           {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.sku_code} · {p.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="md:col-span-8 flex flex-col gap-1">
+                    <div className="md:col-span-8 flex flex-col gap-1 min-w-0">
                       <Label className="text-xs">Description *</Label>
                       <Input value={l.description} onChange={(e) => updateLine(idx, { description: e.target.value })} placeholder="What's needed" />
                     </div>

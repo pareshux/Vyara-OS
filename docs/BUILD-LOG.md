@@ -23,6 +23,61 @@
 
 ## 2026-06-23
 
+### Raj demo — 6 personas + role-based sidebar + customer-facing navigation guide (pending commit)
+- **Tracks:** ARCH-003 (onboarding readiness), Raj cross-industry demo readiness
+- **Capability:** Cross-cutting (Platform + every consumer capability)
+- **Tier:** Customer-#2 readiness
+- **Status change:** Raj tenant goes from 1 admin user to 6 fully-roled personas; product UI adapts per persona; customer-facing demo guide ships
+- **Notes:** Restructured Raj's tenant for an end-to-end customer demo. Six demo users created via service-role auth API (`scripts/seed-raj-team.ts`): Sandeep (Director), Rakesh (Project Manager), Anil (Site Engineer), Mehul (Procurement Manager), Priya (Accounts Manager), Vikas (Service Engineer). Each persona gets a tailored sidebar + a department-aware default landing route. Customer-facing 20-act walkthrough guide written for sharing.
+
+  **Schema:** Migration 0073 adds `user_profile.department` (text) + `user_profile.job_title` (text) — six valid departments (`management`, `projects`, `field_sales`, `procurement`, `accounts`, `service`). Indexed for sidebar filter performance. Backwards-compat: NULL department bypasses gating + sees full nav.
+
+  **Auth setup:** `scripts/seed-raj-team.ts` provisions 5 new auth users for Raj tenant via `supabase.auth.admin.createUser` (the existing admin@rajavinsys.example becomes "Sandeep — Director"; Rakesh / Anil / Mehul / Priya / Vikas are net new). Idempotent on email — re-run is safe. All 6 personas share password `RajDemo@1234` (acceptable for demo; production onboarding would use one-time passwords handed off-band per the runbook).
+
+  **Sidebar:** `components/app/sidebar.tsx` extended with `departments?: ReadonlyArray<…>` gate on each `NavItem`. Items with department gates only render if the user's department matches. Curation:
+  - **management (Sandeep)** — sees everything including Admin/Settings
+  - **projects (Rakesh)** — Leads, Firms, Projects, Quotes, Orders, Procurement (raises PRs), Dispatches, Field (read), Approvals
+  - **field_sales (Anil)** — Leads, Firms, Projects, Quotes, Field, Complaints (reports issues), Expenses, Tasks
+  - **procurement (Mehul)** — Procurement, Inventory, Warehouses, Dispatches, Approvals
+  - **accounts (Priya)** — Invoices, Collections, Procurement (Bills + Payments + AP Ageing + GSTR-2B), Finance, Firms
+  - **service (Vikas)** — Complaints, AMC, Projects (read), Field, Tasks
+  Topbar shows the persona's `job_title` instead of generic role (e.g. "Procurement Manager" rather than "manager"). Layout (`app/(app)/layout.tsx`) fetches `department` + `job_title` from `user_profile` and threads through to Sidebar + Topbar.
+
+  **Department-aware landing:** `app/(app)/dashboard/page.tsx` redirects per-department on entry — Rakesh → /projects, Anil → /field, Mehul → /procurement, Priya → /procurement/bills, Vikas → /complaints. Sandeep + null-department fall through to the standard `/dashboard` view (the multi-purpose home that already exists).
+
+  **/demo page rewrite:** `app/demo/page.tsx` completely restructured from 2-card Vyara+Raj to 6-persona Raj-only grid. Each card has icon + name + job title + plain-language "What they do" bullet list + "Sign in as …" form action. Vyara card removed — internal team signs into Vyara via /login. Each card uses a distinct accent color (amber for Sandeep, sky for Rakesh, emerald for Anil, violet for Mehul, rose for Priya, orange for Vikas) so the page reads as a "team photo" not a list. Demo password (`RajDemo@1234`) displayed in the footer (transparent demo model — same as the previous Vyara+Raj page).
+
+  **Demo data attribution:** Migration 0074 re-attributes existing Raj seed data to the 6 personas and gap-fills missing pieces so each sign-in lands on a workspace with realistic state:
+  - Quotes (4 RA-QT) → `created_by` = Rakesh
+  - Projects → `owner_id` = Rakesh
+  - PRs (2) → `requested_by` = Rakesh
+  - POs (7) → `created_by` = Mehul (including the draft, pending_approval, partly_received states)
+  - Blanket POs (3) + Job-work challans (3) → `created_by` = Mehul
+  - Vendor bills (4 including the rate-mismatch + under_review ones) → `created_by` = Priya
+  - Vendor payments → `created_by` = Priya
+  - GRNs (2) → `created_by` = Mehul
+  Gap-fills:
+  - Fresh lead (RA-LD-2026-0010 "Vapi Specialty Chemicals — Panel + EPC enquiry") owned by Anil, created yesterday — exercises Act 1 of the walkthrough (lead intake)
+  - In-progress field visit at L&T Vadinar site for Anil today (state='in_progress') — exercises Act 2 (field execution)
+  - Anil's `field_attendance` row for today with check-in at 8 AM, odometer 42810 km — exercises Act 2 (attendance)
+  - 2 open complaints assigned to Vikas (Adani Hazira MCC trip + Anand Pharma APFC failure) — exercises Act 19 (complaints)
+  Migration is idempotent (NOT EXISTS guards on each INSERT) so re-applying on a fresh DB is safe.
+
+  **Customer-facing navigation guide:** `docs/raj-demo-navigation-guide.md` — 20-act walkthrough document written in customer-friendly language (no internal jargon — no "Inngest", no "we", no implementation details). Structure: cover + how-to-use + 6 logins table + 20 numbered acts grouped into 7 narrative parts (Winning the work → Procuring the material → Receiving the goods → Paying the vendor → Tax compliance → Customer service → Director's view). Each act has: persona login switch, numbered click-by-click steps, "what you'll see", "what this represents in your business" (the plain-language business value anchor). Closes with a "What this product replaces" comparison table + "What to try yourself" section + "Next steps" feedback prompt. Customer can read top-to-bottom while clicking through `localhost:3000` or convert to PDF via browser print.
+
+  **Verification:**
+  - `tsc --noEmit` clean.
+  - Migration 0073 + 0074 + scripts/seed-raj-team.ts applied successfully; verify-script confirms each persona has the right `department` set and the right `created_by` / `owner_id` / `requested_by` / `assignee_id` attributions on their work. Pertinent rows surfaced: Anil owns 1 lead + 1 visit + 1 attendance; Rakesh raised 2 PRs; Mehul created 7 POs + 3 blanket POs; Priya owns 4 bills; Vikas owns 2 complaints.
+  - `/demo` route returns 200; `/dashboard` + `/procurement` return 307 to /login as expected for unauth.
+  - Vyara tenant data + 2 old Raj users (Bhavesh, Nikhil) untouched — they remain in the DB but won't appear in the demo flow since each persona's sidebar is department-filtered.
+
+  **What's intentionally NOT in this slice:**
+  - Tenant logo / per-tenant brand color theming (Raj demo uses the default CRMOS theme; we can swap if customer asks)
+  - Deployment to a stable URL (localhost:3000 only for now; Vercel preview deploy is one command when customer is ready to receive credentials)
+  - PDF generation of the guide (Markdown ships; customer converts via browser Cmd-P → Save as PDF, or we render once when ready)
+  - Sign-out + persona-switcher widget on the topbar (a "switch persona" affordance would polish the demo experience; deferred since current sign-out → /demo flow works)
+  - Procurement landing-page IA refactor (the broader "PO table as default" + "PR/PO own pages" discussion from the earlier conversation — that's a separate slice and not blocking demo)
+
 ### Procurement P6 lite — Vendor scorecards + Blanket POs + Job work / ITC-04 + Imports-lite (pending commit)
 - **Tracks:** DEL-024 (new, ✅), DEL-022 (✅ Partial — multi-line release deferred), DEL-021 (✅), DEL-023 (✅ Lite — full LC + import-PO flow deferred)
 - **Capability:** Delivery (procurement) + Relationship (vendor performance)

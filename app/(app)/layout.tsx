@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [{ data: profile }, { count: notificationCount }, navFeatures] = await Promise.all([
     supabase
       .from('user_profile')
-      .select('full_name, role')
+      .select('full_name, role, department, job_title')
       .eq('id', user.id)
       .single(),
     supabase
@@ -46,12 +46,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const userName = profile?.full_name ?? user.email ?? 'User'
   const userRole = profile?.role ?? 'sales_engineer'
+  const userDepartment = (profile?.department ?? null) as string | null
+  const userJobTitle = (profile?.job_title ?? null) as string | null
 
   return (
     <div className="flex h-full min-h-screen">
-      <Sidebar userRole={userRole} features={navFeatures} />
+      <Sidebar userRole={userRole} department={userDepartment} features={navFeatures} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar userName={userName} userRole={userRole} notificationCount={notificationCount ?? 0} />
+        <Topbar userName={userName} userRole={userRole} userJobTitle={userJobTitle} notificationCount={notificationCount ?? 0} />
         <main className="flex-1 overflow-auto pb-14 md:pb-0">
           {children}
         </main>

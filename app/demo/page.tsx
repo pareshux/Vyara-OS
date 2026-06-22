@@ -1,53 +1,136 @@
 /**
- * /demo — Demo-mode landing page (Raj demo Phase 1, Constitution v3).
+ * /demo — Raj Avinsys demo landing page (customer-facing).
  *
- * Public page (no auth required). Two cards, two "Sign in as…" forms
- * that POST to the existing signIn server action with pre-filled creds.
- * Lets prospects + internal demos toggle between tenants without typing
- * passwords each time.
+ * Six persona cards laid out as a team. Each persona has their own login
+ * + tailored landing route. The customer can pick which role they want
+ * to experience the product as.
  *
- * **Demo passwords are intentionally on-screen.** The page renders the
- * credentials inline so prospects can sign in themselves from /login if
- * they prefer. Same security model as hardcoding (the password ends up
- * in the form HTML either way). For real customer onboarding, never use
- * this pattern — onboard via `scripts/onboard-tenant.ts` with a strong
- * password handed off out-of-band.
- *
- * To change the Raj password: update both this file AND the password the
- * tenant was provisioned with via the CLI (no shared source of truth —
- * acceptable for a demo, would not be acceptable for production).
+ * Vyara is intentionally hidden — this is the customer-facing demo URL.
+ * Internal team members sign into Vyara via /login directly.
  */
 import Link from 'next/link'
 import { demoSignIn } from './actions'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { BuildingIcon, ZapIcon, AlertTriangleIcon } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Crown, FolderKanban, MapPin, ShoppingCart, Receipt, LifeBuoy } from 'lucide-react'
 
-// Hardcoded demo credentials. See doc comment above re: security model.
-const DEMO_TENANTS = [
+type Persona = {
+  key: string
+  name: string
+  job_title: string
+  blurb: string
+  whatTheyDo: string[]
+  email: string
+  password: string
+  icon: typeof Crown
+  iconBg: string
+  accent: string
+}
+
+const PERSONAS: Persona[] = [
   {
-    key: 'vyara',
-    name: 'Vyara Tiles Limited',
-    tagline: 'Building materials manufacturer · pavers, kerbs, tiles',
-    blurb: 'The launch customer. Architect-specified commercial motion · sample-driven · multi-tranche dispatch · dealer network · 6-stage project pipeline ending at Paving stage.',
-    icon: BuildingIcon,
-    iconBg: 'bg-orange-100 text-orange-700',
-    email: 'admin@vyaratiles.com',
-    password: 'Vyara@1234',
-    role: 'admin',
-  },
-  {
-    key: 'raj',
-    name: 'Raj Avinsys Pvt. Ltd.',
-    tagline: 'Electrical EPC + panel manufacturing + AMC · Gujarat',
-    blurb: 'First cross-industry customer (Constitution v3). Three motions: EPC projects (16-stage pipeline from lead to DLP), panel manufacturing (10-stage from RFQ to SAT), and AMC + breakdown service. Industrial customers across chemicals, pharma, energy, infrastructure.',
-    icon: ZapIcon,
-    iconBg: 'bg-amber-100 text-amber-700',
+    key: 'sandeep',
+    name: 'Sandeep',
+    job_title: 'Director',
+    blurb: 'Runs the business. Approves big-ticket decisions. Watches the money.',
+    whatTheyDo: [
+      'Owner dashboard with the full picture of the business',
+      'Approves quotes, payments above thresholds',
+      'Sees AI brief — top opportunities + risks for the day',
+      'Drills into any cell of any report',
+    ],
     email: 'admin@rajavinsys.example',
     password: 'RajDemo@1234',
-    role: 'admin',
+    icon: Crown,
+    iconBg: 'bg-amber-100 text-amber-700',
+    accent: 'border-amber-200',
   },
-] as const
+  {
+    key: 'rakesh',
+    name: 'Rakesh',
+    job_title: 'Project Manager',
+    blurb: 'Runs the EPC projects. From won deal to commissioned site.',
+    whatTheyDo: [
+      'Tracks every active project + its milestones',
+      'Raises Purchase Requisitions for materials',
+      'Coordinates site engineers + dispatch',
+      'Owns the project P&L',
+    ],
+    email: 'rakesh@rajavinsys.example',
+    password: 'RajDemo@1234',
+    icon: FolderKanban,
+    iconBg: 'bg-sky-100 text-sky-700',
+    accent: 'border-sky-200',
+  },
+  {
+    key: 'anil',
+    name: 'Anil',
+    job_title: 'Site Engineer',
+    blurb: 'On the road every day. Captures leads, site visits, expenses.',
+    whatTheyDo: [
+      'Mobile check-in with odometer photo',
+      'Voice note completes the visit form',
+      'Captures business cards via AI',
+      'Logs expenses against the day',
+    ],
+    email: 'anil@rajavinsys.example',
+    password: 'RajDemo@1234',
+    icon: MapPin,
+    iconBg: 'bg-emerald-100 text-emerald-700',
+    accent: 'border-emerald-200',
+  },
+  {
+    key: 'mehul',
+    name: 'Mehul',
+    job_title: 'Procurement Manager',
+    blurb: 'Buys all the materials. Manages vendors and negotiations.',
+    whatTheyDo: [
+      'Receives PRs from project managers',
+      'Sends RFQs to multiple vendors, compares quotes',
+      'Raises POs, tracks goods receipt',
+      'Reviews vendor performance scorecards',
+    ],
+    email: 'mehul@rajavinsys.example',
+    password: 'RajDemo@1234',
+    icon: ShoppingCart,
+    iconBg: 'bg-violet-100 text-violet-700',
+    accent: 'border-violet-200',
+  },
+  {
+    key: 'priya',
+    name: 'Priya',
+    job_title: 'Accounts Manager',
+    blurb: 'Books vendor bills, pays them, handles tax compliance.',
+    whatTheyDo: [
+      '3-way matches vendor invoices against PO + GRN',
+      'Releases payments with TDS auto-calculated',
+      'Files GSTR-2B reconciliation monthly',
+      'Tracks AP ageing and MSME 45-day compliance',
+    ],
+    email: 'priya@rajavinsys.example',
+    password: 'RajDemo@1234',
+    icon: Receipt,
+    iconBg: 'bg-rose-100 text-rose-700',
+    accent: 'border-rose-200',
+  },
+  {
+    key: 'vikas',
+    name: 'Vikas',
+    job_title: 'Service Engineer',
+    blurb: 'AMC visits + breakdown response. Keeps customers happy.',
+    whatTheyDo: [
+      'Resolves customer complaints on-site',
+      'Executes scheduled AMC visits',
+      'Records root cause + resolution',
+      'Tracks warranty + service history',
+    ],
+    email: 'vikas@rajavinsys.example',
+    password: 'RajDemo@1234',
+    icon: LifeBuoy,
+    iconBg: 'bg-orange-100 text-orange-700',
+    accent: 'border-orange-200',
+  },
+]
 
 export default async function DemoLandingPage({
   searchParams,
@@ -58,66 +141,65 @@ export default async function DemoLandingPage({
   const error = sp.error
 
   return (
-    <div className="min-h-screen bg-background px-4 py-12 md:py-20">
-      <div className="mx-auto w-full max-w-5xl flex flex-col gap-10">
+    <div className="min-h-screen bg-background px-4 py-10 md:py-16">
+      <div className="mx-auto w-full max-w-6xl flex flex-col gap-10">
         {/* Header */}
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="rounded-full bg-amber-50 text-amber-700 px-3 py-1 text-xs font-medium border border-amber-200 inline-flex items-center gap-1.5">
-            <AlertTriangleIcon className="size-3.5" />
-            Demo mode · credentials shown for transparency
+            Raj Avinsys · Product Walkthrough
           </div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-foreground">
-            Sign in as either tenant
+            Choose a role to sign in as
           </h1>
           <p className="text-sm md:text-base text-muted-foreground max-w-2xl">
-            CRMOS is a modular Business Operating System — same architecture, configured per industry.
-            Pick a tenant to see the same screens with different masters, pipelines, vocabulary, and seed data.
+            Each member of your team has a different view of the product, shaped around what they do daily.
+            Pick a role below to experience the product as they would.
           </p>
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 text-destructive px-3 py-2 text-sm max-w-2xl">
-              Sign-in failed: {error}.{' '}
-              {error.toLowerCase().includes('invalid login') && (
-                <span className="text-muted-foreground">
-                  (The Raj tenant may not be provisioned yet — run{' '}
-                  <code className="font-mono">tsx scripts/onboard-tenant.ts ./scripts/onboard-tenant-config.raj.json</code>{' '}
-                  first.)
-                </span>
-              )}
+              Sign-in failed: {error}
             </div>
           )}
         </div>
 
-        {/* Tenant cards — two-column on desktop, stacked on mobile */}
-        <div className="grid md:grid-cols-2 gap-4">
-          {DEMO_TENANTS.map((t) => {
-            const Icon = t.icon
+        {/* Persona grid — 3 columns on desktop, 2 on tablet, 1 on mobile */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {PERSONAS.map((p) => {
+            const Icon = p.icon
             return (
-              <Card key={t.key} className="flex flex-col">
-                <CardHeader className="flex flex-row items-start gap-3">
-                  <div className={`flex size-10 items-center justify-center rounded-xl shrink-0 ${t.iconBg}`}>
-                    <Icon className="size-5" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-base">{t.name}</CardTitle>
-                    <CardDescription className="mt-0.5 text-xs">{t.tagline}</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4 flex-1">
-                  <p className="text-sm text-muted-foreground leading-relaxed">{t.blurb}</p>
-
-                  <div className="rounded-md border border-border bg-surface-muted px-3 py-2 text-xs font-mono text-muted-foreground">
-                    <div className="flex items-center justify-between gap-2">
-                      <span>{t.email}</span>
-                      <span className="text-text-subtle">·</span>
-                      <span>{t.password}</span>
+              <Card key={p.key} className={`flex flex-col border-2 ${p.accent}`}>
+                <CardContent className="flex flex-col gap-4 p-5 flex-1">
+                  <div className="flex items-start gap-3">
+                    <div className={`flex size-12 items-center justify-center rounded-xl shrink-0 ${p.iconBg}`}>
+                      <Icon className="size-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-lg font-semibold text-foreground">{p.name}</div>
+                      <div className="text-sm text-muted-foreground">{p.job_title}</div>
                     </div>
                   </div>
 
+                  <p className="text-sm text-foreground leading-relaxed">{p.blurb}</p>
+
+                  <div className="flex-1">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-1.5">
+                      What they do
+                    </div>
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {p.whatTheyDo.map((line, i) => (
+                        <li key={i} className="flex gap-1.5">
+                          <span className="text-foreground/30">·</span>
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
                   <form action={demoSignIn} className="mt-auto">
-                    <input type="hidden" name="email" value={t.email} />
-                    <input type="hidden" name="password" value={t.password} />
+                    <input type="hidden" name="email" value={p.email} />
+                    <input type="hidden" name="password" value={p.password} />
                     <Button type="submit" className="w-full">
-                      Sign in as {t.name} admin →
+                      Sign in as {p.name} →
                     </Button>
                   </form>
                 </CardContent>
@@ -127,12 +209,14 @@ export default async function DemoLandingPage({
         </div>
 
         {/* Footer */}
-        <div className="text-center text-xs text-muted-foreground">
-          Sign in normally via{' '}
-          <Link href="/login" className="text-primary hover:underline">
-            /login
-          </Link>{' '}
-          if you have your own credentials.
+        <div className="text-center text-xs text-muted-foreground space-y-1">
+          <div>Same password for all roles — <code className="font-mono text-foreground">RajDemo@1234</code></div>
+          <div>
+            Have your own credentials? Sign in via{' '}
+            <Link href="/login" className="text-primary hover:underline">
+              /login
+            </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -25,10 +25,11 @@ const PAGE_TITLES: Record<string, string> = {
 interface TopbarProps {
   userName: string
   userRole: string
+  userJobTitle?: string | null
   notificationCount?: number
 }
 
-export function Topbar({ userName, userRole, notificationCount = 0 }: TopbarProps) {
+export function Topbar({ userName, userRole, userJobTitle, notificationCount = 0 }: TopbarProps) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -97,7 +98,7 @@ export function Topbar({ userName, userRole, notificationCount = 0 }: TopbarProp
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>
               <div className="font-medium">{userName}</div>
-              <div className="text-xs text-muted-foreground capitalize">{userRole.replace('_', ' ')}</div>
+              <div className="text-xs text-muted-foreground capitalize">{userJobTitle ?? userRole.replace('_', ' ')}</div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">

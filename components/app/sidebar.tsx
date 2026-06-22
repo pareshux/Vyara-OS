@@ -73,70 +73,83 @@ type NavItem = {
   /** Role gate — when set, item only renders for the listed roles.
    * Used for Executive group items (admin-only). */
   roles?: ReadonlyArray<'admin' | 'manager' | 'sales_engineer'>
+  /** Department gate — when set, item only renders if the user's
+   * department is in this list. NULL department (legacy single-admin
+   * tenants) bypasses the gate and sees everything. Use sparingly —
+   * most items don't need department curation. */
+  departments?: ReadonlyArray<
+    | 'management'
+    | 'projects'
+    | 'field_sales'
+    | 'procurement'
+    | 'accounts'
+    | 'service'
+  >
 }
 
 const NAV_ITEMS: NavItem[] = [
   // Home — daily-use surfaces, no group header.
   { label: 'Dashboard',   href: '/dashboard',   icon: LayoutDashboard, group: 'home' },
 
-  // Executive — Blueprint INT-014. Admin-only at the role layer; the page
-  // also redirects non-admins to /dashboard as a belt-and-braces guard.
-  { label: 'Owner',       href: '/owner',       icon: LineChart,       group: 'executive', roles: ['admin'] },
+  // Executive — Blueprint INT-014. Admin + management department only.
+  { label: 'Owner',       href: '/owner',       icon: LineChart,       group: 'executive', roles: ['admin'], departments: ['management'] },
 
   // Relationship — people + organisations (Blueprint capability §2.1).
-  // Dealer is a relationship type, not a separate module — lives here.
-  { label: 'Leads',       href: '/leads',       icon: UserPlus,        group: 'relationship' },
-  { label: 'Firms',       href: '/firms',       icon: Building2,       group: 'relationship' },
-  { label: 'Dealers',     href: '/dealers',     icon: Store,           group: 'relationship',  feature: 'enable_dealer_portal' },
+  { label: 'Leads',       href: '/leads',       icon: UserPlus,        group: 'relationship', departments: ['management', 'projects', 'field_sales'] },
+  { label: 'Firms',       href: '/firms',       icon: Building2,       group: 'relationship', departments: ['management', 'projects', 'field_sales', 'accounts'] },
+  { label: 'Dealers',     href: '/dealers',     icon: Store,           group: 'relationship', feature: 'enable_dealer_portal' },
 
   // Revenue — generate business (Blueprint §2.2).
-  { label: 'Projects',    href: '/projects',    icon: FolderKanban,    group: 'revenue' },
-  { label: 'Quotes',      href: '/quotes',      icon: FileText,        group: 'revenue' },
-  { label: 'Orders',      href: '/orders',      icon: Package,         group: 'revenue' },
+  { label: 'Projects',    href: '/projects',    icon: FolderKanban,    group: 'revenue', departments: ['management', 'projects', 'field_sales', 'service'] },
+  { label: 'Quotes',      href: '/quotes',      icon: FileText,        group: 'revenue', departments: ['management', 'projects', 'field_sales'] },
+  { label: 'Orders',      href: '/orders',      icon: Package,         group: 'revenue', departments: ['management', 'projects', 'accounts'] },
 
   // Delivery — fulfil commitments (Blueprint §2.3).
-  { label: 'Procurement', href: '/procurement', icon: ShoppingCart,    group: 'delivery' },
-  { label: 'Inventory',   href: '/inventory',   icon: Boxes,           group: 'delivery',      feature: 'enable_inventory' },
-  { label: 'Warehouses',  href: '/warehouses',  icon: Warehouse,       group: 'delivery',      feature: 'enable_warehouse' },
-  { label: 'Dispatches',  href: '/dispatches',  icon: Truck,           group: 'delivery',      feature: 'enable_dispatches' },
+  // Procurement is visible to procurement, accounts, projects (who raise PRs), and management.
+  { label: 'Procurement', href: '/procurement', icon: ShoppingCart,    group: 'delivery', departments: ['management', 'procurement', 'accounts', 'projects'] },
+  { label: 'Inventory',   href: '/inventory',   icon: Boxes,           group: 'delivery', feature: 'enable_inventory', departments: ['management', 'procurement', 'projects'] },
+  { label: 'Warehouses',  href: '/warehouses',  icon: Warehouse,       group: 'delivery', feature: 'enable_warehouse', departments: ['management', 'procurement'] },
+  { label: 'Dispatches',  href: '/dispatches',  icon: Truck,           group: 'delivery', feature: 'enable_dispatches', departments: ['management', 'projects', 'procurement'] },
 
-  // Field Ops — activity-based execution (Blueprint capability §2.4).
-  // Role-aware link resolver below routes managers to /field/team and
-  // reps to /field — same nav item, different landing.
-  { label: 'Field',       href: '/field',       icon: MapPin,          group: 'field_ops',     feature: 'enable_field_sales' },
-  { label: 'Attendance',  href: '/field/team/attendance', icon: BarChart3, group: 'field_ops', feature: 'enable_field_sales', roles: ['admin', 'manager'] },
+  // Field Ops — activity-based execution (Blueprint §2.4).
+  { label: 'Field',       href: '/field',       icon: MapPin,          group: 'field_ops', feature: 'enable_field_sales', departments: ['management', 'field_sales', 'service', 'projects'] },
+  { label: 'Attendance',  href: '/field/team/attendance', icon: BarChart3, group: 'field_ops', feature: 'enable_field_sales', roles: ['admin', 'manager'], departments: ['management', 'projects'] },
 
-  // Customer Success — Blueprint capability §2.5. Built starting with
-  // CS-001 (complaints, Phase 3) + CS-009 (AMC contracts, Phase 4).
-  { label: 'Complaints',  href: '/complaints',  icon: LifeBuoy,        group: 'customer_success' },
-  { label: 'AMC',         href: '/amc',         icon: CalendarClock,   group: 'customer_success' },
+  // Customer Success — Blueprint §2.5.
+  { label: 'Complaints',  href: '/complaints',  icon: LifeBuoy,        group: 'customer_success', departments: ['management', 'service', 'field_sales'] },
+  { label: 'AMC',         href: '/amc',         icon: CalendarClock,   group: 'customer_success', departments: ['management', 'service'] },
 
   // Finance — receivables, payables, claims (Blueprint §2.6).
-  { label: 'Invoices',    href: '/invoices',    icon: FileText,        group: 'finance' },
-  { label: 'Collections', href: '/collections', icon: Wallet,          group: 'finance',       feature: 'enable_collections' },
-  { label: 'Expenses',    href: '/expenses',    icon: Receipt,         group: 'finance' },
-  { label: 'Finance',     href: '/finance',     icon: TrendingUp,      group: 'finance',       feature: 'enable_finance' },
+  { label: 'Invoices',    href: '/invoices',    icon: FileText,        group: 'finance', departments: ['management', 'accounts'] },
+  { label: 'Collections', href: '/collections', icon: Wallet,          group: 'finance', feature: 'enable_collections', departments: ['management', 'accounts'] },
+  { label: 'Expenses',    href: '/expenses',    icon: Receipt,         group: 'finance' },  // everyone files expenses
+  { label: 'Finance',     href: '/finance',     icon: TrendingUp,      group: 'finance', feature: 'enable_finance', departments: ['management', 'accounts'] },
 
   // Utility — cross-cutting platform surfaces.
-  { label: 'Tasks',       href: '/tasks',       icon: CheckSquare,     group: 'utility' },
-  { label: 'Approvals',   href: '/approvals',   icon: ShieldCheck,     group: 'utility' },
+  { label: 'Tasks',       href: '/tasks',       icon: CheckSquare,     group: 'utility' },  // everyone has tasks
+  { label: 'Approvals',   href: '/approvals',   icon: ShieldCheck,     group: 'utility', departments: ['management', 'projects', 'procurement', 'accounts'] },
 ]
 
 interface SidebarProps {
   userRole?: string
+  department?: string | null
   features?: Partial<Record<FeatureKey, boolean>>
 }
 
-export function Sidebar({ userRole, features }: SidebarProps) {
+export function Sidebar({ userRole, department, features }: SidebarProps) {
   const pathname = usePathname()
   const isAdminish = userRole === 'admin' || userRole === 'manager'
 
   // Hide items whose feature flag is explicitly false. Absence of the
   // flag from the prop = "show" (backwards-compat). Items with a `roles`
   // gate (e.g. Executive group) only render when the user's role matches.
+  // Items with a `departments` gate only render when the user's department
+  // is listed. NULL department (legacy single-admin tenants) bypasses
+  // department gating and sees everything — preserves backwards-compat.
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (item.feature && features?.[item.feature] === false) return false
     if (item.roles && (!userRole || !(item.roles as readonly string[]).includes(userRole))) return false
+    if (item.departments && department && !(item.departments as readonly string[]).includes(department)) return false
     return true
   })
 
@@ -194,7 +207,7 @@ export function Sidebar({ userRole, features }: SidebarProps) {
           )
         })}
 
-        {isAdminish && (
+        {isAdminish && (!department || department === 'management') && (
           <div className="mt-3 flex flex-col gap-0.5">
             <div className="mb-1 px-3 text-[10px] uppercase tracking-wider text-muted-foreground/60">
               Admin
