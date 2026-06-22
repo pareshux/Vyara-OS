@@ -23,6 +23,53 @@
 
 ## 2026-06-23
 
+### Procurement P1β — Goods Receipt Note end-to-end (pending commit)
+- **Tracks:** DEL-017 (✅ — RTV the only remainder, lifted to P1γ)
+- **Capability:** Delivery (procurement) + Platform (stock-movement integration via polymorphic FK)
+- **Tier:** Must-have post-C#2
+- **Status change:** ✅ Partial (schema) → ✅ (RTV → P1γ)
+- **Notes:** Second slice of the procurement module. Picks up the GRN tables shipped in P1α (`goods_receipt_note` + `_line`) and wires the full consumer — server actions, UI, sample data — so a buyer can receive goods against a PO, see stock posting (where products are linked), and watch the PO state advance from `sent` → `partly_received` → `received` automatically. Per the phased-builds memory ([[feedback-phased-builds]]), I built this slice end-to-end before starting P2; not bundling P1β + P2 in one autonomous pass.
+
+  **Server actions** (`lib/actions/goods-receipt-notes.ts`):
+  - `createGoodsReceiptNote` — validates the PO is in a receivable state (approved / sent / partly_received), per-line validates qty + rejection-reason-when-rejected-positive, inserts header + lines, rolls back via soft-delete on line-insert failure, optional `post_immediately` skips the draft state.
+  - `postGoodsReceiptNote` — the atomic 4-step state advance:
+    1. Flip GRN status → posted (with rollback helper if any downstream step fails).
+    2. For each GRN line: refresh parent PO line + update `qty_received += accepted` and `qty_rejected += rejected` (last-write-wins race is acceptable v1).
+    3. Refresh all PO lines + recompute parent PO status — all fulfilled = `received`, any partial = `partly_received`, else fallback `sent` (defensive).
+    4. Insert stock_movement rows for each accepted line where `product_id IS NOT NULL`: `movement_type='receipt'`, `reason_code='purchase'`, `related_entity_type='goods_receipt_note'`, `related_entity_id=grn.id`. Ad-hoc product-null lines skip stock impact silently.
+    Same sequential-actions pattern as `lib/actions/complaints.ts` — Supabase JS doesn't expose transactions to the client; best-effort rollback on intermediate failure.
+  - `cancelGoodsReceiptNote` — draft-only. Posted GRNs require RTV (P1γ).
+  - `listGoodsReceiptNotes` (with status + po_id filters) + `getGoodsReceiptNote` (with PO line description join for context) + `getPoForReceive` (returns PO + lines with `qty_pending` computed, used by the create form).
+
+  **UI:**
+  - `/procurement/orders/[id]/receive` — server-rendered shell validates PO state, redirects on non-receivable status, surfaces an "all lines fulfilled" notice when there's nothing to receive. Client form (`form.tsx`) shows each PO line with `qty_ordered` / `qty_already_received` / `qty_pending`, defaults the editable `qty_received_now` to `qty_pending` (greedy receive — most realistic user behaviour), plus optional `qty_rejected` + required reason + batch/expiry/remarks. Live counters at the top of the line block ("X of N receiving · accepted · rejected"). Per-line "line will close" hint when the receipt fulfils the line. Paperwork section: challan / vendor-invoice / vehicle / transporter / e-way bill / QC status / QC notes. Two buttons: save-as-draft vs save-and-post. Over-receipt (qty_received > qty_pending) is allowed with an inline amber chip — buyer can choose to accept a vendor's over-shipment.
+  - `/procurement/grns` — list with 3-status filter chips (drafts / posted / cancelled), each row shows GRN number + status pill + date + linked PO number + warehouse + line count + accepted/rejected qty rollup.
+  - `/procurement/grns/[id]` — detail page with header card (status + QC pill + linked PO + warehouse), lines table with received/accepted/rejected columns + batch+expiry + remarks column showing rejection reasons in rose, paperwork card (challan/invoice/vehicle/transporter/e-way), QC + internal notes card. Draft-only Post + Cancel-with-reason buttons via small client island (`workflow-actions.tsx`).
+
+  **PO detail extensions:**
+  - "Receive goods" CTA in the header buttons row, visible when PO status ∈ (approved / sent / partly_received) AND any line has `qty_received < quantity`. Emerald accent to distinguish from the existing workflow buttons.
+  - New "Goods receipts" section listing GRNs against this PO with status pill + date + line count + accepted/rejected qty.
+  - Per-line "X/Y received" inline indicator under each line description (violet when partial, emerald when full); also shows rejected qty in rose when present. Visual signal that maps to the order list page's existing receive-% chip.
+  - Procurement landing's DEL-017 gap marker replaced with a live link to `/procurement/grns` showing "Live ✓".
+
+  **Architectural decision recorded.** GRN posting uses `stock_movement.related_entity_type='goods_receipt_note'` + `related_entity_id=grn.id` rather than adding po_id/grn_id FK columns to `stock_movement`. Preserves the existing polymorphic convention used by `dispatch_issue` / `sample_issue` / `transfer_out`. No schema change required to wire stock movement to a new entity type in future; just write the right enum string.
+
+  **Sample GRN data** (migration 0058 — idempotent via fixed UUIDs):
+  - **Vyara `VT-GRN-2026-0001`** — fully receives all 5,000 cartons from VT-PO-2026-0004 (Pack Industries, sent · ₹1.30L). PO status flipped from `sent` → `received`. QC status `accepted`, challan + vehicle + transporter + e-way bill all captured.
+  - **Raj `RA-GRN-2026-0002`** — partial receipt against RA-PO-2026-0005 (L&T, sent · ₹12.30L · 3 lines). Receives 1 of 2 VFDs (batch L1-2026-VFD-A0231) + all 4 SFUs, leaves bus duct pending. PO status flipped from `sent` → `partly_received`. QC status `partial_accept`, full paperwork captured.
+  - Both GRNs use ad-hoc PO lines (no product_id), so no `stock_movement` rows get written. That matches the action's correct behaviour (services / fabricated items don't impact warehouse stock). To exercise the stock-movement path in P1γ we'll seed a PO with product-linked lines.
+
+  **Verification.**
+  - `npx tsc --noEmit` clean across all new files.
+  - Dev server compiles `/procurement/grns`, `/procurement/orders/[id]/receive`, `/procurement/grns/[id]` cleanly; all return 307 to `/login` for unauthenticated curl as expected.
+  - Migration 0058 applied to remote; NOTICE confirms "VT-PO-2026-0004 → received (1 GRN). RA-PO-2026-0005 → partly_received (1 GRN)."
+  - `scripts/check-procurement-seed.mjs` extended with GRN counts + per-row link to parent PO; output verifies both tenants now show 1 GRN each, PO statuses match.
+
+  **Deferred (recorded in DEL-017 row):**
+  - **P1γ:** RTV (Return to Vendor) for posted GRNs — counter-flow that reverses qty_received and writes a negative `stock_movement` ('return_to_vendor' reason). Different semantic from cancellation (which is a draft-only undo). Will also seed a product-linked PO so the stock-movement path is exercisable.
+  - **P1γ:** PO PDF + WhatsApp/email send (AiSensy template, mirrors quote PDF pattern).
+  - **P2:** vendor bill matching against GRN (the 3-way match) — needs `vendor_bill` schema first.
+
 ### Procurement P1α — operational backbone (PO + GRN schema + vendor KYC) (pending commit)
 - **Tracks:** REL-016 (✅), DEL-016 (✅ Partial), DEL-017 (✅ Partial schema-only); new IDs **registered as 📋** in §11: DEL-015, DEL-018..023, FIN-019..023, PLAT-028
 - **Capability:** Delivery (procurement) + Relationship (vendor KYC) + cross-cutting Platform (approval seeds)

@@ -11,11 +11,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getPurchaseOrder } from '@/lib/actions/purchase-orders'
+import { listGoodsReceiptNotes } from '@/lib/actions/goods-receipt-notes'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ApprovalCard } from '@/components/approval/approval-card'
 import { POWorkflowActions } from './workflow-actions'
-import { ChevronLeft, ExternalLink, Building2, MapPin, FileText, Receipt, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ExternalLink, Building2, MapPin, FileText, Receipt, AlertTriangle, PackagePlus, PackageOpen } from 'lucide-react'
 
 function formatINR(n: number): string {
   return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
@@ -43,8 +44,15 @@ interface PageProps {
 
 export default async function PurchaseOrderDetailPage({ params }: PageProps) {
   const { id } = await params
-  const po = await getPurchaseOrder(id)
+  const [po, grns] = await Promise.all([
+    getPurchaseOrder(id),
+    listGoodsReceiptNotes({ po_id: id, status: 'all', limit: 50 }),
+  ])
   if (!po) notFound()
+
+  const receivable = ['approved', 'sent', 'partly_received'].includes(po.status)
+  const hasUnfulfilled = po.lines.some((l) => Number(l.qty_received || 0) < Number(l.quantity || 0))
+  const showReceiveCta = receivable && hasUnfulfilled
 
   const interstate = po.lines.some((l) => l.is_interstate)
   const cgstTotal = po.lines.reduce((s, l) => s + Number(l.cgst_amount || 0), 0)
@@ -79,11 +87,21 @@ export default async function PurchaseOrderDetailPage({ params }: PageProps) {
               </div>
             </div>
 
-            <POWorkflowActions
-              poId={po.id}
-              status={po.status}
-              hasApprovalRequest={!!po.approval_request_id}
-            />
+            <div className="flex items-center gap-2 flex-wrap">
+              {showReceiveCta && (
+                <Link
+                  href={`/procurement/orders/${po.id}/receive`}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-emerald-700 transition-colors"
+                >
+                  <PackagePlus className="size-4" /> Receive goods
+                </Link>
+              )}
+              <POWorkflowActions
+                poId={po.id}
+                status={po.status}
+                hasApprovalRequest={!!po.approval_request_id}
+              />
+            </div>
           </div>
 
           {/* Vendor + ship-to grid */}
@@ -161,7 +179,17 @@ export default async function PurchaseOrderDetailPage({ params }: PageProps) {
                     <td className="px-2 py-2 tabular-nums text-muted-foreground">{l.line_no}</td>
                     <td className="px-2 py-2">
                       <div className="font-medium text-foreground">{l.description}</div>
-                      <div className="text-[10px] text-muted-foreground tabular-nums">{l.unit}</div>
+                      <div className="text-[10px] text-muted-foreground tabular-nums">
+                        {l.unit}
+                        {Number(l.qty_received) > 0 && (
+                          <span className={`ml-1.5 ${Number(l.qty_received) >= Number(l.quantity) ? 'text-emerald-700' : 'text-violet-700'}`}>
+                            · {l.qty_received}/{l.quantity} received
+                          </span>
+                        )}
+                        {Number(l.qty_rejected) > 0 && (
+                          <span className="ml-1 text-rose-700">· {l.qty_rejected} rejected</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-2 py-2 font-mono text-[11px]">{l.hsn_code ?? '—'}</td>
                     <td className="px-2 py-2 text-right tabular-nums">{l.quantity}</td>
@@ -214,6 +242,42 @@ export default async function PurchaseOrderDetailPage({ params }: PageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Goods receipts (GRNs) against this PO */}
+      {grns.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium inline-flex items-center gap-1.5">
+                <PackageOpen className="size-3.5" /> Goods receipts ({grns.length})
+              </div>
+              <Link href={`/procurement/grns?po=${po.id}`} className="text-xs text-muted-foreground hover:text-foreground">View in GRN list →</Link>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {grns.map((g) => {
+                const tint = g.status === 'posted'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : g.status === 'cancelled'
+                    ? 'bg-rose-50 text-rose-800 border-rose-200'
+                    : 'bg-muted text-muted-foreground border-border'
+                return (
+                  <Link
+                    key={g.id}
+                    href={`/procurement/grns/${g.id}`}
+                    className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="font-mono text-xs">{g.grn_number}</span>
+                    <Badge variant="outline" className={`${tint} text-[10px] font-medium`}>{g.status}</Badge>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">{formatDate(g.grn_date)}</span>
+                    <span className="text-xs flex-1 text-muted-foreground">{g.line_count} line{g.line_count === 1 ? '' : 's'} · {g.qty_accepted_total} accepted{g.qty_rejected_total > 0 ? ` · ${g.qty_rejected_total} rejected` : ''}</span>
+                    <ExternalLink className="size-3 text-muted-foreground" />
+                  </Link>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Snapshots + audit footer */}
       <Card size="sm">

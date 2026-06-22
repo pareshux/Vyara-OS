@@ -157,7 +157,11 @@ export default async function ProcurementPage() {
               Phase 1β + 2 land these surfaces. Each gap below maps to a Blueprint row.
             </p>
             <div className="flex flex-col gap-2 text-xs">
-              <GapRow icon={PackageOpen} label="Goods receipt (GRN)" tag="DEL-017 · P1β" />
+              <Link href="/procurement/grns" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
+                <PackageOpen className="size-3.5 text-emerald-600 shrink-0" />
+                <span className="flex-1 text-foreground">Goods receipts (GRN)</span>
+                <span className="text-[10px] text-emerald-700">Live ✓</span>
+              </Link>
               <GapRow icon={Receipt} label="Vendor bills + 3-way match" tag="DEL-019 · P2" />
               <GapRow icon={CircleAlert} label="MSME 45-day compliance" tag="FIN-020 · P2" />
             </div>
