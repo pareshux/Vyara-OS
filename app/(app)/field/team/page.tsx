@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import {
   Users, ChevronRight, MapPin, Inbox, Coffee, CalendarOff, Sun, AlertCircle, Home, ExternalLink, Clock,
 } from 'lucide-react'
@@ -245,37 +246,47 @@ export default async function TeamPage({
         </Card>
       )}
 
-      {/* ── Team grid ─────────────────────────────────────────── */}
+      {/* ── Team table — scannable at a glance ─────────────────── */}
       {reps.length === 0 ? (
         <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No active reps in the tenant.</CardContent></Card>
       ) : (
-        <div className="flex flex-col gap-2">
-          {reps.map((r) => {
-            const stale = isStale(r, isToday)
-            const att = r.attendance
-            const isOnDuty = !!att?.check_in_at && !att?.check_out_at
-            return (
-              <div
-                key={r.user_id}
-                className="rounded-lg border border-border bg-card px-3 py-3"
-              >
-                {/* Whole row 1 + row 2 is the drill-in link. Row 3 (Maps)
-                    is a sibling so we don't nest <a> tags. */}
-                <Link
-                  href={`/field/team/${r.user_id}?date=${date}`}
-                  className="block hover:opacity-80 transition-opacity"
-                >
-                  {/* Row 1 — identity + status */}
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground shrink-0">
-                      {initials(r.full_name)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium">{r.full_name}</p>
-                        <Badge variant="outline" className="text-[10px] uppercase border-0 bg-muted text-muted-foreground">
-                          {r.role.replace('_', ' ')}
-                        </Badge>
+        <Card className="overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="text-[10px] uppercase tracking-wide text-muted-foreground">Rep</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wide text-muted-foreground tabular-nums">Visits</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wide text-muted-foreground hidden md:table-cell">Hours</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wide text-muted-foreground tabular-nums hidden md:table-cell">Distance</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Last activity</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wide text-muted-foreground hidden lg:table-cell">Where</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-wide text-muted-foreground text-right w-12"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {reps.map((r) => {
+                const stale = isStale(r, isToday)
+                const att = r.attendance
+                const isOnDuty = !!att?.check_in_at && !att?.check_out_at
+                const drillHref = `/field/team/${r.user_id}?date=${date}`
+                return (
+                  <TableRow key={r.user_id} className="align-middle">
+                    {/* Rep */}
+                    <TableCell>
+                      <Link href={drillHref} className="flex items-center gap-2.5 group">
+                        <div className="flex size-8 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-muted-foreground shrink-0">
+                          {initials(r.full_name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium group-hover:text-primary">{r.full_name}</p>
+                          <p className="text-[10px] uppercase text-muted-foreground tracking-wide">{r.role.replace('_', ' ')}</p>
+                        </div>
+                      </Link>
+                    </TableCell>
+                    {/* Status */}
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <StatusPill rep={r} isToday={isToday} />
                         {stale && (
                           <Badge variant="outline" className="text-[10px] uppercase border-0 bg-amber-50 text-amber-700">
@@ -283,58 +294,85 @@ export default async function TeamPage({
                           </Badge>
                         )}
                       </div>
-                    </div>
-                    <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-1" />
-                  </div>
-
-                  {/* Row 2 — visit counts + time strip */}
-                  {att && (att.check_in_at || att.status_for_day !== 'on_duty') && (
-                    <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums flex-wrap">
-                      <span>
-                        <span className="text-foreground font-medium">{r.visits_today}</span> done
-                        {' · '}
-                        <span className="text-foreground font-medium">{r.planned_count}</span> planned
-                        {r.in_progress_count > 0 && (
-                          <> · <span className="text-emerald-700 font-medium">{r.in_progress_count} live</span></>
-                        )}
-                      </span>
-                      {att.check_in_at && <span>· in {formatTime(att.check_in_at)}</span>}
-                      {att.check_out_at && <span>· out {formatTime(att.check_out_at)}</span>}
-                      {att.total_km != null
-                        ? <span>· {att.total_km.toLocaleString('en-IN')} km</span>
-                        : att.running_km != null
-                          ? <span>· {att.running_km.toLocaleString('en-IN')} km so far</span>
-                          : null}
-                      {att.reimbursement_amount != null && <span>· {rs(att.reimbursement_amount)}</span>}
-                      {r.last_activity_at && isOnDuty && (
-                        <span>· active {formatRelative(r.last_activity_at)}</span>
+                    </TableCell>
+                    {/* Visits */}
+                    <TableCell className="tabular-nums text-sm">
+                      {att && (att.check_in_at || att.status_for_day !== 'on_duty') ? (
+                        <span>
+                          <span className="text-foreground font-medium">{r.visits_today}</span>
+                          <span className="text-muted-foreground"> / </span>
+                          <span className="text-foreground font-medium">{r.planned_count}</span>
+                          <span className="text-[11px] text-muted-foreground"> planned</span>
+                          {r.in_progress_count > 0 && (
+                            <Badge variant="outline" className="ml-1.5 text-[10px] uppercase border-0 bg-emerald-50 text-emerald-700">
+                              {r.in_progress_count} live
+                            </Badge>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-[11px]">—</span>
                       )}
-                    </div>
-                  )}
-                  {!att && isToday && (
-                    <p className="mt-2 text-[11px] text-muted-foreground italic">Not checked in yet</p>
-                  )}
-                </Link>
-
-                {/* Row 3 — where they are right now. Tap the chip to
-                    open a modal with the embedded map; no navigation
-                    away. Sibling of the drill-in Link (not nested) so
-                    the click doesn't bubble into the row. */}
-                {r.latest_location && (
-                  <div className="mt-2">
-                    <LocationMapButton
-                      lat={r.latest_location.lat}
-                      lng={r.latest_location.lng}
-                      label={r.latest_location.label}
-                      source={r.latest_location.source}
-                      repName={r.full_name}
-                    />
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+                    </TableCell>
+                    {/* Hours */}
+                    <TableCell className="hidden md:table-cell text-sm tabular-nums">
+                      {att?.check_in_at ? (
+                        <span>
+                          {formatTime(att.check_in_at)}
+                          {att.check_out_at && <span className="text-muted-foreground"> → {formatTime(att.check_out_at)}</span>}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-[11px]">—</span>
+                      )}
+                    </TableCell>
+                    {/* Distance */}
+                    <TableCell className="hidden md:table-cell text-sm tabular-nums">
+                      {att?.total_km != null ? (
+                        <span>{att.total_km.toLocaleString('en-IN')} km</span>
+                      ) : att?.running_km != null ? (
+                        <span className="text-muted-foreground">{att.running_km.toLocaleString('en-IN')} km <span className="text-[10px]">(so far)</span></span>
+                      ) : (
+                        <span className="text-muted-foreground text-[11px]">—</span>
+                      )}
+                      {att?.reimbursement_amount != null && (
+                        <div className="text-[10px] text-muted-foreground tabular-nums">{rs(att.reimbursement_amount)}</div>
+                      )}
+                    </TableCell>
+                    {/* Last activity */}
+                    <TableCell className="hidden lg:table-cell text-[11px] text-muted-foreground tabular-nums">
+                      {r.last_activity_at && isOnDuty ? formatRelative(r.last_activity_at)
+                        : !att && isToday ? <span className="italic">not checked in</span>
+                        : <span>—</span>}
+                    </TableCell>
+                    {/* Where (location chip — separate clickable, not nested) */}
+                    <TableCell className="hidden lg:table-cell">
+                      {r.latest_location ? (
+                        <LocationMapButton
+                          lat={r.latest_location.lat}
+                          lng={r.latest_location.lng}
+                          label={r.latest_location.label}
+                          source={r.latest_location.source}
+                          repName={r.full_name}
+                        />
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    {/* Open arrow */}
+                    <TableCell className="text-right">
+                      <Link
+                        href={drillHref}
+                        className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        aria-label={`Open ${r.full_name}'s day`}
+                      >
+                        <ChevronRight className="size-4" />
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </Card>
       )}
 
       <p className="text-[10px] text-muted-foreground italic">
