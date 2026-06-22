@@ -12,6 +12,7 @@
  */
 import Link from 'next/link'
 import { listPurchaseOrders } from '@/lib/actions/purchase-orders'
+import { listPurchaseRequisitions } from '@/lib/actions/purchase-requisitions'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -24,6 +25,7 @@ import {
   ListChecks,
   Undo2,
   Banknote,
+  ClipboardList,
 } from 'lucide-react'
 
 function formatMoneyShort(n: number): string {
@@ -34,7 +36,12 @@ function formatMoneyShort(n: number): string {
 }
 
 export default async function ProcurementPage() {
-  const pos = await listPurchaseOrders({ status: 'all', limit: 500 })
+  const [pos, prs] = await Promise.all([
+    listPurchaseOrders({ status: 'all', limit: 500 }),
+    listPurchaseRequisitions({ status: 'all', limit: 200 }),
+  ])
+  const prAwaiting = prs.filter((p) => p.status === 'submitted').length
+  const prApproved = prs.filter((p) => p.status === 'approved').length
 
   // Roll up.
   const openStatuses = ['pending_approval', 'approved', 'sent', 'partly_received'] as const
@@ -62,12 +69,20 @@ export default async function ProcurementPage() {
             Vendors, purchase orders, goods receipt. The inbound side of inventory.
           </p>
         </div>
-        <Link
-          href="/procurement/orders/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <ShoppingCart className="size-4" /> New purchase order
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href="/procurement/requisitions/new"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm font-medium hover:bg-muted/40 transition-colors"
+          >
+            <ClipboardList className="size-4" /> New requisition
+          </Link>
+          <Link
+            href="/procurement/orders/new"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <ShoppingCart className="size-4" /> New purchase order
+          </Link>
+        </div>
       </div>
 
       {/* KPI strip */}
@@ -159,6 +174,17 @@ export default async function ProcurementPage() {
               Phase 1β + 2 land these surfaces. Each gap below maps to a Blueprint row.
             </p>
             <div className="flex flex-col gap-2 text-xs">
+              <Link href="/procurement/requisitions" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
+                <ClipboardList className="size-3.5 text-violet-600 shrink-0" />
+                <span className="flex-1 text-foreground">Purchase requisitions</span>
+                {prAwaiting > 0 ? (
+                  <span className="text-[10px] text-amber-700">{prAwaiting} pending</span>
+                ) : prApproved > 0 ? (
+                  <span className="text-[10px] text-emerald-700">{prApproved} approved</span>
+                ) : (
+                  <span className="text-[10px] text-emerald-700">Live ✓</span>
+                )}
+              </Link>
               <Link href="/procurement/grns" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
                 <PackageOpen className="size-3.5 text-emerald-600 shrink-0" />
                 <span className="flex-1 text-foreground">Goods receipts (GRN)</span>

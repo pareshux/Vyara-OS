@@ -23,6 +23,55 @@
 
 ## 2026-06-23
 
+### Procurement P4α — Purchase Requisitions (pending commit)
+- **Tracks:** DEL-015 ✅ Partial (PR→PO conversion → P4β; RFQ + CS → P4β/γ)
+- **Capability:** Delivery (procurement — pre-procurement front-end)
+- **Tier:** Should-have
+- **Status change:** 📋 P4 → ✅ Partial
+- **Notes:** The demand-capture step that sits before the PO. A site engineer / project manager / store keeper raises a PR saying "I need 200 cables for the L&T project, est ₹4.2L, by Jan 15"; an approver greenlights based on amount band; procurement then raises a PO (or in P4β, an RFQ across vendors). Without PRs, anyone with PO permissions could spend money without sign-off — even for sub-₹50k auto-approved POs, the PR creates the documentation trail.
+
+  **Schema** (migration 0067):
+  - `purchase_requisition` (header — 19 columns): pr_number auto VT-PR-* / RA-PR-*, project_id (optional — typical for EPC, niche for Vyara), cost_center (free text v1; master in v2), requested_by FK user_profile, required_by_date, justification, estimated_value (computed from line sums), 6-state status enum (draft / submitted / approved / rejected / cancelled / po_raised), approval_request_id (PLAT-014), linked_po_id (P4β PR→PO conversion target — set when PO created from PR), full audit + workflow timestamps + reason fields.
+  - `purchase_requisition_line` (line): product_id optional (ad-hoc allowed), description + hsn_code + unit + quantity + estimated_rate, estimated_value computed = qty × rate, preferred_vendor_id (optional suggestion — actual vendor picked at PO / RFQ evaluation time), specifications (free text for dimensions, finish, brand notes).
+  - Sequence + render_tenant_code-aware trigger + next_code_sequence whitelist extended + code templates VT-PR-* / RA-PR-* + CodeTemplatesSchema Zod extended.
+  - Approval policies seeded for entity_type='purchase_requisition' mirroring PO bands (50k-5L manager / 5L-25L manager+admin / 25L+ admin). Sub-₹50k auto-approves per PLAT-014 default.
+
+  **Server actions** (`lib/actions/purchase-requisitions.ts`):
+  - `createPurchaseRequisition` — validates per-line qty + estimated_rate, computes estimated_value, inserts header + lines atomically with soft-delete rollback. Supports `submit_immediately=true` to chain into submit.
+  - `submitPurchaseRequisition` — raises approval via PLAT-014. Sub-₹50k auto-approves (status flips draft → approved); otherwise creates approval_request and flips to submitted.
+  - `syncPrFromApproval` — read-time reconciliation pattern (mirrors expenses.ts / purchase-orders.ts). When approval lands, PR status flips approved/rejected.
+  - `cancelPurchaseRequisition` — draft-only. Submitted PRs require approver rejection.
+  - `listPurchaseRequisitions` + `getPurchaseRequisition` — both with nested project + requester + approver + linked_po + lines + product + preferred_vendor context.
+  - 3 form pickers: `listProjectsForPrPicker`, `listProductsForPrPicker`, `listVendorsForPrPicker`.
+
+  **UI**:
+  - `/procurement/requisitions` list — 4-KPI strip (drafts / awaiting approval / approved / total estimated value in flight) + 7-status filter row. Per-row chips: PR number + status pill, project name + cost center, requester + line count + linked-PO when status=po_raised, estimated value.
+  - `/procurement/requisitions/new` — single-page form. Project picker + cost center + required-by date + justification card. Dynamic line table: product picker auto-fills description/unit; HSN + unit dropdown + qty + estimated rate + preferred-vendor picker + specifications. Live total card with "above ₹50k → routes to Manager / Manager+Director / Director approval" hint based on running total. Save-as-draft vs save-and-submit buttons.
+  - `/procurement/requisitions/[id]` detail — header pill row (PR# + status), meta grid (project/requester/need-by), justification box (when present), inline `<ApprovalCard>` when status=submitted with approval_request_id, rejection/cancellation/PO-raised banners, 7-column lines table (#/item+specs/HSN/qty/est-rate/est-value/preferred vendor) with total row, "Ready to raise PO" hint card on approved PRs pointing at P4β + linking to manual /procurement/orders/new path, Submit/Cancel workflow via `<PrWorkflowActions>` client island (draft only — submitted state hands off to ApprovalCard's Decide buttons).
+  - Procurement landing extended: header gets "New requisition" CTA alongside "New PO"; coming-next card adds Purchase requisitions tile showing live "X pending" / "Y approved" / "Live ✓" depending on current state.
+
+  **Sample data** (migration 0068):
+  - **Vyara VT-PR-2026-0001** — draft, ₹1.80L. Q3 pigment top-up (Iron Oxide Red 120kg + Yellow 80kg) for Plant-1 production. Preferred vendor V-PGM-01 (Surat Pigments). User can walk submit → mid-band manager approval flow.
+  - **Raj RA-PR-2026-0001** — submitted/pending, ₹4.20L. Cable supplies (1500 m LT XLPE 150 + 500 m 70) for Adani EPC project. Marked site-critical in notes. Approval_request seeded against mid-band policy. User can go to `/approvals` queue and approve.
+  - **Raj RA-PR-2026-0002** — approved end-to-end, ₹2.80L. Schneider MCCB 250A + LC1D contactors + aux contacts for L&T Vadinar MCC. Cost center "EPC-L&T-Vadinar". Shows the "Ready to raise PO" hint card.
+
+  **Architectural calls recorded:**
+  - **Cost center as free text v1.** Real ERPs have a cost-center master tied to departments + budget caps; v1 captures it as TEXT so the field exists without committing to a master schema yet. Migrates cleanly to a FK when first customer asks.
+  - **PR approval threshold mirrors PO bands.** Same ₹50k / ₹5L / ₹25L breakpoints — keeps the approval bands consistent across the procurement chain (PR + PO + Bill all use the same logic). One mental model for the user.
+  - **PR auto-approves the same items a PO would.** For sub-₹50k spend, the PR auto-approves AND a follow-on PO would also auto-approve — the question is whether the documentation exists. Even when both auto-approve, the PR record is what auditors want.
+  - **Two-step PR→PO conversion deferred.** Could have built P4α + the conversion in one slice; chose to ship just PR first because the conversion needs the existing PO form to accept ?from_pr= and pre-fill its lines, plus the PO action needs to set PR.linked_po_id and flip PR.status atomically. Cleaner as its own slice in P4β.
+  - **RFQ + CS deferred to P4β/γ.** Pre-procurement vendor selection is a distinct flow; RFQ is "send the requirement to multiple vendors", CS is "compare quotes side-by-side". Different schema, different UX. They naturally pair with PR→PO conversion in P4β (PR + RFQ + CS feed the PO).
+
+  **Verification:**
+  - `tsc --noEmit` clean.
+  - 4 routes (`/procurement/requisitions`, `/requisitions/new`, `/requisitions/[id]`, `/procurement` landing) 307 to /login for unauth as expected.
+  - Migration 0067 + 0068 applied; notice confirms PR seeds in correct states.
+
+  **Deferred:**
+  - **P4β:** PR → PO conversion (Raise PO from this PR button on approved PR detail → pre-fills PO form + sets PR.linked_po_id + flips PR.status to po_raised on save). RFQ + Comparative Statement.
+  - **P4γ:** Multi-PR consolidation into one PO (procurement officer batches multiple approved PRs from same project / vendor preference into one consolidated PO).
+  - **Future:** Self-service PR for sales_engineer / dealer roles (v1 limits to admin/manager for simplicity), budget caps per cost_center master, cost-center master schema.
+
 ### Procurement P3β — Voucher PDF + NEFT CSV + Reversal + MSME-1 CSV (pending commit)
 - **Tracks:** FIN-022 ✅ (per-bank dialects → P3γ); FIN-020 ✅ (PDF format → P3γ if asked); FIN-021 still ✅ Partial pending Form 16A + 26Q
 - **Capability:** Finance (procurement output formats)
