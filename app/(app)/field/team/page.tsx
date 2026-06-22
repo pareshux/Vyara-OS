@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
-  Users, ChevronRight, MapPin, Inbox, Coffee, CalendarOff, Sun, AlertCircle, Home, ExternalLink, Clock,
+  Users, ChevronRight, MapPin, Inbox, Coffee, CalendarOff, Sun, AlertCircle, Home, ExternalLink, Clock, BarChart3,
 } from 'lucide-react'
 import { getTeamSnapshot, listPendingClaims, type TeamRepRow } from '@/lib/actions/field-team'
 import { getTodayContext } from '@/lib/actions/field-attendance'
@@ -192,6 +192,13 @@ export default async function TeamPage({
               Go
             </button>
           </form>
+          <Link
+            href="/field/team/attendance"
+            className="h-8 px-3 text-xs rounded-md border border-border bg-card hover:bg-muted/30 inline-flex items-center gap-1.5"
+          >
+            <BarChart3 className="size-3.5" />
+            Attendance report
+          </Link>
         </div>
       </div>
 
