@@ -100,7 +100,7 @@ export default async function DealerDashboardPage() {
             Welcome back
           </p>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Here&apos;s a quick view of your account with Vyara Tiles.
+            Here&apos;s a quick view of your dealer account.
           </p>
         </CardContent>
       </Card>

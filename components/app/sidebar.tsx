@@ -148,7 +148,7 @@ export function Sidebar({ userRole, features }: SidebarProps) {
         <div className="flex size-7 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
           <BuildingIcon className="size-4" />
         </div>
-        <span className="font-semibold text-sidebar-foreground tracking-tight">CRMOS</span>
+        <span className="font-semibold text-sidebar-foreground tracking-tight">Vyara OS</span>
       </div>
 
       <nav className="flex flex-1 flex-col p-3">

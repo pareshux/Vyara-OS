@@ -430,7 +430,10 @@ function DunningDialog({
   buyerPhone: string | null
   onSuccess: () => void
 }) {
-  const defaultMsg = `Reminder: Invoice ${invoiceNumber} for ₹${outstanding.toLocaleString('en-IN')} is overdue. Please settle at the earliest. — Vyara Tiles.`
+  // Default template — caller can edit before sending. Company sign-off
+  // removed to be tenant-neutral; the user can add their own. Long-term:
+  // pull from tenant.settings.company.name and prefill (Phase 7d follow-up).
+  const defaultMsg = `Reminder: Invoice ${invoiceNumber} for ₹${outstanding.toLocaleString('en-IN')} is overdue. Please settle at the earliest.`
   const [msg, setMsg] = useState(defaultMsg)
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)

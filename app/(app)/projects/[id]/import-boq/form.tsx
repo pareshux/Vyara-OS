@@ -31,7 +31,7 @@ interface BOQRow {
   customerDescription: string
   customerQty: string
   customerUnit: string
-  // Vyara's mapping
+  // Our catalog mapping
   productId: string
   unitPrice: string
   priceSource: string | null   // e.g. "DEFAULT_2026 · ₹291.67"
@@ -136,7 +136,7 @@ export function ImportBOQForm({
 
   function handleSubmit() {
     if (mappedRows.length === 0) {
-      toast.error('Map at least one row to a Vyara product before generating the quote.')
+      toast.error('Map at least one row to a catalog product before generating the quote.')
       return
     }
 
@@ -276,7 +276,7 @@ export function ImportBOQForm({
             <p className="text-xs font-medium text-muted-foreground">Customer description</p>
             <p className="text-xs font-medium text-muted-foreground">Qty</p>
             <p className="text-xs font-medium text-muted-foreground">Unit</p>
-            <p className="text-xs font-medium text-muted-foreground">→ Vyara product</p>
+            <p className="text-xs font-medium text-muted-foreground">→ Catalog product</p>
             <p className="text-xs font-medium text-muted-foreground">Rate (₹)</p>
             <p className="text-xs font-medium text-muted-foreground text-right">Line total</p>
             <span />
@@ -324,7 +324,7 @@ export function ImportBOQForm({
                     className="h-8 text-xs"
                   />
 
-                  {/* Vyara product mapping */}
+                  {/* Catalog product mapping */}
                   <div className="flex flex-col gap-0.5">
                     <Select value={row.productId} onValueChange={(v) => handleProductChange(index, v)}>
                       <SelectTrigger className="h-8 text-xs w-full">

@@ -32,7 +32,7 @@ export default function LoginPage() {
             <BuildingIcon className="size-5" />
           </div>
           <div className="text-center">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">CRMOS</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">Vyara OS</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">Modular Business Operating System</p>
           </div>
         </div>
