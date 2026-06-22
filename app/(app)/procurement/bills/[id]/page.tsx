@@ -4,11 +4,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getVendorBill, type LineMatchStatus } from '@/lib/actions/vendor-bills'
+import { listVendorPayments } from '@/lib/actions/vendor-payments'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ApprovalCard } from '@/components/approval/approval-card'
 import { BillWorkflowActions } from './workflow-actions'
-import { ChevronLeft, ExternalLink, Building2, Receipt, FileSignature, AlertTriangle, CheckCircle2, Eye } from 'lucide-react'
+import { ChevronLeft, ExternalLink, Building2, Receipt, FileSignature, AlertTriangle, CheckCircle2, Eye, Banknote } from 'lucide-react'
 
 function formatINR(n: number) {
   return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
@@ -54,7 +55,10 @@ interface PageProps {
 
 export default async function VendorBillDetailPage({ params }: PageProps) {
   const { id } = await params
-  const bill = await getVendorBill(id)
+  const [bill, payments] = await Promise.all([
+    getVendorBill(id),
+    listVendorPayments({ bill_id: id, limit: 50 }),
+  ])
   if (!bill) notFound()
 
   const interstate = bill.lines.some((l) => l.is_interstate)
@@ -64,6 +68,8 @@ export default async function VendorBillDetailPage({ params }: PageProps) {
 
   const overdue = (bill.status === 'approved' || bill.status === 'partly_paid') && isOverdue(bill.due_date)
   const mismatchedLineCount = bill.lines.filter((l) => ['qty_over', 'rate_mismatch', 'hsn_mismatch', 'gst_mismatch'].includes(l.match_status)).length
+
+  const canPay = (bill.status === 'approved' || bill.status === 'partly_paid') && bill.amount_outstanding > 0
 
   return (
     <div className="p-4 md:p-6 flex flex-col gap-5 max-w-5xl">
@@ -97,7 +103,17 @@ export default async function VendorBillDetailPage({ params }: PageProps) {
               </div>
             </div>
 
-            <BillWorkflowActions billId={bill.id} status={bill.status} matchStatus={bill.match_status} />
+            <div className="flex items-center gap-2 flex-wrap">
+              {canPay && (
+                <Link
+                  href={`/procurement/payments/new?vendor=${bill.vendor_id}&bill=${bill.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-emerald-700 transition-colors"
+                >
+                  <Banknote className="size-4" /> Pay vendor
+                </Link>
+              )}
+              <BillWorkflowActions billId={bill.id} status={bill.status} matchStatus={bill.match_status} />
+            </div>
           </div>
 
           {/* Money + due summary */}
@@ -285,6 +301,52 @@ export default async function VendorBillDetailPage({ params }: PageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Payments against this bill */}
+      {payments.length > 0 && (
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium inline-flex items-center gap-1.5">
+                <Banknote className="size-3.5" /> Payments ({payments.length})
+              </div>
+              <Link href={`/procurement/payments?bill=${bill.id}`} className="text-xs text-muted-foreground hover:text-foreground">View all →</Link>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {payments.map((p) => {
+                const allocation = p.allocation_count > 0 ? p.gross_amount / p.allocation_count : p.gross_amount
+                // Note: for display we show full payment net; the actual allocation to this specific bill
+                // can be looked up via getVendorPayment(p.id) — for the inline card we keep it simple.
+                void allocation
+                const statusTint = p.status === 'posted' ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : p.status === 'cancelled' ? 'bg-rose-50 text-rose-800 border-rose-200'
+                  : 'bg-muted text-muted-foreground border-border'
+                return (
+                  <Link
+                    key={p.id}
+                    href={`/procurement/payments/${p.id}`}
+                    className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2 hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="font-mono text-xs">{p.payment_number}</span>
+                    <Badge variant="outline" className={`${statusTint} text-[10px] font-medium`}>{p.status}</Badge>
+                    <Badge variant="outline" className="text-[10px] uppercase">{p.payment_mode}</Badge>
+                    {p.tds_section && (
+                      <Badge variant="outline" className="bg-rose-50 text-rose-800 border-rose-200 text-[10px]">
+                        TDS {p.tds_section} · {p.tds_pct}%
+                      </Badge>
+                    )}
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {formatDate(p.payment_date)}{p.reference_no && <> · <span className="font-mono">{p.reference_no}</span></>}
+                    </span>
+                    <span className="text-xs flex-1 text-right text-foreground font-medium tabular-nums">net ₹{formatINR(p.net_amount)}</span>
+                    <ExternalLink className="size-3 text-muted-foreground" />
+                  </Link>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {bill.notes && (
         <Card size="sm">

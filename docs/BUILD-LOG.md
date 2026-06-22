@@ -23,6 +23,72 @@
 
 ## 2026-06-23
 
+### Procurement P3α — Vendor payments + TDS engine (pending commit)
+- **Tracks:** FIN-021 ✅ Partial (16A + 26Q → P3β); FIN-022 ✅ Partial (NEFT bank file + voucher PDF → P3β)
+- **Capability:** Finance (AP payment + TDS)
+- **Tier:** Must-have post-C#2
+- **Status change:** Both flipped 📋 P3 → ✅ Partial
+- **Notes:** Closes the full procurement chain. The platform now walks PO → GRN → Vendor Bill (3-way matched) → Payment (with TDS) → bills auto-flip to partly_paid/paid → AP ageing updates. Books can finally be balanced.
+
+  **TDS engine** (`lib/procurement/tds-engine.ts` — pure functions, no DB writes):
+  - Lives outside `lib/actions/*` because Next.js requires every export in a `'use server'` module to be `async`. Same lock-in we discovered at P2α match-engine.
+  - `suggestTds(vendor)` — section + pct + reason string based on vendor_type:
+    - supplier → §194Q @ 0.1% (5% if no PAN per §206AA)
+    - contractor → §194C @ 1% (20% if no PAN)
+    - service → §194J @ 10% (20% if no PAN)
+    - other → manual (no auto-suggest)
+  - `tdsRateForSection(section, hasPan)` — utility for section lookups when user picks manually.
+  - `computeTds(gross, pct)` — returns { tds, net } rounded to paise.
+  - User can override section + rate per payment. The reason string is visible in the form for compliance traceability.
+
+  **Server actions** (`lib/actions/vendor-payments.ts`):
+  - `createVendorPayment` — validates vendor + each allocation (bill.vendor_id matches, bill.status ∈ approved/partly_paid, allocated ≤ bill.amount_outstanding), TDS bounds (0-50%), computes net. Inserts header + allocations atomically with soft-delete rollback if allocation insert fails.
+  - `postVendorPayment` — atomic 3-step advance:
+    1. Re-validate outstanding hasn't decreased since draft (another payment may have hit the same bill — fail loudly, ask user to cancel + recreate).
+    2. Flip payment.status = posted.
+    3. For each allocation: `bill.amount_paid += allocated_amount`, recompute `amount_outstanding = total − amount_paid`, flip status to `paid` when outstanding≤0.01 or `partly_paid` otherwise.
+    Best-effort rollback on intermediate failure mirroring the GRN + RTV + bill patterns.
+  - `cancelVendorPayment` — draft-only. Posted reversal is v2.
+  - `listVendorPayments` + `getVendorPayment` — both with allocation context.
+  - `listVendorsWithOutstanding` — picker. Sums approved/partly_paid bill outstanding per vendor.
+  - `getBillsForPayment(vendorId)` — picker. Hits `vendor_bill_ageing_v` (the P2β view) so the form gets `days_overdue` + `msme_flag` for free.
+
+  **UI:**
+  - `/procurement/payments` list — 4-KPI strip (net paid this month, TDS deducted this month, draft count, total), status + mode filter rows, per-row chips for mode + TDS section/rate, gross/net columns.
+  - `/procurement/payments/new` — two modes:
+    - Picker (no `?vendor=`): vendors with outstanding sorted by amount, MSME badge inline, PAN warning when missing.
+    - Pre-bound (`?vendor=X`, optional `?bill=Y` to pre-select one bill): vendor TDS-suggestion card at top with the engine's reason string; payment header (date + mode + reference + bank account used); bills checkbox list with each row showing total/paid/outstanding + MSME breach/warning border + "max" button to set allocation to full outstanding; TDS section + rate dropdowns auto-fill from suggestTds, edit-allowed; live preview computes gross + TDS + net as the user types.
+  - `/procurement/payments/[id]` detail — header with status pill + mode pill + TDS pill, 4 money tiles (gross / TDS / net / allocation count) with rose tint on TDS row + emerald on net, vendor block with PAN or §206AA warning + MSME badge, TDS deposit-by-7th reminder card pointing at P3β follow-on for 16A/26Q, MSME 45-day reminder when applicable (draft only), allocations table linking back to bills with bill-total + allocated-to-this-payment columns. `<PaymentWorkflowActions>` client island for Post + Cancel-with-reason.
+  - Bill detail extended: "Pay vendor" CTA (emerald, gated on status=approved/partly_paid + amount_outstanding>0; routes to `/procurement/payments/new?vendor=X&bill=Y`) + Payments section listing payments allocated to the bill with all the relevant chips.
+  - Procurement landing's "Payment + TDS" gap marker swapped for a live link. Remaining gaps: P3β follow-on (NEFT bank file + 16A + 26Q + MSME-1 PDF) and P5 (GSTR-2B).
+
+  **Sample data** (migration 0065):
+  - `VT-PAY-2026-0001` — full payment of VT-VB-2026-0001 (₹1.30L gross, ₹130 TDS §194Q@0.1% because supplier has PAN, ₹1.29L net NEFT with ref N026INF9988). Status posted. After post: VT-VB-2026-0001 flips approved → paid; amount_outstanding → 0.
+  - `RA-PAY-2026-0001` — backfill for the legacy ₹3,00,000 on-account against RA-VB-2026-0007 (Crompton transformer). No TDS recorded — explicitly noted in the payment notes as a pre-TDS-flow legacy entry. Restores audit-trail integrity (before this, amount_paid was set directly by migration 0063 without a payment record).
+
+  **Architectural calls recorded:**
+  - **TDS engine extracted to lib/procurement/tds-engine.ts.** Forced by Next.js `'use server'` async-export constraint — same lock-in as P2α match-engine. Worth noting that this is now the established pattern in this codebase: pure procurement helpers go in `lib/procurement/`, actions in `lib/actions/`.
+  - **TDS at payment level (uniform across allocations) in v1.** Per-allocation TDS (one section per bill in a multi-bill payment) is the v2 path if a customer needs it. Real-world: vendors usually fall into one section across all their bills with us, so uniform-per-payment matches reality.
+  - **Re-validate on post.** Outstanding can decrease between draft and post if another payment lands on the same bill. We fail loudly with a "cancel and recreate" message rather than silently capping the allocation — the user needs to see what changed.
+  - **Posted-payment reversal deferred.** v1 only allows draft cancellation. To reverse a posted payment, v2 needs a reverse-allocation flow (mirror of RTV for goods). Real-world frequency: cheque bounce, NEFT failure, vendor refund. P3β might add this.
+  - **NEFT bank file format deferred to P3β.** HDFC, ICICI, SBI, and generic CSV are all slightly different. Schema captures everything needed (gross, net, reference_no, bank_account_used); export format is templated output, not new data. Faster to ship the payment lifecycle first and add the export when a customer asks for a specific bank.
+
+  **Verification:**
+  - `tsc --noEmit` clean.
+  - 4 routes (`/procurement/payments`, `/payments/new`, `/payments/[id]`, bill detail) 307 to /login as expected.
+  - Migration 0064 + 0065 applied; both sample payments seeded with NOTICE confirmation.
+  - VT-VB-2026-0001 verified flipped to status=paid after seed, amount_outstanding=0.
+
+  **Deferred to P3β:**
+  - **NEFT/RTGS bank file export** (HDFC / ICICI / SBI / generic-CSV) — the actual money-movement format.
+  - **Payment voucher PDF** (the receipt vendor gets).
+  - **Form 16A** per vendor per FY (TDS certificate format).
+  - **Quarterly 26Q return CSV** (TDS quarterly filing).
+  - **26AS reconciliation** (govt portal match).
+  - **MSME-1 half-yearly filing format** (PDF / CSV per the prescribed half-yearly form).
+  - **Posted-payment reversal** (cheque bounce / NEFT fail / vendor refund flow).
+  - **Multi-step payment release approval** (PLAT-014 wiring for high-value payments).
+
 ### Procurement P2β — AP ageing dashboard + MSME 45-day compliance (pending commit)
 - **Tracks:** DEL-019 ✅ Partial (vendor dunning → P3); FIN-020 ✅ Partial (MSME-1 filing format → follow-on)
 - **Capability:** Finance (AP) + Delivery (procurement)

@@ -74,6 +74,7 @@ const CodeTemplatesSchema = z
     goods_receipt_note: codeTemplate('goods_receipt_note').default('VT-GRN-{yyyy}-{nnnn}'),
     return_to_vendor:   codeTemplate('return_to_vendor').default('VT-RTV-{yyyy}-{nnnn}'),
     vendor_bill:        codeTemplate('vendor_bill').default('VT-VB-{yyyy}-{nnnn}'),
+    vendor_payment:     codeTemplate('vendor_payment').default('VT-PAY-{yyyy}-{nnnn}'),
   })
   .passthrough()
 
