@@ -6,12 +6,14 @@
  * contract to drill — but /amc/[id] detail page is deferred to v2.
  */
 
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { listAmcContracts, type AmcListRow } from '@/lib/actions/amc'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CalendarClock, CheckCircle2, AlertTriangle, Clock, Building2 } from 'lucide-react'
+import { CreateAmcSheet, type FirmOption } from './create-amc-sheet'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +28,11 @@ export default async function AmcPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const r = await listAmcContracts()
+  const [r, { data: firms }] = await Promise.all([
+    listAmcContracts(),
+    supabase.from('firm').select('id, name').order('name'),
+  ])
+  const firmOptions: FirmOption[] = (firms ?? []).map((f) => ({ value: f.id as string, label: f.name as string }))
   if (!r.ok) {
     return (
       <div className="p-6">
@@ -56,6 +62,7 @@ export default async function AmcPage() {
             <p className="text-sm text-muted-foreground">Customer Success · annual maintenance + scheduled visits</p>
           </div>
         </div>
+        <CreateAmcSheet firms={firmOptions} />
       </div>
 
       {/* KPI strip */}
@@ -121,7 +128,8 @@ function AmcRow({ c, muted = false }: { c: AmcListRow; muted?: boolean }) {
     : 'No visits scheduled'
 
   return (
-    <Card size="sm" className={muted ? 'opacity-70' : ''}>
+    <Link href={`/amc/${c.id}`}>
+    <Card size="sm" className={muted ? 'opacity-70 hover:opacity-100 cursor-pointer' : 'cursor-pointer'}>
       <CardContent className="pt-4 flex items-center gap-3 flex-wrap">
         <Badge variant="outline" style={{ borderColor: STATUS_COLORS[c.status] ?? '#94a3b8', color: STATUS_COLORS[c.status] ?? '#94a3b8' }}>
           {c.status}
@@ -153,5 +161,6 @@ function AmcRow({ c, muted = false }: { c: AmcListRow; muted?: boolean }) {
         </div>
       </CardContent>
     </Card>
+    </Link>
   )
 }
