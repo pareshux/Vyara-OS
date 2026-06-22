@@ -194,18 +194,25 @@ export default async function PurchaseRequisitionDetailPage({ params }: PageProp
         </CardContent>
       </Card>
 
-      {/* P4β hint when approved + no PO yet */}
+      {/* PR → PO conversion CTA when approved + no PO yet */}
       {pr.status === 'approved' && !pr.linked_po_id && (
-        <Card size="sm">
-          <CardContent className="flex items-start gap-2 text-sm">
-            <AlertCircle className="size-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div>
-              <div className="font-medium text-foreground">Ready to raise PO</div>
-              <div className="text-muted-foreground text-xs">
-                The PR → PO conversion (pre-fills PO form from these lines + links back to this PR) lands in P4β.
-                For now, raise the PO manually at <Link href="/procurement/orders/new" className="text-primary hover:underline">/procurement/orders/new</Link>.
+        <Card>
+          <CardContent className="flex items-center justify-between gap-3">
+            <div className="flex items-start gap-2 text-sm">
+              <FileSpreadsheet className="size-4 text-sky-600 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-medium text-foreground">Ready to raise PO</div>
+                <div className="text-muted-foreground text-xs">
+                  Pre-fills the PO form from these lines (description, HSN, qty, estimated rate as PO rate). On save the PR flips to <span className="font-mono">po_raised</span>.
+                </div>
               </div>
             </div>
+            <Link
+              href={`/procurement/orders/new?from_pr=${pr.id}`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-sky-600 text-white px-3 py-2 text-sm font-medium hover:bg-sky-700 transition-colors whitespace-nowrap"
+            >
+              <FileSpreadsheet className="size-4" /> Raise PO from this PR
+            </Link>
           </CardContent>
         </Card>
       )}

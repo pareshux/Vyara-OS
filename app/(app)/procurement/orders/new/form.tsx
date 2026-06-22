@@ -31,11 +31,50 @@ type WarehousePick = { id: string; name: string; code: string; state: string | n
 type ProductPick = { id: string; sku_code: string; name: string; unit: string }
 type ProjectPick = { id: string; name: string }
 
+type PrPrefill = {
+  pr_id: string
+  pr_number: string
+  project_id: string | null
+  cost_center: string | null
+  required_by_date: string | null
+  preferred_vendor_id: string | null
+  lines: Array<{
+    product_id: string | null
+    description: string
+    hsn_code: string | null
+    unit: string
+    quantity: number
+    estimated_rate: number
+  }>
+}
+
+type RfqPrefill = {
+  rfq_id: string
+  rfq_number: string
+  project_id: string | null
+  cost_center: string | null
+  required_by_date: string | null
+  vendor_id: string
+  vendor_name: string
+  lines: Array<{
+    product_id: string | null
+    description: string
+    hsn_code: string | null
+    unit: string
+    quantity: number
+    rate: number
+    gst_rate_pct: number
+    discount_pct: number
+  }>
+}
+
 interface Props {
   vendors: VendorPick[]
   warehouses: WarehousePick[]
   products: ProductPick[]
   projects: ProjectPick[]
+  prPrefill?: PrPrefill | null
+  rfqPrefill?: RfqPrefill | null
 }
 
 type LineDraft = {
@@ -90,17 +129,17 @@ function formatINR(n: number): string {
   return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 }
 
-export function NewPurchaseOrderForm({ vendors, warehouses, products, projects }: Props) {
+export function NewPurchaseOrderForm({ vendors, warehouses, products, projects, prPrefill = null, rfqPrefill = null }: Props) {
   const router = useRouter()
   const [busy, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
-  // Header state
-  const [vendorId, setVendorId] = useState<string>('')
+  // Header state — prefill from PR or RFQ when given
+  const [vendorId, setVendorId] = useState<string>(rfqPrefill?.vendor_id ?? prPrefill?.preferred_vendor_id ?? '')
   const [warehouseId, setWarehouseId] = useState<string>(warehouses[0]?.id ?? '')
-  const [projectId, setProjectId] = useState<string>('')
+  const [projectId, setProjectId] = useState<string>(rfqPrefill?.project_id ?? prPrefill?.project_id ?? '')
   const [poDate, setPoDate] = useState<string>(new Date().toISOString().slice(0, 10))
-  const [expectedDelivery, setExpectedDelivery] = useState<string>('')
+  const [expectedDelivery, setExpectedDelivery] = useState<string>(rfqPrefill?.required_by_date ?? prPrefill?.required_by_date ?? '')
   const [paymentTermsDays, setPaymentTermsDays] = useState<string>('30')
 
   // Terms
@@ -109,10 +148,44 @@ export function NewPurchaseOrderForm({ vendors, warehouses, products, projects }
   const [liquidatedDamagesTerms, setLdTerms] = useState<string>('')
   const [retentionPct, setRetentionPct] = useState<string>('')
   const [otherTerms, setOtherTerms] = useState<string>('')
-  const [notes, setNotes] = useState<string>('')
+  const [notes, setNotes] = useState<string>(
+    rfqPrefill
+      ? `Raised against ${rfqPrefill.rfq_number}${rfqPrefill.cost_center ? ` · cost center ${rfqPrefill.cost_center}` : ''}`
+      : prPrefill
+        ? `Raised against ${prPrefill.pr_number}${prPrefill.cost_center ? ` · cost center ${prPrefill.cost_center}` : ''}`
+        : '',
+  )
 
-  // Lines
-  const [lines, setLines] = useState<LineDraft[]>([newLine()])
+  // Lines — prefill from RFQ (preferred) or PR
+  const [lines, setLines] = useState<LineDraft[]>(() => {
+    if (rfqPrefill && rfqPrefill.lines.length > 0) {
+      return rfqPrefill.lines.map((l) => ({
+        key: Math.random().toString(36).slice(2),
+        product_id: l.product_id,
+        description: l.description,
+        hsn_code: l.hsn_code ?? '',
+        unit: l.unit,
+        quantity: String(l.quantity),
+        rate: String(l.rate),
+        discount_pct: String(l.discount_pct),
+        gst_rate_pct: String(l.gst_rate_pct),
+      }))
+    }
+    if (prPrefill && prPrefill.lines.length > 0) {
+      return prPrefill.lines.map((l) => ({
+        key: Math.random().toString(36).slice(2),
+        product_id: l.product_id,
+        description: l.description,
+        hsn_code: l.hsn_code ?? '',
+        unit: l.unit,
+        quantity: String(l.quantity),
+        rate: String(l.estimated_rate),
+        discount_pct: '0',
+        gst_rate_pct: '18',
+      }))
+    }
+    return [newLine()]
+  })
 
   const vendor = useMemo(() => vendors.find((v) => v.id === vendorId), [vendors, vendorId])
   const warehouse = useMemo(() => warehouses.find((w) => w.id === warehouseId), [warehouses, warehouseId])
@@ -208,6 +281,8 @@ export function NewPurchaseOrderForm({ vendors, warehouses, products, projects }
         retention_pct: retentionPct ? Number(retentionPct) : null,
         other_terms: otherTerms.trim() || undefined,
         notes: notes.trim() || undefined,
+        from_pr_id: prPrefill?.pr_id ?? null,
+        from_rfq_id: rfqPrefill?.rfq_id ?? null,
         lines: lines.map((l) => ({
           product_id: l.product_id,
           description: l.description.trim(),

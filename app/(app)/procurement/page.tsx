@@ -185,6 +185,11 @@ export default async function ProcurementPage() {
                   <span className="text-[10px] text-emerald-700">Live ✓</span>
                 )}
               </Link>
+              <Link href="/procurement/rfqs" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
+                <ArrowRight className="size-3.5 text-violet-600 shrink-0" />
+                <span className="flex-1 text-foreground">RFQ + Comparative Statement</span>
+                <span className="text-[10px] text-emerald-700">Live ✓</span>
+              </Link>
               <Link href="/procurement/grns" className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 hover:bg-muted/40 transition-colors">
                 <PackageOpen className="size-3.5 text-emerald-600 shrink-0" />
                 <span className="flex-1 text-foreground">Goods receipts (GRN)</span>

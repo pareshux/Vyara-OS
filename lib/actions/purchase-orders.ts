@@ -240,6 +240,10 @@ export async function createPurchaseOrder(params: {
   other_terms?: string
   notes?: string
   lines: POLineInput[]
+  /** When supplied, on successful PO create the PR's status flips to po_raised + linked_po_id set. */
+  from_pr_id?: string | null
+  /** When supplied, RFQ.status flips to po_raised + linked_po_id set; PO row stamps source_rfq_id. */
+  from_rfq_id?: string | null
 }): Promise<{ ok: true; id: string; po_number: string } | { ok: false; error: string }> {
   const actor = await getActor()
   if (!actor) return { ok: false, error: 'Not authenticated' }
@@ -379,6 +383,8 @@ export async function createPurchaseOrder(params: {
       retention_pct: params.retention_pct ?? null,
       other_terms: params.other_terms?.trim() || null,
       notes: params.notes?.trim() || null,
+      source_pr_id: params.from_pr_id ?? null,
+      source_rfq_id: params.from_rfq_id ?? null,
       created_by: actor.userId,
       updated_by: actor.userId,
     })
@@ -415,9 +421,192 @@ export async function createPurchaseOrder(params: {
     return { ok: false, error: `Failed to create PO lines: ${lineErr.message}` }
   }
 
+  // 5) Link back to PR / RFQ when this PO was raised from one.
+  //    Done after PO insert so PR/RFQ updates can't orphan us on insert failure.
+  if (params.from_pr_id) {
+    await actor.supabase
+      .from('purchase_requisition')
+      .update({
+        status: 'po_raised',
+        linked_po_id: po.id,
+        updated_at: new Date().toISOString(),
+        updated_by: actor.userId,
+      })
+      .eq('id', params.from_pr_id)
+      .eq('tenant_id', actor.tenantId)
+    revalidatePath(`/procurement/requisitions/${params.from_pr_id}`)
+    revalidatePath('/procurement/requisitions')
+  }
+
+  if (params.from_rfq_id) {
+    await actor.supabase
+      .from('request_for_quotation')
+      .update({
+        status: 'po_raised',
+        linked_po_id: po.id,
+        updated_at: new Date().toISOString(),
+        updated_by: actor.userId,
+      })
+      .eq('id', params.from_rfq_id)
+      .eq('tenant_id', actor.tenantId)
+    revalidatePath(`/procurement/rfqs/${params.from_rfq_id}`)
+    revalidatePath('/procurement/rfqs')
+  }
+
   revalidatePath('/procurement')
   revalidatePath('/procurement/orders')
   return { ok: true, id: po.id as string, po_number: po.po_number as string }
+}
+
+/* ─── PR lookup for ?from_pr= prefill ──────────────────────── */
+
+export type PrForPoPrefill = {
+  pr_id: string
+  pr_number: string
+  project_id: string | null
+  cost_center: string | null
+  required_by_date: string | null
+  preferred_vendor_id: string | null
+  lines: Array<{
+    product_id: string | null
+    description: string
+    hsn_code: string | null
+    unit: string
+    quantity: number
+    estimated_rate: number
+  }>
+}
+
+export async function getPrForPoPrefill(prId: string): Promise<PrForPoPrefill | null> {
+  const actor = await getActor()
+  if (!actor) return null
+  const { data } = await actor.supabase
+    .from('purchase_requisition')
+    .select(`
+      id, pr_number, project_id, cost_center, required_by_date, status,
+      lines:purchase_requisition_line ( product_id, description, hsn_code, unit, quantity, estimated_rate, preferred_vendor_id, line_no )
+    `)
+    .eq('id', prId)
+    .eq('tenant_id', actor.tenantId)
+    .maybeSingle()
+  if (!data) return null
+  if (data.status !== 'approved') return null  // only approved PRs can raise PO
+
+  type RawLine = { product_id: string | null; description: string; hsn_code: string | null; unit: string; quantity: number; estimated_rate: number; preferred_vendor_id: string | null; line_no: number }
+  const lines = ((data.lines as RawLine[] | null) ?? [])
+    .sort((a, b) => a.line_no - b.line_no)
+    .map((l) => ({
+      product_id: l.product_id,
+      description: l.description,
+      hsn_code: l.hsn_code,
+      unit: l.unit,
+      quantity: Number(l.quantity),
+      estimated_rate: Number(l.estimated_rate),
+    }))
+
+  // Most-frequent preferred vendor across lines (simple mode pick)
+  const vendorVotes = new Map<string, number>()
+  for (const l of (data.lines as Array<{ preferred_vendor_id: string | null }> | null) ?? []) {
+    if (l.preferred_vendor_id) vendorVotes.set(l.preferred_vendor_id, (vendorVotes.get(l.preferred_vendor_id) ?? 0) + 1)
+  }
+  const preferred = Array.from(vendorVotes.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+
+  return {
+    pr_id: data.id as string,
+    pr_number: data.pr_number as string,
+    project_id: (data.project_id as string | null) ?? null,
+    cost_center: (data.cost_center as string | null) ?? null,
+    required_by_date: (data.required_by_date as string | null) ?? null,
+    preferred_vendor_id: preferred,
+    lines,
+  }
+}
+
+/* ─── RFQ lookup for ?from_rfq=&vendor= prefill ─────────────── */
+
+export type RfqForPoPrefill = {
+  rfq_id: string
+  rfq_number: string
+  project_id: string | null
+  cost_center: string | null
+  required_by_date: string | null
+  vendor_id: string
+  vendor_name: string
+  lines: Array<{
+    product_id: string | null
+    description: string
+    hsn_code: string | null
+    unit: string
+    quantity: number
+    rate: number
+    gst_rate_pct: number
+    discount_pct: number
+  }>
+}
+
+export async function getRfqForPoPrefill(rfqId: string, vendorId: string): Promise<RfqForPoPrefill | null> {
+  const actor = await getActor()
+  if (!actor) return null
+
+  const { data: rfq } = await actor.supabase
+    .from('request_for_quotation')
+    .select(`
+      id, rfq_number, project_id, cost_center, required_by_date, status,
+      lines:request_for_quotation_line ( id, line_no, product_id, description, hsn_code, unit, quantity )
+    `)
+    .eq('id', rfqId)
+    .eq('tenant_id', actor.tenantId)
+    .maybeSingle()
+  if (!rfq) return null
+  if (!['cs_finalised', 'quotes_collected'].includes(rfq.status as string)) return null
+
+  const { data: vendor } = await actor.supabase
+    .from('vendor')
+    .select('id, name')
+    .eq('id', vendorId)
+    .eq('tenant_id', actor.tenantId)
+    .maybeSingle()
+  if (!vendor) return null
+
+  const { data: selectedResponses } = await actor.supabase
+    .from('request_for_quotation_response')
+    .select('rfq_line_id, rate, discount_pct, gst_rate_pct')
+    .eq('rfq_id', rfqId)
+    .eq('vendor_id', vendorId)
+    .eq('is_selected', true)
+
+  type RawLine = { id: string; line_no: number; product_id: string | null; description: string; hsn_code: string | null; unit: string; quantity: number }
+  type RawResp = { rfq_line_id: string; rate: number; discount_pct: number; gst_rate_pct: number }
+  const lineMap = new Map(((rfq.lines as RawLine[] | null) ?? []).map((l) => [l.id, l]))
+  const responses = (selectedResponses as RawResp[] | null) ?? []
+
+  const lines = responses
+    .map((r) => {
+      const line = lineMap.get(r.rfq_line_id)
+      if (!line) return null
+      return {
+        product_id: line.product_id,
+        description: line.description,
+        hsn_code: line.hsn_code,
+        unit: line.unit,
+        quantity: Number(line.quantity),
+        rate: Number(r.rate),
+        gst_rate_pct: Number(r.gst_rate_pct),
+        discount_pct: Number(r.discount_pct),
+      }
+    })
+    .filter((l): l is NonNullable<typeof l> => l !== null)
+
+  return {
+    rfq_id: rfq.id as string,
+    rfq_number: rfq.rfq_number as string,
+    project_id: (rfq.project_id as string | null) ?? null,
+    cost_center: (rfq.cost_center as string | null) ?? null,
+    required_by_date: (rfq.required_by_date as string | null) ?? null,
+    vendor_id: vendorId,
+    vendor_name: vendor.name as string,
+    lines,
+  }
 }
 
 /* ─── Submit for approval ────────────────────────────────────── */

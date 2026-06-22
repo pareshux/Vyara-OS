@@ -76,6 +76,7 @@ const CodeTemplatesSchema = z
     vendor_bill:        codeTemplate('vendor_bill').default('VT-VB-{yyyy}-{nnnn}'),
     vendor_payment:     codeTemplate('vendor_payment').default('VT-PAY-{yyyy}-{nnnn}'),
     purchase_requisition: codeTemplate('purchase_requisition').default('VT-PR-{yyyy}-{nnnn}'),
+    rfq:                codeTemplate('rfq').default('VT-RFQ-{yyyy}-{nnnn}'),
   })
   .passthrough()
 

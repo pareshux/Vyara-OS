@@ -23,6 +23,24 @@
 
 ## 2026-06-23
 
+### Procurement P4β + P4γ — PR→PO conversion + RFQ + Comparative Statement (pending commit)
+- **Tracks:** DEL-015 (PR→PO conversion → ✅ full); DEL-020 (RFQ + CS → ✅)
+- **Capability:** Delivery (procurement)
+- **Status change:** Both flipped ✅
+- **Notes:** Bulk autonomous build per user instruction. The "PR → RFQ → CS → PO" flow is now end-to-end walkable. The full procurement chain is **PR → RFQ → CS → PO → GRN → Vendor Bill (3-way matched) → Payment (with TDS) → AP ageing → MSME compliance → Exports + Reversal**.
+
+  **P4β PR→PO conversion** — `createPurchaseOrder` accepts `from_pr_id` param. On successful PO save, PR.linked_po_id is set + PR.status flips to `po_raised`. `getPrForPoPrefill` action returns PR lines as PO line defaults + preferred-vendor mode pick. PR detail extended with sky-blue "Raise PO from this PR" CTA (replaces the earlier P4β-marker hint).
+
+  **P4β RFQ flow** — migration 0069 adds 4 tables: request_for_quotation (header with source_pr_ids JSONB array for consolidation, response_deadline, 6-state status), request_for_quotation_line (with source_pr_line_id traceability), request_for_quotation_vendor (invited vendors + vendor-level quote metadata), request_for_quotation_response (per-vendor per-line rate/discount/GST/delivery-days; computed taxable+total; is_l1 + is_selected + selection_reason for CS outcomes). purchase_order extended with source_pr_id + source_rfq_id columns. lib/actions/rfqs.ts ships 7 actions: createRfq (min-2-vendor validation), sendRfq, cancelRfq, recordVendorRfqResponse (upserts per-line responses; auto-flips RFQ to quotes_collected when all vendors responded), finaliseCs (computes L1, marks selections, flips status), listRfqs, getRfq + 2 form pickers for PR consolidation. UI: /procurement/rfqs list with status filter; /procurement/rfqs/new two-mode (blank or `?pr=id1,id2` source PRs) with vendor multi-select + dynamic line table; /procurement/rfqs/[id] detail with vendors-responded badges + "Record response" per vendor; /procurement/rfqs/[id]/responses/new?vendor=X to capture one vendor's quote.
+
+  **P4γ Comparative Statement** — `/procurement/rfqs/[id]/cs` page renders vendor × line matrix with sticky vendor header. L1 auto-highlighted amber per line based on lowest amount_total. Click a cell to pick that vendor (emerald). Override-reason input becomes required when picking non-L1. Finalise CS confirms (flagging multi-vendor selection — v1 creates PO for the most-picked vendor; multi-PO from one CS deferred to P4δ). After finalisation, "Create PO from CS" CTA appears and routes to /procurement/orders/new?from_rfq=X&vendor=Y. The new-PO server page reads ?from_rfq= via `getRfqForPoPrefill` action returning selected vendor's selected-line rates as PO line defaults. Form prefill chain: rfqPrefill > prPrefill > blank. On PO save, RFQ.linked_po_id set + RFQ.status='po_raised'.
+
+  **Sample data** — none seeded for RFQ/CS this slice (would benefit from a fully-walked-through Raj demo; deferred). Existing approved PRs (RA-PR-2026-0002, VT-PR-2026-0001-once-approved) can be used to walk PR→PO. RFQ flow needs user to create one to demo.
+
+  **Procurement landing** extended with "RFQ + Comparative Statement" Live ✓ link.
+
+  **Deferred (P4δ):** Multi-PO from one CS (when different vendors selected across lines, create one PO per vendor with the lines they won). Vendor-portal RFQ response (vendor logs in to a portal and submits their quote — currently accounts types it in).
+
 ### Procurement P4α — Purchase Requisitions (pending commit)
 - **Tracks:** DEL-015 ✅ Partial (PR→PO conversion → P4β; RFQ + CS → P4β/γ)
 - **Capability:** Delivery (procurement — pre-procurement front-end)
