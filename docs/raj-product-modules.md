@@ -23,6 +23,23 @@ Use this as a companion to the navigation guide. When you read about an Act in t
 
 ---
 
+## Demo login credentials
+
+Six personas are pre-provisioned for the Raj Avinsys demo. Sign in at `/demo` or directly at `/login` using the credentials below.
+
+| Name | Role | Email | Password |
+|---|---|---|---|
+| Sandeep | Director | `admin@rajavinsys.example` | `RajDemo@1234` |
+| Rakesh | Project Manager | `rakesh@rajavinsys.example` | `RajDemo@1234` |
+| Anil | Site Engineer | `anil@rajavinsys.example` | `RajDemo@1234` |
+| Mehul | Procurement Manager | `mehul@rajavinsys.example` | `RajDemo@1234` |
+| Priya | Accounts Manager | `priya@rajavinsys.example` | `RajDemo@1234` |
+| Vikas | Service Engineer | `vikas@rajavinsys.example` | `RajDemo@1234` |
+
+All accounts use the same demo password. Each persona's sidebar and landing page are tailored to their department.
+
+---
+
 ## How CRMOS is organised
 
 CRMOS is built around **eight business capabilities**. Each capability has multiple modules that work together. The eight are deliberately limited — a new top-level capability requires evidence from multiple customers, not a single feature request.

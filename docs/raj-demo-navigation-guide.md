@@ -106,15 +106,20 @@ When an Act says "Sign in as Rakesh", you'll need to:
 3. You'll return to `/demo`
 4. Click the next persona's card
 
-## A single password for all roles
+## Login credentials
 
-All six personas in this demo share the same password:
+All six personas share the same password. Use the email address for the person you want to sign in as.
 
-```
-RajDemo@1234
-```
+| Name | Email | Password |
+|---|---|---|
+| Sandeep (Director) | `admin@rajavinsys.example` | `RajDemo@1234` |
+| Rakesh (Project Manager) | `rakesh@rajavinsys.example` | `RajDemo@1234` |
+| Anil (Site Engineer) | `anil@rajavinsys.example` | `RajDemo@1234` |
+| Mehul (Procurement Manager) | `mehul@rajavinsys.example` | `RajDemo@1234` |
+| Priya (Accounts Manager) | `priya@rajavinsys.example` | `RajDemo@1234` |
+| Vikas (Service Engineer) | `vikas@rajavinsys.example` | `RajDemo@1234` |
 
-This is intentional for demonstration. In a real deployment, every team member would have their own credentials, set during onboarding.
+These credentials are intentional for demonstration. In a real deployment, every team member would have their own credentials, set during onboarding.
 
 ---
 
@@ -124,14 +129,14 @@ Six members of your team carry the story forward. Each one has a different view 
 
 ## Quick reference
 
-| Role | Name | Department | Their daily question |
-|---|---|---|---|
-| Director | **Sandeep** | Management | "How is the business today, and what needs my attention?" |
-| Project Manager | **Rakesh** | Projects | "Which milestones are due, what materials need ordering, what's stuck?" |
-| Site Engineer | **Anil** | Field | "Where do I go today, and what do I need to log?" |
-| Procurement Manager | **Mehul** | Procurement | "What's pending approval, which POs are stuck, which vendors are reliable?" |
-| Accounts Manager | **Priya** | Accounts | "What bills need approving, what's due this week, are we GST-compliant?" |
-| Service Engineer | **Vikas** | Service | "Which complaints are open, which AMC visits are scheduled?" |
+| Role | Name | Email | Password | Their daily question |
+|---|---|---|---|---|
+| Director | **Sandeep** | `admin@rajavinsys.example` | `RajDemo@1234` | "How is the business today, and what needs my attention?" |
+| Project Manager | **Rakesh** | `rakesh@rajavinsys.example` | `RajDemo@1234` | "Which milestones are due, what materials need ordering, what's stuck?" |
+| Site Engineer | **Anil** | `anil@rajavinsys.example` | `RajDemo@1234` | "Where do I go today, and what do I need to log?" |
+| Procurement Manager | **Mehul** | `mehul@rajavinsys.example` | `RajDemo@1234` | "What's pending approval, which POs are stuck, which vendors are reliable?" |
+| Accounts Manager | **Priya** | `priya@rajavinsys.example` | `RajDemo@1234` | "What bills need approving, what's due this week, are we GST-compliant?" |
+| Service Engineer | **Vikas** | `vikas@rajavinsys.example` | `RajDemo@1234` | "Which complaints are open, which AMC visits are scheduled?" |
 
 ## What each role can and cannot see
 
