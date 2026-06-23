@@ -43,15 +43,16 @@ export default async function InvoicesPage({
   const monthFilter = sp.month ?? null   // YYYY-MM
   const sourceFilter = sp.source ?? null
 
-  const { data: invoicesRaw } = await supabase
-    .from('invoice_ageing_v')
-    .select('*')
-    .order('due_date', { ascending: true })
-
-  const { data: meta } = await supabase
-    .from('invoice')
-    .select('id, source, is_running_bill, running_bill_seq, buyer_firm_id, project:project_id(id, name), buyer:buyer_firm_id(id, name)')
-    .is('deleted_at', null)
+  const [{ data: invoicesRaw }, { data: meta }] = await Promise.all([
+    supabase
+      .from('invoice_ageing_v')
+      .select('*')
+      .order('due_date', { ascending: true }),
+    supabase
+      .from('invoice')
+      .select('id, source, is_running_bill, running_bill_seq, buyer_firm_id, project:project_id(id, name), buyer:buyer_firm_id(id, name)')
+      .is('deleted_at', null),
+  ])
 
   type Row = {
     id: string

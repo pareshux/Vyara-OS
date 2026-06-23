@@ -90,14 +90,13 @@ export default async function OrdersPage({
 
   const stages = stagesRaw ?? []
 
-  // Stage chip counts from the full unfiltered set
-  const { data: allForCounts } = await supabase
-    .from('sales_order')
-    .select('current_stage_id')
-    .is('deleted_at', null)
+  // Stage chip counts from the already-fetched full set (no extra query needed)
   const stageCounts = stages.map((s) => ({
     ...s,
-    count: (allForCounts ?? []).filter((o) => o.current_stage_id === s.id).length,
+    count: allOrders.filter((o) => {
+      const stage = Array.isArray(o.stage) ? o.stage[0] : o.stage
+      return stage?.id === s.id
+    }).length,
   }))
 
   const hasFilter = q || stageFilter || buyerFilter
