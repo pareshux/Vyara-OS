@@ -261,7 +261,7 @@ function RemarkDialog({
   function submit() { onSubmit(remark.trim()); setRemark('') }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <Textarea rows={3} placeholder={placeholder} value={remark} onChange={(e) => setRemark(e.target.value)} autoFocus />
         <DialogFooter>
@@ -292,7 +292,7 @@ function LostDialog({
   const [remark, setRemark] = useState('')
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Mark lead as lost</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
@@ -333,7 +333,7 @@ function AssignDialog({
   const [newOwnerId, setNewOwnerId] = useState<string>(currentOwnerId)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Reassign lead</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-1.5">
           <Label>New owner</Label>

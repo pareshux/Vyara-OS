@@ -160,7 +160,7 @@ export function StakeholdersTab({ projectId, stakeholders, contacts }: Stakehold
       )}
 
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-md">
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Add stakeholder</SheetTitle>
           </SheetHeader>

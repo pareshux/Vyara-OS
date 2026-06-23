@@ -74,7 +74,7 @@ export function AdjustButton({
         <Pencil className="size-3 mr-1" /> Adjust
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Adjust stock — <span className="font-mono text-sm">{skuCode}</span>

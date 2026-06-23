@@ -114,7 +114,7 @@ export function ReceiveButton({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Receive stock {warehouseCode && <span className="font-mono text-sm text-muted-foreground">@ {warehouseCode}</span>}

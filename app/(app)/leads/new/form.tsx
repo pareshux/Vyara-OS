@@ -116,7 +116,7 @@ export function NewLeadForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Segment</Label>
           <Select value={segment} onValueChange={(v) => setSegment(v as typeof segment)}>
@@ -140,7 +140,7 @@ export function NewLeadForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Owner *</Label>
           <Select value={ownerId} onValueChange={setOwnerId}>
@@ -169,7 +169,7 @@ export function NewLeadForm({
 
       <div className="rounded-lg border border-border bg-muted/20 p-3 flex flex-col gap-3">
         <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Contact</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="cn">Contact name</Label>
             <Input id="cn" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Mr. Patel, Site Engineer" />
@@ -185,7 +185,7 @@ export function NewLeadForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="city">City</Label>
           <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Surat" />

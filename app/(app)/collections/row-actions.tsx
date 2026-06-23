@@ -191,7 +191,7 @@ function ReceiptDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Record receipt — {invoiceNumber}</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
@@ -324,7 +324,7 @@ function PTPDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Promise to pay — {invoiceNumber}</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3">
           {aiWhatsappEnabled && (
@@ -460,7 +460,7 @@ function DunningDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Send WhatsApp dunning</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
@@ -506,7 +506,7 @@ function RemarkDialog({
   const [busy, startTransition] = useTransition()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3">
           <Textarea rows={3} value={remark} onChange={(e) => setRemark(e.target.value)} placeholder={placeholder} />

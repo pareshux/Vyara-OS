@@ -103,7 +103,7 @@ export function CompleteVisitButton({
           <CheckCircle2 className="size-3.5 mr-1.5" /> Visit completed
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Wrap up the visit</DialogTitle>
         </DialogHeader>

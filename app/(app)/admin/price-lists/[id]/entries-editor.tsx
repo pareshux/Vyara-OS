@@ -101,7 +101,7 @@ export function EntriesEditor({ priceListId, entries, products }: Props) {
                   return (
                     <tr key={e.id} className="border-b border-border last:border-0 hover:bg-muted/30">
                       <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{i === 0 ? e.sku_code : ''}</td>
-                      <td className="px-3 py-2">{i === 0 ? e.product_name : <span className="text-muted-foreground/40">↳ tier</span>}</td>
+                      <td className="px-3 py-2 max-w-[200px] truncate">{i === 0 ? e.product_name : <span className="text-muted-foreground/40">↳ tier</span>}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {Number(e.min_qty).toLocaleString('en-IN')}{e.unit && <span className="text-xs text-muted-foreground ml-1">{e.unit}</span>}
                       </td>

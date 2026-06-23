@@ -23,9 +23,13 @@ export function SubjectPicker({
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<SubjectSearchHit[]>([])
   const [loading, setLoading] = useState(false)
+  const [focused, setFocused] = useState(false)
   const debounce = useRef<NodeJS.Timeout | null>(null)
 
+  const showDropdown = focused || query.length > 0
+
   useEffect(() => {
+    if (!showDropdown) return
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(async () => {
       setLoading(true)
@@ -34,7 +38,7 @@ export function SubjectPicker({
       setLoading(false)
     }, 200)
     return () => { if (debounce.current) clearTimeout(debounce.current) }
-  }, [query])
+  }, [query, showDropdown])
 
   if (selected) {
     return (
@@ -68,39 +72,42 @@ export function SubjectPicker({
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setTimeout(() => setFocused(false), 150)}
           placeholder="Search project, lead, firm, dealer…"
           className="h-10 pl-8"
-          autoFocus
         />
       </div>
-      <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-card divide-y divide-border">
-        {loading && hits.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic px-3 py-3">Searching…</p>
-        ) : hits.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic px-3 py-3">No matches.</p>
-        ) : (
-          hits.map((h) => (
-            <button
-              key={`${h.type}-${h.id}`}
-              type="button"
-              onClick={() => onSelect(h)}
-              className="w-full text-left px-3 py-2.5 hover:bg-muted/40"
-            >
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className={`text-[10px] uppercase border-0 ${TINT[h.type]}`}>
-                  {h.type}
-                </Badge>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{h.label}</p>
-                  {h.sublabel && (
-                    <p className="text-[11px] text-muted-foreground truncate">{h.sublabel}</p>
-                  )}
+      {showDropdown && (
+        <div className="max-h-52 overflow-y-auto rounded-lg border border-border bg-card divide-y divide-border">
+          {loading && hits.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic px-3 py-3">Searching…</p>
+          ) : hits.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic px-3 py-3">No matches.</p>
+          ) : (
+            hits.map((h) => (
+              <button
+                key={`${h.type}-${h.id}`}
+                type="button"
+                onClick={() => onSelect(h)}
+                className="w-full text-left px-3 py-2.5 hover:bg-muted/40"
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={`text-[10px] uppercase border-0 ${TINT[h.type]}`}>
+                    {h.type}
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm truncate">{h.label}</p>
+                    {h.sublabel && (
+                      <p className="text-[11px] text-muted-foreground truncate">{h.sublabel}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))
-        )}
-      </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

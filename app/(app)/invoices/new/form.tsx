@@ -202,8 +202,8 @@ export function NewInvoiceForm({ projects, firms, orders, initialDefaults, aiPre
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); handleSubmit() }} className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5 col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5 col-span-1 sm:col-span-2">
           <Label>Linked sales order (optional)</Label>
           <Select value={orderId} onValueChange={setOrderId}>
             <SelectTrigger><SelectValue placeholder="Direct billing — no order" /></SelectTrigger>
@@ -239,7 +239,7 @@ export function NewInvoiceForm({ projects, firms, orders, initialDefaults, aiPre
           </Select>
         </div>
 
-        <div className="flex flex-col gap-1.5 col-span-2">
+        <div className="flex flex-col gap-1.5 col-span-1 sm:col-span-2">
           <Label htmlFor="ext">External / Tally invoice number (optional)</Label>
           <Input id="ext" value={externalNum} onChange={(e) => setExternalNum(e.target.value)} placeholder="e.g. INV-2026-0042" />
         </div>
@@ -305,7 +305,7 @@ export function NewInvoiceForm({ projects, firms, orders, initialDefaults, aiPre
           <span>This is a running-account bill (partial billing across a project)</span>
         </label>
         {isRunningBill && (
-          <div className="grid grid-cols-2 gap-3 mt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="seq">Bill sequence (RA-Bill #)</Label>
               <Input id="seq" type="number" min={1} value={billSeq} onChange={(e) => {
@@ -324,7 +324,7 @@ export function NewInvoiceForm({ projects, firms, orders, initialDefaults, aiPre
       {/* Live totals */}
       <div className="rounded-lg border border-border p-3 bg-card">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Computed</p>
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">GST amount</span><span className="tabular-nums font-medium">₹{gstAmount.toLocaleString('en-IN')}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="tabular-nums font-medium">₹{total.toLocaleString('en-IN')}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Retention held</span><span className="tabular-nums font-medium">₹{retentionAmount.toLocaleString('en-IN')}</span></div>

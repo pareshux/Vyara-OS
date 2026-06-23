@@ -68,7 +68,6 @@ export function PlanOrStartVisitSheet({
 
   function submit() {
     setErr(null)
-    if (!subject) { setErr('Pick a project / lead / firm / dealer'); return }
     if (!title.trim()) { setErr('Give the visit a short title'); return }
 
     if (mode === 'plan') {
@@ -80,8 +79,8 @@ export function PlanOrStartVisitSheet({
           description: description.trim() || null,
           due_at: dueIso,
           priority,
-          subject_type: subject.type,
-          subject_id: subject.id,
+          subject_type: subject?.type ?? null,
+          subject_id: subject?.id ?? null,
         })
         if ('error' in r) { setErr(r.error); toast.error(r.error); return }
         toast.success('Planned'); setOpen(false); reset(); router.refresh()
@@ -99,8 +98,8 @@ export function PlanOrStartVisitSheet({
         description: description.trim() || null,
         due_at: new Date().toISOString(),
         priority,
-        subject_type: subject.type,
-        subject_id: subject.id,
+        subject_type: subject?.type ?? null,
+        subject_id: subject?.id ?? null,
       })
       if ('error' in plan) { setErr(plan.error); toast.error(plan.error); return }
       const started = await startVisit({
@@ -121,7 +120,7 @@ export function PlanOrStartVisitSheet({
           <PlusCircle className="size-3.5 mr-1.5" /> Add a visit
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === 'plan' ? 'Plan a visit' : 'Just arrived'}</DialogTitle>
         </DialogHeader>
@@ -156,7 +155,7 @@ export function PlanOrStartVisitSheet({
 
           {/* Subject */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Subject</Label>
+            <Label className="text-xs">Subject <span className="text-muted-foreground font-normal">— optional</span></Label>
             <SubjectPicker selected={subject} onSelect={setSubject} />
           </div>
 

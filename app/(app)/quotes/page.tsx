@@ -89,7 +89,7 @@ export default async function QuotesPage({
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card size="sm">
           <CardContent className="pt-3 pb-3">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Pipeline value</p>

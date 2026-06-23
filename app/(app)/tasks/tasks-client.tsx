@@ -151,7 +151,7 @@ function CreateTaskSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right">
+      <SheetContent side="right" className="overflow-y-auto">
         <SheetHeader>
           <SheetTitle>New task</SheetTitle>
         </SheetHeader>

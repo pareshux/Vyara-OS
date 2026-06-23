@@ -54,7 +54,7 @@ export function LimitsButton({ warehouseId, productId, skuCode, productName, uni
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Stock limits — <span className="font-mono text-sm">{skuCode}</span></DialogTitle>
           </DialogHeader>

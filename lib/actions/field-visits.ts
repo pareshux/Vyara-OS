@@ -390,8 +390,8 @@ export async function createPlannedVisit(params: {
   description?: string | null
   due_at: string // ISO
   priority?: 'low' | 'medium' | 'high' | 'urgent'
-  subject_type: SubjectType
-  subject_id: string
+  subject_type?: SubjectType | null
+  subject_id?: string | null
   contact_id?: string | null
   assignee_id?: string | null
 }): Promise<{ task_id: string } | { error: string }> {
@@ -417,9 +417,9 @@ export async function createPlannedVisit(params: {
     contact_id: params.contact_id ?? null,
   }
 
-  if (params.subject_type === 'project') {
+  if (params.subject_type === 'project' && params.subject_id) {
     taskRow.project_id = params.subject_id
-  } else {
+  } else if (params.subject_type && params.subject_id) {
     taskRow.source_entity_type = params.subject_type
     taskRow.source_entity_id = params.subject_id
   }
@@ -512,13 +512,12 @@ export async function startVisit(params: {
       return { error: 'This visit was assigned to someone else' }
     }
     const subj = subjectFromTask(task)
-    if (!subj.type || !subj.id) return { error: 'Planned visit has no subject' }
-    subjectType = subj.type
-    subjectId = subj.id
+    if (subj.type && subj.id) {
+      subjectType = subj.type
+      subjectId = subj.id
+    }
     if (!contactId) contactId = (task.contact_id as string | null) ?? null
   }
-
-  if (!subjectType || !subjectId) return { error: 'Subject is required' }
 
   // Today's attendance row gives us attendance_id (so the visit groups under the day).
   const date = todayInIST()

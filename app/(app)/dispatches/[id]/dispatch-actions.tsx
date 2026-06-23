@@ -133,7 +133,7 @@ export function DispatchActions({ dispatchId, stageKey, isTerminal, podUrl }: Pr
       {err && <p className="text-xs text-destructive mt-2">{err}</p>}
 
       <Dialog open={podOpen} onOpenChange={setPodOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Capture proof of delivery</DialogTitle>
           </DialogHeader>

@@ -84,7 +84,7 @@ export function EditDealerButton({ dealerId, initial, tiers, territories }: Prop
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader><DialogTitle>Edit dealer</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-3">
             <p className="text-xs text-muted-foreground italic">

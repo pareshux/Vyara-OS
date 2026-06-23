@@ -197,7 +197,7 @@ export default async function DispatchDetail({ params }: { params: Promise<{ id:
               {lines.map((l) => (
                 <tr key={l.id} className="border-b border-border last:border-0">
                   <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{l.sku_code}</td>
-                  <td className="px-3 py-2">{l.product_name}</td>
+                  <td className="px-3 py-2 max-w-[200px] truncate">{l.product_name}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{l.quantity}</td>
                   <td className="px-3 py-2 text-muted-foreground">{l.unit}</td>
                 </tr>
